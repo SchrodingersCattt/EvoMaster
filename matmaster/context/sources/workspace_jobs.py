@@ -1,14 +1,16 @@
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
 
 from matmaster.bohrium.status import LEDGER_FAILURE_STATUSES
 from matmaster.context.ports import WorkspaceJobs
-from matmaster.context.sections import (
-    ALL_VIEWS,
-    ContextSection,
-    SectionOrder,
+from matmaster.context.sections import ALL_VIEWS, ContextSection, SectionOrder
+from matmaster.context.workspace_jobs_compute import (
+    SUMMARY_COLUMNS,
+    render_csv_block,
+    render_inline_lines,
+    render_job_json,
+    summary_to_dict,
 )
 
 _DELIVERY_FAILED_HEADER = "以下作业失败："
@@ -17,10 +19,30 @@ _DELIVERY_TABLE_HEADER = "job_id, job_name"
 _DELIVERY_SUCCESS_STATUS = "finished"
 _DELIVERY_FAILURE_STATUSES = frozenset(LEDGER_FAILURE_STATUSES)
 
+_READ_HINT = (
+    "Full job details are in the CSV file. Use Read or Bash to inspect/filter "
+    "it when you need specific job ids, job names, failed rows, or result "
+    "directories."
+)
+_ACTION_HINT = (
+    "Failed terminal jobs exist. Inspect failed rows first; do not enumerate "
+    "all jobs in the final answer."
+)
+_EXPORT_ERROR_HINT = (
+    "Full job details could not be exported; do not assume omitted pending "
+    "jobs were delivered."
+)
+
 
 @dataclass(frozen=True)
 class WorkspaceJobsSource:
-    """Renderer for the workspace job view."""
+    """Renderer for the workspace job view.
+
+    observation 模式：inline / compact / error 三态，按 ``export`` /
+    ``export_error`` 决定，不查 DAO、不写文件、不判阈值。
+    delivery 模式：不在本 section 渲染；其 job 表格由 ``delivery_instruction_text``
+    生成，再经 compositions 注入到 turn instruction。
+    """
 
     lines: tuple[str, ...] = ()
 
@@ -28,7 +50,11 @@ class WorkspaceJobsSource:
     def from_jobs(cls, jobs: WorkspaceJobs) -> WorkspaceJobsSource:
         if jobs.mode == "delivery":
             return cls(lines=())
-        return cls._from_observation_jobs(jobs)
+        if jobs.export_error is not None:
+            return cls(lines=cls._error_lines(jobs))
+        if jobs.export is not None:
+            return cls(lines=cls._compact_lines(jobs))
+        return cls(lines=render_inline_lines(jobs))
 
     @classmethod
     def delivery_instruction_text(cls, jobs: WorkspaceJobs) -> str:
@@ -53,66 +79,84 @@ class WorkspaceJobsSource:
         )
         return "\n".join(lines)
 
-    @classmethod
-    def _from_observation_jobs(cls, jobs: WorkspaceJobs) -> WorkspaceJobsSource:
-        active, _ = cls._render_group(
-            "active_job", "active_overflow", jobs.active_jobs, jobs.detail_limit
-        )
-        pending, _ = cls._render_group(
-            "pending_terminal_job",
-            "pending_terminal_overflow",
-            jobs.pending_terminal_jobs,
-            jobs.detail_limit,
-        )
-        recent, _ = cls._render_group(
-            "recent_terminal_job",
-            "recent_terminal_overflow",
-            jobs.recent_terminal_jobs,
-            jobs.detail_limit,
-        )
-        body = active + pending + recent
-        if not body:
-            return cls(lines=())
-        header = (f"workspace {jobs.workspace}",) if jobs.workspace else ()
-        return cls(lines=header + body)
-
     @staticmethod
-    def _render_group(
-        prefix: str,
-        overflow_tag: str,
-        items: tuple,
-        limit: int | None,
-        *,
-        intro: str | None = None,
-    ) -> tuple[tuple[str, ...], bool]:
-        """前 limit 条完整详情，其余压成一行溢出摘要；全量 job_id 始终可见。"""
-        if limit is None or len(items) <= limit:
-            shown, rest = items, ()
-        else:
-            shown, rest = items[:limit], items[limit:]
-        lines = tuple(
-            f"{prefix}_{index} "
-            f"{json.dumps(job, ensure_ascii=False, sort_keys=True)}"
-            for index, job in enumerate(shown, 1)
-        )
-        if rest:
-            by_status: dict[str, int] = {}
-            for job in rest:
-                status = str(job.get("status"))
-                by_status[status] = by_status.get(status, 0) + 1
-            summary = {
-                "count": len(rest),
-                "by_status": by_status,
-                # 不按 job_id 去重：唯一键含 sandbox，计数与 ack 以 row 为准
-                "job_ids": [str(job.get("job_id")) for job in rest],
-            }
-            lines += (
-                f"{overflow_tag} "
-                f"{json.dumps(summary, ensure_ascii=False, sort_keys=True)}",
+    def _head_lines(jobs: WorkspaceJobs) -> list[str]:
+        lines: list[str] = []
+        if jobs.workspace:
+            lines.append(f"workspace {jobs.workspace}")
+        if jobs.mode:
+            lines.append(f"mode {jobs.mode}")
+        if jobs.summary is not None:
+            lines.append(f"summary {render_job_json(summary_to_dict(jobs.summary))}")
+        return lines
+
+    @classmethod
+    def _compact_lines(cls, jobs: WorkspaceJobs) -> tuple[str, ...]:
+        lines = cls._head_lines(jobs)
+        export = jobs.export
+        assert export is not None
+        lines.append(
+            "details_exported "
+            + render_job_json(
+                {
+                    "format": export.format,
+                    "path": export.path,
+                    "rows": export.row_count,
+                    "columns": list(export.columns),
+                    "reason": export.reason,
+                }
             )
-        if intro and lines:
-            lines = (intro,) + lines
-        return lines, bool(rest)
+        )
+        lines.append(f'read_hint "{_READ_HINT}"')
+        if jobs.summary is not None and (
+            jobs.summary.failed or jobs.summary.lost or jobs.summary.stopped
+        ):
+            lines.append(f'action_hint "{_ACTION_HINT}"')
+        if jobs.priority_samples:
+            lines.extend(
+                render_csv_block(
+                    "priority_samples",
+                    SUMMARY_COLUMNS,
+                    jobs.priority_samples,
+                )
+            )
+        if jobs.omitted_count is not None:
+            lines.append(
+                "omitted_from_prompt "
+                + render_job_json(
+                    {
+                        "count": jobs.omitted_count,
+                        "reason": "large job set exported to csv",
+                    }
+                )
+            )
+        return tuple(lines)
+
+    @classmethod
+    def _error_lines(cls, jobs: WorkspaceJobs) -> tuple[str, ...]:
+        lines = cls._head_lines(jobs)
+        err = jobs.export_error
+        assert err is not None
+        lines.append(
+            "workspace_jobs_export_error "
+            + render_job_json(
+                {
+                    "reason": err.reason,
+                    "rows": err.rows,
+                    "target_path": err.target_path,
+                }
+            )
+        )
+        lines.append(f'action_hint "{_EXPORT_ERROR_HINT}"')
+        if jobs.priority_samples:
+            lines.extend(
+                render_csv_block(
+                    "priority_samples",
+                    SUMMARY_COLUMNS,
+                    jobs.priority_samples,
+                )
+            )
+        return tuple(lines)
 
     @classmethod
     def _render_delivery_table(

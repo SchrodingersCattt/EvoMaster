@@ -1,85 +1,95 @@
 from __future__ import annotations
 
-import json
-
-from matmaster.context.ports import WorkspaceJobs
+from matmaster.context.ports import (
+    WorkspaceJobs,
+    WorkspaceJobsExport,
+    WorkspaceJobsExportError,
+    WorkspaceJobsSummary,
+)
 from matmaster.context.sections import ContextView, SectionOrder
 from matmaster.context.sources.workspace_jobs import WorkspaceJobsSource
 
 
-def test_workspace_jobs_empty_returns_no_sections() -> None:
-    assert WorkspaceJobsSource.from_jobs(WorkspaceJobs.empty()).to_sections() == ()
-
-
-def test_workspace_jobs_mode_defaults_to_observation() -> None:
-    assert WorkspaceJobs().mode == "observation"
-    assert WorkspaceJobs.empty().mode == "observation"
-    assert WorkspaceJobs(mode="delivery").mode == "delivery"
-
-
-def test_workspace_jobs_renders_active_and_pending_terminal() -> None:
-    jobs = WorkspaceJobs(
-        active_jobs=(
-            {"job_id": "a2", "status": "running"},
-            {"job_id": "a1", "status": "submitted"},
-        ),
-        pending_terminal_jobs=({"job_id": "t9", "status": "finished"},),
+def _summary() -> WorkspaceJobsSummary:
+    return WorkspaceJobsSummary(
+        total=2, active=1, pending_terminal=1, recent_terminal=0,
+        by_status={"running": 1, "failed": 1}, failed=1, stopped=0, lost=0,
     )
 
-    section = WorkspaceJobsSource.from_jobs(jobs).to_sections()[0]
 
+# ---- observation: inline 态 ----
+def test_inline_renders_summary_and_columnar_details() -> None:
+    jobs = WorkspaceJobs(
+        workspace="/share/p",
+        active_jobs=({"job_id": "a1", "job_name": "n1", "status": "running"},),
+        pending_terminal_jobs=(
+            {"job_id": "p1", "job_name": "n2", "status": "failed"},
+        ),
+        mode="observation",
+        summary=_summary(),
+    )
+    section = WorkspaceJobsSource.from_jobs(jobs).to_sections()[0]
     assert section.key == "workspace_jobs"
     assert section.tag == "workspace_jobs"
     assert section.order == SectionOrder.WORKSPACE_JOBS
     assert section.views == frozenset({ContextView.RUNTIME, ContextView.CHECKPOINT})
-    assert section.content == (
-        'active_job_1 {"job_id": "a2", "status": "running"}\n'
-        'active_job_2 {"job_id": "a1", "status": "submitted"}\n'
-        'pending_terminal_job_1 {"job_id": "t9", "status": "finished"}'
-    )
+    lines = section.content.splitlines()
+    assert lines[0] == "workspace /share/p"
+    assert lines[1] == "mode observation"
+    assert lines[2].startswith("summary {")
+    assert lines[3] == "active job_id,job_name,status"
+    assert lines[4] == "a1,n1,running"
+    assert "pending_terminal job_id,job_name,status" in section.content
+    assert "p1,n2,failed" in section.content
 
 
-def test_workspace_header_prefixes_groups_when_workspace_present() -> None:
+# ---- observation: compact 态 ----
+def test_compact_renders_export_samples_omitted() -> None:
     jobs = WorkspaceJobs(
-        workspace="/share/w1",
-        active_jobs=({"job_id": "a1", "status": "running"},),
-        recent_terminal_jobs=({"job_id": "r1", "status": "finished"},),
+        workspace="/share/p",
+        mode="observation",
+        summary=_summary(),
+        export=WorkspaceJobsExport(
+            path="/share/p/.matmaster/context/workspace_jobs/s-i.csv",
+            format="csv", row_count=1020, columns=("group", "job_id"),
+            reason="row_limit",
+        ),
+        priority_samples=(
+            {"job_id": "p1", "job_name": "n2", "status": "failed"},
+        ),
+        omitted_count=1019,
     )
-    section = WorkspaceJobsSource.from_jobs(jobs).to_sections()[0]
-    assert section.content == (
-        "workspace /share/w1\n"
-        'active_job_1 {"job_id": "a1", "status": "running"}\n'
-        'recent_terminal_job_1 {"job_id": "r1", "status": "finished"}'
+    content = WorkspaceJobsSource.from_jobs(jobs).to_sections()[0].content
+    assert "details_exported {" in content
+    assert "read_hint " in content
+    assert "action_hint " in content  # summary.failed=1
+    assert "priority_samples job_id,job_name,status" in content
+    assert "p1,n2,failed" in content
+    assert "omitted_from_prompt {" in content
+    assert "active job_id" not in content  # compact 不渲染 active 明细 block
+
+
+# ---- observation: error 态 ----
+def test_error_renders_export_error_not_details() -> None:
+    jobs = WorkspaceJobs(
+        workspace="/share/p",
+        mode="observation",
+        summary=_summary(),
+        export_error=WorkspaceJobsExportError(
+            reason="write_failed", rows=1000, target_path="/share/p/x.csv"
+        ),
     )
+    content = WorkspaceJobsSource.from_jobs(jobs).to_sections()[0].content
+    assert "workspace_jobs_export_error {" in content
+    assert "details_exported" not in content
+    assert "do not assume omitted pending jobs were delivered" in content
 
 
-def test_workspace_header_omitted_when_no_jobs() -> None:
-    jobs = WorkspaceJobs(workspace="/share/w1")
-    assert WorkspaceJobsSource.from_jobs(jobs).to_sections() == ()
+def test_empty_jobs_render_nothing() -> None:
+    assert WorkspaceJobsSource.from_jobs(WorkspaceJobs()).to_sections() == ()
 
 
-def test_recent_terminal_group_renders() -> None:
-    jobs = WorkspaceJobs(recent_terminal_jobs=({"job_id": "r9", "status": "finished"},))
-    section = WorkspaceJobsSource.from_jobs(jobs).to_sections()[0]
-    assert section.content == (
-        'recent_terminal_job_1 {"job_id": "r9", "status": "finished"}'
-    )
-
-
-def test_workspace_jobs_only_active_renders_without_terminal_lines() -> None:
-    jobs = WorkspaceJobs(active_jobs=({"job_id": "a1", "status": "running"},))
-    section = WorkspaceJobsSource.from_jobs(jobs).to_sections()[0]
-    assert section.content == 'active_job_1 {"job_id": "a1", "status": "running"}'
-
-
-def test_workspace_jobs_only_pending_terminal_renders() -> None:
-    jobs = WorkspaceJobs(pending_terminal_jobs=({"job_id": "t1", "status": "failed"},))
-    section = WorkspaceJobsSource.from_jobs(jobs).to_sections()[0]
-    assert section.content == (
-        'pending_terminal_job_1 {"job_id": "t1", "status": "failed"}'
-    )
-
-
+# ---- delivery: 仍渲染为 turn instruction 文本，不在本 section ----
 def _job(
     job_id: str,
     status: str = "finished",
@@ -120,7 +130,7 @@ def test_delivery_jobs_render_current_instruction_template_text() -> None:
     assert "relax-running" not in text
 
 
-def test_delivery_instruction_lists_all_pending_jobs_without_overflow() -> None:
+def test_delivery_instruction_lists_all_pending_jobs() -> None:
     jobs = WorkspaceJobs(
         mode="delivery",
         pending_terminal_jobs=(
@@ -128,36 +138,16 @@ def test_delivery_instruction_lists_all_pending_jobs_without_overflow() -> None:
             _job("t2", "failed", job_name="two"),
             _job("t3", "stopped", job_name="three"),
         ),
-        detail_limit=1,
     )
 
     text = WorkspaceJobsSource.delivery_instruction_text(jobs)
 
-    assert "pending_terminal_overflow" not in text
     assert "t1, one" in text
     assert "t2, two" in text
     assert "t3, three" in text
 
 
-def test_delivery_instruction_covers_all_pending_jobs_in_order() -> None:
-    pending = tuple(_job(f"t{index}") for index in range(5))
-    jobs = WorkspaceJobs(
-        mode="delivery",
-        pending_terminal_jobs=pending,
-        detail_limit=2,
-    )
-
-    lines = WorkspaceJobsSource.delivery_instruction_text(jobs).splitlines()
-    ids = [
-        line.split(", ", 1)[0]
-        for line in lines
-        if line.startswith("t") and ", " in line
-    ]
-
-    assert ids == [job["job_id"] for job in pending]
-
-
-def test_delivery_active_only_renders_no_instruction_text_or_sections() -> None:
+def test_delivery_active_only_renders_no_instruction_or_section() -> None:
     jobs = WorkspaceJobs(
         mode="delivery",
         active_jobs=(_job("a1", "running"),),
@@ -176,99 +166,3 @@ def test_delivery_empty_jobs_render_no_sections() -> None:
         WorkspaceJobsSource.from_jobs(WorkspaceJobs(mode="delivery")).to_sections()
         == ()
     )
-
-
-def test_observation_mode_does_not_render_delivery_directive() -> None:
-    jobs = WorkspaceJobs(
-        mode="observation",
-        pending_terminal_jobs=(_job("t1", "failed"),),
-    )
-
-    sections = WorkspaceJobsSource.from_jobs(jobs).to_sections()
-
-    assert len(sections) == 1
-    assert sections[0].key == "workspace_jobs"
-    assert sections[0].content.startswith("pending_terminal_job_1 ")
-
-
-def test_detail_limit_compresses_pending_with_overflow_summary() -> None:
-    jobs = WorkspaceJobs(
-        pending_terminal_jobs=(
-            _job("f1", "failed"),
-            _job("t1"),
-            _job("t2"),
-            _job("t3", "stopped"),
-        ),
-        detail_limit=2,
-    )
-    lines = WorkspaceJobsSource.from_jobs(jobs).lines
-
-    assert lines[0].startswith('pending_terminal_job_1 {"job_id": "f1"')
-    assert lines[1].startswith('pending_terminal_job_2 {"job_id": "t1"')
-    assert len(lines) == 3
-    assert lines[2] == (
-        'pending_terminal_overflow '
-        '{"by_status": {"finished": 1, "stopped": 1}, '
-        '"count": 2, "job_ids": ["t2", "t3"]}'
-    )
-
-
-def test_detail_limit_compresses_active_independently() -> None:
-    jobs = WorkspaceJobs(
-        active_jobs=(
-            _job("a1", "running"),
-            _job("a2", "running"),
-            _job("a3", "submitted"),
-        ),
-        pending_terminal_jobs=(_job("t1"),),
-        detail_limit=1,
-    )
-    lines = WorkspaceJobsSource.from_jobs(jobs).lines
-
-    assert lines[0].startswith("active_job_1 ")
-    assert lines[1] == (
-        'active_overflow '
-        '{"by_status": {"running": 1, "submitted": 1}, '
-        '"count": 2, "job_ids": ["a2", "a3"]}'
-    )
-    assert lines[2].startswith("pending_terminal_job_1 ")
-    assert len(lines) == 3
-
-
-def test_detail_limit_covers_all_ids_between_detail_and_overflow() -> None:
-    all_ids = [f"j{i}" for i in range(7)]
-    jobs = WorkspaceJobs(
-        pending_terminal_jobs=tuple(_job(i) for i in all_ids),
-        detail_limit=3,
-    )
-    lines = WorkspaceJobsSource.from_jobs(jobs).lines
-
-    detail_ids = [json.loads(line.split(" ", 1)[1])["job_id"] for line in lines[:3]]
-    overflow = json.loads(lines[3].split(" ", 1)[1])
-    assert detail_ids + overflow["job_ids"] == all_ids
-
-
-def test_detail_limit_no_overflow_when_limit_covers_all() -> None:
-    jobs = WorkspaceJobs(
-        pending_terminal_jobs=(_job("t1"), _job("t2")),
-        detail_limit=2,
-    )
-    lines = WorkspaceJobsSource.from_jobs(jobs).lines
-    assert len(lines) == 2
-    assert not any("overflow" in line for line in lines)
-
-
-def test_overflow_job_ids_keep_same_job_id_across_sandboxes() -> None:
-    jobs = WorkspaceJobs(
-        pending_terminal_jobs=(
-            _job("keep"),
-            _job("dup", sandbox=False),
-            _job("dup", sandbox=True),
-        ),
-        detail_limit=1,
-    )
-    lines = WorkspaceJobsSource.from_jobs(jobs).lines
-
-    overflow = json.loads(lines[1].split(" ", 1)[1])
-    assert overflow["count"] == 2
-    assert overflow["job_ids"] == ["dup", "dup"]
