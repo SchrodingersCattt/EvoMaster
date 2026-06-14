@@ -48,7 +48,7 @@ class WorkspaceJobsSource:
 
     @classmethod
     def from_jobs(cls, jobs: WorkspaceJobs) -> WorkspaceJobsSource:
-        if jobs.mode == "delivery":
+        if jobs.mode == "session_workspace_delivery":
             return cls(lines=())
         if jobs.export_error is not None:
             return cls(lines=cls._error_lines(jobs))
@@ -58,7 +58,7 @@ class WorkspaceJobsSource:
 
     @classmethod
     def delivery_instruction_text(cls, jobs: WorkspaceJobs) -> str:
-        if jobs.mode != "delivery" or not jobs.pending_terminal_jobs:
+        if jobs.mode != "session_workspace_delivery" or not jobs.pending_terminal_jobs:
             return ""
         failed = tuple(
             job

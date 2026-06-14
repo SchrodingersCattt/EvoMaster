@@ -188,7 +188,7 @@ class _SessionWorkspaceDeliveryJobsPort:
             active_jobs=tuple(active),
             pending_terminal_jobs=tuple(pending),
             detail_limit=detail_limit,
-            mode="delivery",
+            mode="session_workspace_delivery",
         )
 
 
@@ -246,7 +246,7 @@ class _WorkspaceObservationJobsPort:
             pending_terminal_jobs=tuple(pending),
             recent_terminal_jobs=tuple(recent),
             detail_limit=self._detail_limit,
-            mode="observation",
+            mode="workspace_observation",
         )
 
 

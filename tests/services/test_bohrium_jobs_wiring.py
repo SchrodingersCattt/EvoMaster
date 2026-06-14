@@ -159,7 +159,7 @@ async def test_delivery_mode_serves_active_and_pending_from_snapshot() -> None:
 
     result = await jobs_port.load_workspace_jobs(WorkspaceJobsQuery(session_id="s"))
     assert result.workspace == "/share/project"
-    assert result.mode == "delivery"
+    assert result.mode == "session_workspace_delivery"
     assert result.active_jobs == ({"job_id": "a"},)
     assert result.pending_terminal_jobs == ({"id": 1, "job_id": "t"},)
     assert result.recent_terminal_jobs == ()
@@ -191,7 +191,7 @@ async def test_observation_mode_reads_three_groups_cross_session() -> None:
 
     result = await jobs_port.load_workspace_jobs(WorkspaceJobsQuery(session_id="s"))
     assert result.workspace == "/share/project"
-    assert result.mode == "observation"
+    assert result.mode == "workspace_observation"
     assert result.active_jobs == ({"job_id": "a"},)
     assert result.pending_terminal_jobs == ({"job_id": "p"},)
     assert result.recent_terminal_jobs == ({"job_id": "r"},)
@@ -245,7 +245,7 @@ async def test_delivery_mode_keeps_snapshot_pending_when_active_query_fails() ->
 
     result = await jobs_port.load_workspace_jobs(WorkspaceJobsQuery(session_id="s"))
 
-    assert result.mode == "delivery"
+    assert result.mode == "session_workspace_delivery"
     assert result.active_jobs == ()
     assert result.pending_terminal_jobs == snap_rows
     assert result.detail_limit == 20

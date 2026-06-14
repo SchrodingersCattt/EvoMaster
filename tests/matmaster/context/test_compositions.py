@@ -88,7 +88,7 @@ def test_anchor_delivery_turn_embeds_job_template_in_current_instruction() -> No
                 )
             ),
             workspace_jobs=WorkspaceJobs(
-                mode="delivery",
+                mode="session_workspace_delivery",
                 pending_terminal_jobs=(
                     _job("f1", "failed", "relax-fail"),
                     _job("t1", "finished", "relax-ok"),
@@ -125,7 +125,7 @@ def test_anchor_observation_jobs_do_not_render_delivery_directive() -> None:
                 instruction=TurnInstructionSource(user_text="Check workspace jobs.")
             ),
             workspace_jobs=WorkspaceJobs(
-                mode="observation",
+                mode="workspace_observation",
                 pending_terminal_jobs=(_job("t1", "failed"),),
             ),
         )

@@ -25,7 +25,7 @@ def test_inline_renders_summary_and_columnar_details() -> None:
         pending_terminal_jobs=(
             {"job_id": "p1", "job_name": "n2", "status": "failed"},
         ),
-        mode="observation",
+        mode="workspace_observation",
         summary=_summary(),
     )
     section = WorkspaceJobsSource.from_jobs(jobs).to_sections()[0]
@@ -35,7 +35,7 @@ def test_inline_renders_summary_and_columnar_details() -> None:
     assert section.views == frozenset({ContextView.RUNTIME, ContextView.CHECKPOINT})
     lines = section.content.splitlines()
     assert lines[0] == "workspace /share/p"
-    assert lines[1] == "mode observation"
+    assert lines[1] == "mode workspace_observation"
     assert lines[2].startswith("summary {")
     assert lines[3] == "active job_id,job_name,status"
     assert lines[4] == "a1,n1,running"
@@ -47,7 +47,7 @@ def test_inline_renders_summary_and_columnar_details() -> None:
 def test_compact_renders_export_samples_omitted() -> None:
     jobs = WorkspaceJobs(
         workspace="/share/p",
-        mode="observation",
+        mode="workspace_observation",
         summary=_summary(),
         export=WorkspaceJobsExport(
             path="/share/p/.matmaster/context/workspace_jobs/s-i.csv",
@@ -73,7 +73,7 @@ def test_compact_renders_export_samples_omitted() -> None:
 def test_error_renders_export_error_not_details() -> None:
     jobs = WorkspaceJobs(
         workspace="/share/p",
-        mode="observation",
+        mode="workspace_observation",
         summary=_summary(),
         export_error=WorkspaceJobsExportError(
             reason="write_failed", rows=1000, target_path="/share/p/x.csv"
@@ -104,7 +104,7 @@ def _job(
 
 def test_delivery_jobs_render_current_instruction_template_text() -> None:
     jobs = WorkspaceJobs(
-        mode="delivery",
+        mode="session_workspace_delivery",
         pending_terminal_jobs=(
             _job("f1", "failed", job_name="relax-fail"),
             _job("s1", "stopped", job_name="relax-stop"),
@@ -132,7 +132,7 @@ def test_delivery_jobs_render_current_instruction_template_text() -> None:
 
 def test_delivery_instruction_lists_all_pending_jobs() -> None:
     jobs = WorkspaceJobs(
-        mode="delivery",
+        mode="session_workspace_delivery",
         pending_terminal_jobs=(
             _job("t1", "finished", job_name="one"),
             _job("t2", "failed", job_name="two"),
@@ -149,7 +149,7 @@ def test_delivery_instruction_lists_all_pending_jobs() -> None:
 
 def test_delivery_active_only_renders_no_instruction_or_section() -> None:
     jobs = WorkspaceJobs(
-        mode="delivery",
+        mode="session_workspace_delivery",
         active_jobs=(_job("a1", "running"),),
     )
 
@@ -159,10 +159,14 @@ def test_delivery_active_only_renders_no_instruction_or_section() -> None:
 
 def test_delivery_empty_jobs_render_no_sections() -> None:
     assert (
-        WorkspaceJobsSource.delivery_instruction_text(WorkspaceJobs(mode="delivery"))
+        WorkspaceJobsSource.delivery_instruction_text(
+            WorkspaceJobs(mode="session_workspace_delivery")
+        )
         == ""
     )
     assert (
-        WorkspaceJobsSource.from_jobs(WorkspaceJobs(mode="delivery")).to_sections()
+        WorkspaceJobsSource.from_jobs(
+            WorkspaceJobs(mode="session_workspace_delivery")
+        ).to_sections()
         == ()
     )

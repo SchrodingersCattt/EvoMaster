@@ -98,7 +98,7 @@ def _step_turn_input(inputs: ContextCompositionInputs) -> tuple[ContextSection, 
 def _step_workspace_jobs(
     inputs: ContextCompositionInputs,
 ) -> tuple[ContextSection, ...]:
-    if inputs.workspace_jobs.mode == "delivery":
+    if inputs.workspace_jobs.mode == "session_workspace_delivery":
         return ()
     return WorkspaceJobsSource.from_jobs(inputs.workspace_jobs).to_sections()
 
