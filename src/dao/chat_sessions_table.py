@@ -107,7 +107,9 @@ class ChatSessionsTable(BaseTable):
                 logger.info(f"创建会话成功: {session_id}")
                 return cursor.rowcount > 0
 
-    def get_session(self, session_id: str, *, include_deleted: bool = False) -> dict | None:
+    def get_session(
+        self, session_id: str, *, include_deleted: bool = False
+    ) -> dict | None:
         """获取会话信息（含 user_id、org_id、project_id、status 等）。"""
         with self.get_connection() as conn:
             with conn.cursor() as cursor:
@@ -331,11 +333,14 @@ class ChatSessionsTable(BaseTable):
         with self.get_connection() as conn:
             with conn.cursor() as cursor:
                 where_clause = (
-                    f"WHERE user_id = %s AND project_id = %s AND deleted_at IS NULL"
+                    "WHERE user_id = %s AND project_id = %s AND deleted_at IS NULL"
                 )
                 params: list[object] = [user_id, int(project_id)]
                 if directory is None:
-                    where_clause += " AND (session_directory IS NULL OR TRIM(session_directory) = '')"
+                    where_clause += (
+                        " AND (session_directory IS NULL "
+                        "OR TRIM(session_directory) = '')"
+                    )
                 else:
                     where_clause += " AND session_directory = %s"
                     params.append(directory)
