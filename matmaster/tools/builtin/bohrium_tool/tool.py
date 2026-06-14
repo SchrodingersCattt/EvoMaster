@@ -543,6 +543,10 @@ class BohriumTool(BuiltinTool):
             return ToolResult(
                 status="success",
                 content=json.dumps(result_payload, ensure_ascii=False),
+                meta={
+                    "bohrium_running": code in RUNNING_CODES,
+                    "bohrium_status_code": int(code),
+                },
             )
 
         except Exception as exc:
