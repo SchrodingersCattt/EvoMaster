@@ -1,0 +1,3 @@
+DP-GEN validation stopped before submission:
+Some configuration values do not match the expected argument types for training and FP resources.
+Several path placeholders still need to be replaced before a real run.

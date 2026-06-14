@@ -1,0 +1,105 @@
+{
+  "api_version": "1.0",
+  "deepmd_version": "2.2.8",
+  "train": [
+    {
+      "_note": "dpa1 is 2.2.9 and deepmd is 2.2.8",
+      "command": "path/to/xx",
+      "machine": {
+        "batch_type": "Shell",
+        "context_type": "ssh",
+        "remote_profile": {
+          "hostname": "221.194.152.152",
+          "port": 5460,
+          "username": "root",
+          "timeout": 20
+        },
+        "remote_root": "path/to/xx",
+        "local_root": "path/to/xx"
+      },
+      "resources": {
+        "_envs": {
+          "OMP_NUM_THREADS": 1
+        },
+        "batch_type": "Shell",
+        "number_node": 1,
+        "cpu_per_node": 90,
+        "gpu_per_node": 2,
+        "strategy": {
+          "if_cuda_multi_devices": true
+        },
+        "_custom_flags": [],
+        "kwargs": {},
+        "group_size": 4
+      }
+    }
+  ],
+  "model_devi": [
+    {
+      "_note": "dpa1 is 2.2.9 and deepmd is 2.2.8",
+      "command": "set -x;. path/to/xx; . path/to/xx path/to/xx && lmp -i path/to/xx -v restart 0",
+      "machine": {
+        "batch_type": "Shell",
+        "context_type": "ssh",
+        "remote_profile": {
+          "hostname": "123.123.12.12",
+          "port": 1234,
+          "username": "root",
+          "timeout": 123
+        },
+        "remote_root": "path/to/xx",
+        "local_root": "path/to/xx"
+      },
+      "resources": {
+        "_envs": {
+          "OMP_NUM_THREADS": 1
+        },
+        "batch_type": "Shell",
+        "number_node": 1,
+        "cpu_per_node": 90,
+        "gpu_per_node": 2,
+        "strategy": {
+          "if_cuda_multi_devices": true
+        },
+        "_custom_flags": [],
+        "kwargs": {},
+        "group_size": 155
+      }
+    }
+  ],
+  "fp": [
+    {
+      "command": "source  path/to/xx && export OMP_NUM_THREADS=1 && mpirun -n 16 cp2k.popt -i path/to/xx -o path/to/xx",
+      "machine": {
+        "batch_type": "Lebesgue",
+        "context_type": "LebesgueContext",
+        "local_root": "path/to/xx",
+        "remote_profile": {
+          "email": "matmaster@dp.tech",
+          "password": "matmaster",
+          "program_id": 12345,
+          "keep_backup": true,
+          "input_data": {
+            "grouped": true,
+            "job_name": "dpgen",
+            "machine_type": "c16_m64_cpu",
+            "checkpoint_time": 30,
+            "platform": "ali",
+            "job_type": "container",
+            "image_address": "registry.dp.tech/dptech/cp2k:2024.1"
+          }
+        }
+      },
+      "resources": {
+        "number_node": 1,
+        "cpu_per_node": 16,
+        "gpu_per_node": 0,
+        "queue_name": "M1_4_0",
+        "strategy": {
+          "ratio_unfinished": 0.1
+        },
+        "group_size": "ten"
+      }
+    }
+  ]
+}
