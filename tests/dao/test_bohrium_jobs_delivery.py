@@ -1,5 +1,7 @@
-"""scan_delivery_units / list_pending_terminal_snapshot / mark_handled_by_ids /
-get_first_pending_failed 的真库测试（无 .env.test 则整组 SKIP）。"""
+"""scan_delivery_units / list_pending_terminal_snapshot / mark_handled_by_ids 的真库测试。
+
+无 .env.test 则整组 SKIP。
+"""
 
 from __future__ import annotations
 
@@ -239,32 +241,6 @@ def test_mark_handled_by_ids_idempotent_and_chunked(jobs_table, sessions_shadow)
     assert jobs_table.scan_delivery_units(limit=10) == []
 
 
-def test_get_first_pending_failed_returns_earliest_unhandled(
-    jobs_table, sessions_shadow
-):
-    _register_session(sessions_shadow)
-    _seed_job(jobs_table, job_id="101", status="failed")
-    with sessions_shadow.cursor() as cur:
-        cur.execute(
-            "UPDATE bohrium_jobs SET handled_at = NOW() WHERE job_id = %s", ("101",)
-        )
-    sessions_shadow.commit()
-    _seed_job(jobs_table, job_id="102", status="stopped")
-    _seed_job(jobs_table, job_id="103", status="failed")
-    _shift_terminal_at(sessions_shadow, job_id="102", seconds_ago=300)
-    _shift_terminal_at(sessions_shadow, job_id="103", seconds_ago=100)
-
-    row = jobs_table.get_first_pending_failed(
-        user_id="u1",
-        org_id="o1",
-        session_id="sess-1",
-        workspace="/share/project",
-        invocation_key="inv-1",
-    )
-
-    assert row == {"job_id": "102", "job_name": "name-102", "status": "stopped"}
-
-
 def _force_lost(jobs_table, *, job_id):
     """把活跃行拨老后经 mark_poll_error 置 lost（唯一合法写入路径）。"""
     with jobs_table.get_connection() as conn:
@@ -305,7 +281,7 @@ def test_scan_lost_only_unit_has_final_shape(jobs_table, sessions_shadow):
 
 def test_scan_lost_with_active_has_first_failure_shape(jobs_table, sessions_shadow):
     # 1 lost + 1 仍在跑：failed_total>0 且 failed_handled==0、active>0
-    # → decide 判 FIRST_FAILURE；get_first_pending_failed 取到 lost 行供文案。
+    # → decide 判 FIRST_FAILURE。
     _register_session(sessions_shadow)
     _seed_job(jobs_table, inv="inv-1", job_id="402")
     _seed_job(jobs_table, inv="inv-1", job_id="403")
@@ -320,16 +296,6 @@ def test_scan_lost_with_active_has_first_failure_shape(jobs_table, sessions_shad
     assert unit["active"] == 1
     assert unit["failed_total"] == 1
     assert unit["failed_handled"] == 0
-
-    first = jobs_table.get_first_pending_failed(
-        user_id="u1",
-        org_id="o1",
-        session_id="sess-1",
-        workspace="/share/project",
-        invocation_key="inv-1",
-    )
-    assert first is not None
-    assert first["status"] == "lost"
 
 
 def test_mark_handled_by_job_keys_idempotent_and_session_scoped(
@@ -451,9 +417,7 @@ def test_mark_handled_by_ids_does_not_cross_workspace(jobs_table, sessions_shado
     assert [r["id"] for r in still] == ids
 
 
-def test_mark_handled_by_job_keys_does_not_cross_workspace(
-    jobs_table, sessions_shadow
-):
+def test_mark_handled_by_job_keys_does_not_cross_workspace(jobs_table, sessions_shadow):
     _register_session(sessions_shadow)
     _seed_job(jobs_table, job_id="501", status="finished")  # /share/project
     # 正确 workspace + 错 job_key 无效；错 workspace + 对 job_key 也无效
@@ -508,52 +472,6 @@ def test_scan_splits_same_session_by_workspace(jobs_table, sessions_shadow):
     assert workspaces == ["/share/other", "/share/project"]
     for u in units:
         assert u["pending_terminal"] == 1
-
-
-def test_get_first_pending_failed_scoped_by_workspace(
-    jobs_table, sessions_shadow
-):
-    _register_session(sessions_shadow)
-    _seed_job(jobs_table, inv="inv-1", job_id="701", status="failed")
-    jobs_table.insert_submitted(
-        session_id="sess-1",
-        invocation_id="inv-1",
-        spawn_id=None,
-        user_id="u1",
-        org_id="o1",
-        job_id="702",
-        job_name="name-702",
-        project_id=42,
-        sandbox=False,
-        input_dir="data/in",
-        workspace="/share/other",
-    )
-    jobs_table.apply_poll(
-        user_id="u1",
-        org_id="o1",
-        sandbox=False,
-        job_id="702",
-        status="failed",
-        is_terminal=True,
-        backoff_seconds=30,
-    )
-
-    row_other = jobs_table.get_first_pending_failed(
-        user_id="u1",
-        org_id="o1",
-        session_id="sess-1",
-        workspace="/share/other",
-        invocation_key="inv-1",
-    )
-    assert row_other is not None and row_other["job_id"] == "702"
-    row_project = jobs_table.get_first_pending_failed(
-        user_id="u1",
-        org_id="o1",
-        session_id="sess-1",
-        workspace="/share/project",
-        invocation_key="inv-1",
-    )
-    assert row_project is not None and row_project["job_id"] == "701"
 
 
 def test_query_workspace_active_spans_sessions(jobs_table, sessions_shadow):

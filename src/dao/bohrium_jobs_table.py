@@ -574,34 +574,6 @@ class BohriumJobsTable(BaseTable):
             conn.commit()
         return affected
 
-    def get_first_pending_failed(
-        self,
-        *,
-        user_id: str,
-        org_id: str,
-        session_id: str,
-        workspace: str,
-        invocation_key: str,
-    ) -> dict[str, Any] | None:
-        """该 invocation 最早一个未交付失败作业（FIRST_FAILURE prompt 用）。"""
-        sql = f"""
-            SELECT job_id, job_name, status
-            FROM {self.table_name}
-            WHERE user_id = %s AND org_id = %s AND session_id = %s
-              AND workspace = %s
-              AND COALESCE(invocation_id, '') = %s
-              AND status IN ({_SQL_FAILURE})
-              AND handled_at IS NULL
-            ORDER BY terminal_at ASC, id ASC
-            LIMIT 1
-        """
-        with self.get_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    sql, (user_id, org_id, session_id, workspace, invocation_key)
-                )
-                return cur.fetchone()
-
     def list_all_for_test(self) -> list[dict[str, Any]]:
         """仅供测试：返回全部行。"""
         with self.get_connection() as conn:
