@@ -159,6 +159,7 @@ async def test_delivery_mode_serves_active_and_pending_from_snapshot() -> None:
 
     result = await jobs_port.load_workspace_jobs(WorkspaceJobsQuery(session_id="s"))
     assert result.workspace == "/share/project"
+    assert result.mode == "delivery"
     assert result.active_jobs == ({"job_id": "a"},)
     assert result.pending_terminal_jobs == ({"id": 1, "job_id": "t"},)
     assert result.recent_terminal_jobs == ()
@@ -190,6 +191,7 @@ async def test_observation_mode_reads_three_groups_cross_session() -> None:
 
     result = await jobs_port.load_workspace_jobs(WorkspaceJobsQuery(session_id="s"))
     assert result.workspace == "/share/project"
+    assert result.mode == "observation"
     assert result.active_jobs == ({"job_id": "a"},)
     assert result.pending_terminal_jobs == ({"job_id": "p"},)
     assert result.recent_terminal_jobs == ({"job_id": "r"},)
@@ -218,6 +220,35 @@ async def test_observation_mode_empty_when_workspace_missing() -> None:
     result = await jobs_port.load_workspace_jobs(WorkspaceJobsQuery(session_id="s"))
     assert result == WorkspaceJobs.empty()
     table.query_workspace_active.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_delivery_mode_keeps_snapshot_pending_when_active_query_fails() -> None:
+    from matmaster.context.ports import WorkspaceJobsQuery
+
+    table = MagicMock()
+    table.query_session_active.side_effect = RuntimeError("active unavailable")
+    snap_rows = (
+        {"id": 1, "job_id": "t1", "status": "finished"},
+        {"id": 2, "job_id": "f1", "status": "failed"},
+    )
+    _, jobs_port = build_bohrium_jobs_ports(
+        session_id="s",
+        invocation_id="inv",
+        user_id="u",
+        org_id="o",
+        workspace="/share/project",
+        job_context_mode="session_workspace_delivery",
+        delivery_snapshot=_snapshot(snap_rows),
+        table=table,
+    )
+
+    result = await jobs_port.load_workspace_jobs(WorkspaceJobsQuery(session_id="s"))
+
+    assert result.mode == "delivery"
+    assert result.active_jobs == ()
+    assert result.pending_terminal_jobs == snap_rows
+    assert result.detail_limit == 20
 
 
 def test_ports_do_not_construct_table_until_identity_allows_use() -> None:

@@ -160,6 +160,12 @@ class _SessionWorkspaceDeliveryJobsPort:
         self._snapshot = snapshot
 
     async def load_workspace_jobs(self, query: WorkspaceJobsQuery) -> WorkspaceJobs:
+        if self._snapshot is not None:
+            pending: tuple[dict[str, Any], ...] = self._snapshot.rows
+            detail_limit: int | None = self._snapshot.detail_limit
+        else:
+            pending = ()
+            detail_limit = None
         try:
             table = self._table_ref.get()
             active = await asyncio.to_thread(
@@ -169,25 +175,20 @@ class _SessionWorkspaceDeliveryJobsPort:
                 session_id=query.session_id,
                 workspace=self._workspace,
             )
-            if self._snapshot is not None:
-                pending: tuple[dict[str, Any], ...] = self._snapshot.rows
-                detail_limit: int | None = self._snapshot.detail_limit
-            else:
-                pending = ()
-                detail_limit = None
         except Exception:  # noqa: BLE001
             logger.warning(
-                "load_workspace_jobs(delivery) failed session_id=%s workspace=%s",
+                "load_workspace_jobs(delivery active) failed session_id=%s workspace=%s",
                 query.session_id,
                 self._workspace,
                 exc_info=True,
             )
-            return WorkspaceJobs.empty()
+            active = ()
         return WorkspaceJobs(
             workspace=self._workspace,
             active_jobs=tuple(active),
             pending_terminal_jobs=tuple(pending),
             detail_limit=detail_limit,
+            mode="delivery",
         )
 
 
@@ -245,6 +246,7 @@ class _WorkspaceObservationJobsPort:
             pending_terminal_jobs=tuple(pending),
             recent_terminal_jobs=tuple(recent),
             detail_limit=self._detail_limit,
+            mode="observation",
         )
 
 
