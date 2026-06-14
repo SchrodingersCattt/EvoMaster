@@ -147,7 +147,11 @@ def create_job(ctx: BohriumContext, *, job_name: str) -> dict[str, Any]:
         }
     )
     response = _post(
-        ctx.credentials.base_url, path, ctx.credentials.access_key, payload
+        ctx.credentials.base_url,
+        path,
+        ctx.credentials.access_key,
+        payload,
+        log_curl=True,
     )
     if response.get("code") != 0:
         raise BohriumAPIError(f"job/create failed: {response}")
