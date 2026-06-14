@@ -11,7 +11,7 @@ ORCA is an ab initio quantum chemistry program focused on molecular systems. It 
 
 | Item | Default Value |
 |------|---------------|
-| image | `registry.dp.tech/dptech/dp/native/prod-19853/orca:v6.1.1` |
+| image | `registry.dp.tech/dptech/matmaster:orca-v6.1.1` |
 | machine | `c32_m128_cpu` (16 physical cores, 128 GB RAM) |
 | cmd | `OMPI_ALLOW_RUN_AS_ROOT=1 OMPI_ALLOW_RUN_AS_ROOT_CONFIRM=1 OMPI_MCA_rmaps_base_oversubscribe=1 /opt/orca611_avx2/orca {input_file} > log 2>&1` |
 
@@ -82,7 +82,7 @@ If the user provides a complete ORCA `.inp` file, skip preparation and submit di
 2. Generate: `render_input.py --software orca --task sp --structure molecule.xyz --output input.inp`
 3. Diagnose: `diagnose_input.py --software orca --input input.inp`
 4. Place input.inp (and .xyz if using xyzfile) in one directory
-5. Submit: `Bohrium(action="submit", input_dir="<dir>", image="registry.dp.tech/dptech/dp/native/prod-19853/orca:v6.1.1", cmd="OMPI_ALLOW_RUN_AS_ROOT=1 OMPI_ALLOW_RUN_AS_ROOT_CONFIRM=1 OMPI_MCA_rmaps_base_oversubscribe=1 /opt/orca611_avx2/orca input.inp > log 2>&1")`
+5. Submit: `Bohrium(action="submit", input_dir="<dir>", image="registry.dp.tech/dptech/matmaster:orca-v6.1.1", cmd="OMPI_ALLOW_RUN_AS_ROOT=1 OMPI_ALLOW_RUN_AS_ROOT_CONFIRM=1 OMPI_MCA_rmaps_base_oversubscribe=1 /opt/orca611_avx2/orca input.inp > log 2>&1")`
 6. Query current status when needed: `Bohrium(action="query", job_id=<id>)`
 
 ## Reference
