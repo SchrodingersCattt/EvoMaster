@@ -282,9 +282,11 @@ def main():
         print(f"Errors: {errors}")
         for r in results:
             if r["status"] == "error":
-                print(f"  {r['case_id']}: HTTP {r['http_status']} - {r.get('detail', '')[:100]}")
+                print(
+                    f"  {r['case_id']}: HTTP {r['http_status']} - {r.get('detail', '')[:100]}"
+                )
 
-    print(f"\nFrontend URL:")
+    print("\nFrontend URL:")
     env_domains = {
         "test": "matmaster.test.bohrium.com",
         "uat": "matmaster.uat.bohrium.com",
