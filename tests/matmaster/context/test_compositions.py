@@ -38,8 +38,11 @@ class OverrideSource:
         )
 
 
-def _job(job_id: str, status: str = "finished") -> dict:
-    return {"job_id": job_id, "status": status}
+def _job(job_id: str, status: str = "finished", job_name: str | None = None) -> dict:
+    row = {"job_id": job_id, "status": status}
+    if job_name is not None:
+        row["job_name"] = job_name
+    return row
 
 
 def test_composition_inputs_defaults_are_empty() -> None:
@@ -75,7 +78,7 @@ def test_anchor_composition_includes_instructions_session_turn_and_jobs() -> Non
     assert context.images[0].url == "https://example.com/a.png"
 
 
-def test_anchor_delivery_turn_renders_reason_listing_and_directive_in_order() -> None:
+def test_anchor_delivery_turn_embeds_job_template_in_current_instruction() -> None:
     context = ANCHOR_COMPOSITION.apply(
         ContextCompositionInputs(
             user_instructions_text="Use SI units.",
@@ -86,21 +89,31 @@ def test_anchor_delivery_turn_renders_reason_listing_and_directive_in_order() ->
             ),
             workspace_jobs=WorkspaceJobs(
                 mode="delivery",
-                pending_terminal_jobs=(_job("t1", "failed"),),
-                active_jobs=(_job("a1", "running"),),
+                pending_terminal_jobs=(
+                    _job("f1", "failed", "relax-fail"),
+                    _job("t1", "finished", "relax-ok"),
+                ),
+                active_jobs=(_job("a1", "running", "relax-running"),),
             ),
         )
     )
 
     runtime = context.render(ContextView.RUNTIME)
 
-    assert "<current_instruction>" in runtime
-    assert "<workspace_jobs>" in runtime
-    assert "<delivery_directive>" in runtime
+    assert "<workspace_jobs>" not in runtime
+    assert "<delivery_directive>" not in runtime
+    assert "relax-running" not in runtime
+    assert "本会话出现失败的 Bohrium 作业" not in runtime
     assert (
-        runtime.index("<current_instruction>")
-        < runtime.index("<workspace_jobs>")
-        < runtime.index("<delivery_directive>")
+        "<current_instruction>\n"
+        "以下作业失败：\n"
+        "job_id, job_name\n"
+        "f1, relax-fail\n"
+        "\n"
+        "以下作业成功结束：\n"
+        "job_id, job_name\n"
+        "t1, relax-ok\n"
+        "</current_instruction>" in runtime
     )
 
 

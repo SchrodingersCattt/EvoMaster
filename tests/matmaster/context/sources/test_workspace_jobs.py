@@ -6,14 +6,6 @@ from matmaster.context.ports import WorkspaceJobs
 from matmaster.context.sections import ContextView, SectionOrder
 from matmaster.context.sources.workspace_jobs import WorkspaceJobsSource
 
-DELIVERY_DIRECTIVE = (
-    "请逐一拉取并核对以上已结束作业的结果：成功项汇总关键产出，失败项诊断原因，"
-    "给出整体结论与下一步。处理完成即视为交付确认。"
-)
-OVERFLOW_DIRECTIVE_SUFFIX = (
-    "（末尾 overflow 摘要中的 job_ids 同属本批次，请按其 status 一并处理。）"
-)
-
 
 def test_workspace_jobs_empty_returns_no_sections() -> None:
     assert WorkspaceJobsSource.from_jobs(WorkspaceJobs.empty()).to_sections() == ()
@@ -88,85 +80,66 @@ def test_workspace_jobs_only_pending_terminal_renders() -> None:
     )
 
 
-def _job(job_id: str, status: str = "finished", sandbox: bool = False) -> dict:
-    return {"job_id": job_id, "status": status, "sandbox": sandbox}
+def _job(
+    job_id: str,
+    status: str = "finished",
+    sandbox: bool = False,
+    job_name: str | None = None,
+) -> dict:
+    row = {"job_id": job_id, "status": status, "sandbox": sandbox}
+    if job_name is not None:
+        row["job_name"] = job_name
+    return row
 
 
-def test_delivery_jobs_render_listing_and_directive_sections() -> None:
-    jobs = WorkspaceJobs(
-        mode="delivery",
-        pending_terminal_jobs=(_job("t9", "finished"),),
-        active_jobs=(_job("a1", "running"),),
-    )
-
-    listing, directive = WorkspaceJobsSource.from_jobs(jobs).to_sections()
-
-    assert listing.key == "workspace_jobs"
-    assert listing.tag == "workspace_jobs"
-    assert listing.order == SectionOrder.WORKSPACE_JOBS
-    assert listing.views == frozenset({ContextView.RUNTIME, ContextView.CHECKPOINT})
-    assert listing.content.splitlines() == [
-        "以下 Bohrium 作业已结束、结果待处理（属于本轮交付确认范围）：",
-        (
-            'pending_terminal_job_1 '
-            '{"job_id": "t9", "sandbox": false, "status": "finished"}'
-        ),
-        "以下 Bohrium 作业仍在运行（仅作上下文，无需处理）：",
-        'active_job_1 {"job_id": "a1", "sandbox": false, "status": "running"}',
-    ]
-    assert directive.key == "delivery_directive"
-    assert directive.tag == "delivery_directive"
-    assert directive.order == SectionOrder.TURN_INSTRUCTION_LAST
-    assert directive.views == frozenset({ContextView.RUNTIME})
-    assert directive.content == DELIVERY_DIRECTIVE
-
-
-def test_delivery_pending_overflow_extends_directive_scope() -> None:
+def test_delivery_jobs_render_current_instruction_template_text() -> None:
     jobs = WorkspaceJobs(
         mode="delivery",
         pending_terminal_jobs=(
-            _job("t1", "finished"),
-            _job("t2", "failed"),
-            _job("t3", "stopped"),
+            _job("f1", "failed", job_name="relax-fail"),
+            _job("s1", "stopped", job_name="relax-stop"),
+            _job("l1", "lost", job_name="relax-lost"),
+            _job("t9", "finished", job_name="relax-ok"),
+        ),
+        active_jobs=(_job("a1", "running", job_name="relax-running"),),
+    )
+
+    text = WorkspaceJobsSource.delivery_instruction_text(jobs)
+
+    assert text.splitlines() == [
+        "以下作业失败：",
+        "job_id, job_name",
+        "f1, relax-fail",
+        "s1, relax-stop",
+        "l1, relax-lost",
+        "",
+        "以下作业成功结束：",
+        "job_id, job_name",
+        "t9, relax-ok",
+    ]
+    assert "relax-running" not in text
+
+
+def test_delivery_instruction_lists_all_pending_jobs_without_overflow() -> None:
+    jobs = WorkspaceJobs(
+        mode="delivery",
+        pending_terminal_jobs=(
+            _job("t1", "finished", job_name="one"),
+            _job("t2", "failed", job_name="two"),
+            _job("t3", "stopped", job_name="three"),
         ),
         detail_limit=1,
     )
 
-    listing, directive = WorkspaceJobsSource.from_jobs(jobs).to_sections()
+    text = WorkspaceJobsSource.delivery_instruction_text(jobs)
 
-    assert "pending_terminal_overflow" in listing.content
-    assert directive.content == DELIVERY_DIRECTIVE + OVERFLOW_DIRECTIVE_SUFFIX
-
-
-def test_delivery_without_pending_overflow_uses_plain_directive() -> None:
-    jobs = WorkspaceJobs(
-        mode="delivery",
-        pending_terminal_jobs=(_job("t1"), _job("t2")),
-        detail_limit=2,
-    )
-
-    _, directive = WorkspaceJobsSource.from_jobs(jobs).to_sections()
-
-    assert directive.content == DELIVERY_DIRECTIVE
-    assert OVERFLOW_DIRECTIVE_SUFFIX not in directive.content
+    assert "pending_terminal_overflow" not in text
+    assert "t1, one" in text
+    assert "t2, two" in text
+    assert "t3, three" in text
 
 
-def test_delivery_active_overflow_does_not_extend_directive_scope() -> None:
-    jobs = WorkspaceJobs(
-        mode="delivery",
-        pending_terminal_jobs=(_job("t1"),),
-        active_jobs=(_job("a1", "running"), _job("a2", "submitted")),
-        detail_limit=1,
-    )
-
-    listing, directive = WorkspaceJobsSource.from_jobs(jobs).to_sections()
-
-    assert "active_overflow" in listing.content
-    assert directive.content == DELIVERY_DIRECTIVE
-    assert OVERFLOW_DIRECTIVE_SUFFIX not in directive.content
-
-
-def test_delivery_pending_listing_covers_all_pending_jobs_in_order() -> None:
+def test_delivery_instruction_covers_all_pending_jobs_in_order() -> None:
     pending = tuple(_job(f"t{index}") for index in range(5))
     jobs = WorkspaceJobs(
         mode="delivery",
@@ -174,31 +147,31 @@ def test_delivery_pending_listing_covers_all_pending_jobs_in_order() -> None:
         detail_limit=2,
     )
 
-    listing = WorkspaceJobsSource.from_jobs(jobs).to_sections()[0]
-    pending_ids: list[str] = []
-    for line in listing.content.splitlines():
-        if line.startswith("pending_terminal_job_"):
-            pending_ids.append(json.loads(line.split(" ", 1)[1])["job_id"])
-        if line.startswith("pending_terminal_overflow "):
-            pending_ids.extend(json.loads(line.split(" ", 1)[1])["job_ids"])
+    lines = WorkspaceJobsSource.delivery_instruction_text(jobs).splitlines()
+    ids = [
+        line.split(", ", 1)[0]
+        for line in lines
+        if line.startswith("t") and ", " in line
+    ]
 
-    assert pending_ids == [job["job_id"] for job in pending]
+    assert ids == [job["job_id"] for job in pending]
 
 
-def test_delivery_active_only_renders_no_directive() -> None:
+def test_delivery_active_only_renders_no_instruction_text_or_sections() -> None:
     jobs = WorkspaceJobs(
         mode="delivery",
         active_jobs=(_job("a1", "running"),),
     )
 
-    sections = WorkspaceJobsSource.from_jobs(jobs).to_sections()
-
-    assert len(sections) == 1
-    assert sections[0].key == "workspace_jobs"
-    assert "delivery_directive" not in sections[0].content
+    assert WorkspaceJobsSource.delivery_instruction_text(jobs) == ""
+    assert WorkspaceJobsSource.from_jobs(jobs).to_sections() == ()
 
 
 def test_delivery_empty_jobs_render_no_sections() -> None:
+    assert (
+        WorkspaceJobsSource.delivery_instruction_text(WorkspaceJobs(mode="delivery"))
+        == ""
+    )
     assert (
         WorkspaceJobsSource.from_jobs(WorkspaceJobs(mode="delivery")).to_sections()
         == ()
