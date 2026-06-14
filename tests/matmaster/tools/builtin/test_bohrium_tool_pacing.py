@@ -155,3 +155,18 @@ class TestBohriumQueryPacing:
 
         assert slept == []
         assert len(calls) == 2
+
+
+class TestBohriumPrompt:
+    def test_prompt_drops_manual_sleep_guidance(self, tmp_path):
+        tool = BohriumTool(workdir=tmp_path)
+        text = tool.prompt()
+
+        assert text is not None
+        # Old guidance that told the agent to sleep between polls is gone.
+        assert "sleep 30-60" not in text
+        assert "return immediately - no blocking, no internal waiting" not in text
+        # New guidance states the tool paces repeated queries automatically.
+        assert "first query for a job returns immediately" in text
+        assert "automatically paces" in text
+        assert "Bash sleep" in text
