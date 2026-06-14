@@ -299,7 +299,7 @@ def test_sessions_service_delete_directory_rejects_blocked_status():
         "blocked_count": 1,
         "blocked_statuses": ["active"],
     }
-    mock_table.soft_delete_sessions_by_ids.assert_not_called()
+    mock_table.soft_delete_sessions_by_directory_if_unblocked.assert_not_called()
 
 
 def test_sessions_service_delete_directory_soft_deletes_all_candidates():
@@ -308,7 +308,12 @@ def test_sessions_service_delete_directory_soft_deletes_all_candidates():
         {"session_id": "s-1", "status": "idle"},
         {"session_id": "s-2", "status": "failed"},
     ]
-    mock_table.soft_delete_sessions_by_ids.return_value = 2
+    mock_table.soft_delete_sessions_by_directory_if_unblocked.return_value = {
+        "session_ids": ["s-1", "s-2"],
+        "deleted_count": 2,
+        "blocked_count": 0,
+        "blocked_statuses": [],
+    }
     registry = MagicMock()
 
     with patch(
@@ -329,12 +334,49 @@ def test_sessions_service_delete_directory_soft_deletes_all_candidates():
         "blocked_count": 0,
         "blocked_statuses": [],
     }
-    mock_table.soft_delete_sessions_by_ids.assert_called_once_with(
-        ["s-1", "s-2"],
+    mock_table.soft_delete_sessions_by_directory_if_unblocked.assert_called_once_with(
         "test-user-2",
+        99,
+        directory=None,
+        blocked_statuses=("active", "waiting"),
     )
     registry.delete_session_run_owner.assert_any_call("s-1")
     registry.delete_session_run_owner.assert_any_call("s-2")
+
+
+def test_sessions_service_delete_directory_honors_transaction_block():
+    mock_table = MagicMock()
+    mock_table.list_session_delete_candidates_by_directory.return_value = [
+        {"session_id": "s-1", "status": "idle"},
+        {"session_id": "s-2", "status": "idle"},
+    ]
+    mock_table.soft_delete_sessions_by_directory_if_unblocked.return_value = {
+        "session_ids": [],
+        "deleted_count": 0,
+        "blocked_count": 1,
+        "blocked_statuses": ["waiting"],
+    }
+    registry = MagicMock()
+
+    with patch(
+        "src.services.sessions_service.get_worker_registry_service",
+        return_value=registry,
+    ):
+        from src.services.sessions_service import ChatSessionsService
+
+        service = ChatSessionsService(mock_table)
+        result = service.delete_sessions_by_directory(
+            user_id="test-user-2",
+            project_id=99,
+            directory="/share/a",
+        )
+
+    assert result == {
+        "deleted_count": 0,
+        "blocked_count": 1,
+        "blocked_statuses": ["waiting"],
+    }
+    registry.delete_session_run_owner.assert_not_called()
 
 
 def test_sessions_service_denies_access_to_soft_deleted_session():

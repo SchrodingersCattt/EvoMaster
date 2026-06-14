@@ -513,10 +513,25 @@ class ChatSessionsService:
                 "blocked_statuses": sorted(blocked_statuses),
             }
 
-        self._clear_deleted_session_runtime(session_ids)
-        deleted_count = self.table.soft_delete_sessions_by_ids(session_ids, user_id)
+        delete_result = self.table.soft_delete_sessions_by_directory_if_unblocked(
+            user_id,
+            project_id,
+            directory=directory,
+            blocked_statuses=tuple(sorted(DELETE_BLOCKED_STATUSES)),
+        )
+        if delete_result.get("blocked_count", 0) > 0:
+            return {
+                "deleted_count": 0,
+                "blocked_count": delete_result.get("blocked_count", 0),
+                "blocked_statuses": delete_result.get("blocked_statuses", []),
+            }
+
+        deleted_session_ids = [
+            str(sid).strip() for sid in delete_result.get("session_ids", []) if sid
+        ]
+        self._clear_deleted_session_runtime(deleted_session_ids)
         return {
-            "deleted_count": deleted_count,
+            "deleted_count": delete_result.get("deleted_count", 0),
             "blocked_count": 0,
             "blocked_statuses": [],
         }

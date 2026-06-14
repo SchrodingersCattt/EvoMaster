@@ -315,7 +315,10 @@ class ChatSessionsTable(BaseTable):
                     f"""
                     UPDATE {self.table_name}
                     SET deleted_at = NOW(), deleted_by = %s, updated_at = NOW()
-                    WHERE session_id = %s AND user_id = %s AND deleted_at IS NULL
+                    WHERE session_id = %s
+                      AND user_id = %s
+                      AND deleted_at IS NULL
+                      AND status NOT IN ('active', 'waiting')
                     """,
                     (user_id, session_id, user_id),
                 )
@@ -375,6 +378,113 @@ class ChatSessionsTable(BaseTable):
                 )
                 conn.commit()
                 return int(cursor.rowcount or 0)
+
+    def soft_delete_sessions_by_directory_if_unblocked(
+        self,
+        user_id: str,
+        project_id: int,
+        *,
+        directory: str | None,
+        blocked_statuses: tuple[str, ...],
+    ) -> dict[str, Any]:
+        """
+        事务内整组软删除目录会话。
+
+        先锁住该目录组仍未删除的会话；若锁内发现 active/waiting，则整组回滚，
+        避免“部分删除”或状态在预检查后被并发切换。
+        """
+        with self.get_connection() as conn:
+            with conn.cursor() as cursor:
+                where_clause = (
+                    "WHERE user_id = %s AND project_id = %s AND deleted_at IS NULL"
+                )
+                params: list[object] = [user_id, int(project_id)]
+                if directory is None:
+                    where_clause += (
+                        " AND (session_directory IS NULL "
+                        "OR TRIM(session_directory) = '')"
+                    )
+                else:
+                    where_clause += " AND session_directory = %s"
+                    params.append(directory)
+                cursor.execute(
+                    f"""
+                    SELECT session_id, status
+                    FROM {self.table_name}
+                    {where_clause}
+                    ORDER BY updated_at DESC, session_id DESC
+                    FOR UPDATE
+                    """,
+                    tuple(params),
+                )
+                rows = list(cursor.fetchall() or [])
+                if not rows:
+                    conn.commit()
+                    return {
+                        "session_ids": [],
+                        "deleted_count": 0,
+                        "blocked_count": 0,
+                        "blocked_statuses": [],
+                    }
+
+                blocked = [
+                    row
+                    for row in rows
+                    if str(row.get("status") or "") in blocked_statuses
+                ]
+                if blocked:
+                    conn.rollback()
+                    return {
+                        "session_ids": [],
+                        "deleted_count": 0,
+                        "blocked_count": len(blocked),
+                        "blocked_statuses": sorted(
+                            {str(row.get("status") or "") for row in blocked}
+                        ),
+                    }
+
+                ids = [
+                    str(row.get("session_id") or "").strip()
+                    for row in rows
+                    if str(row.get("session_id") or "").strip()
+                ]
+                if not ids:
+                    conn.commit()
+                    return {
+                        "session_ids": [],
+                        "deleted_count": 0,
+                        "blocked_count": 0,
+                        "blocked_statuses": [],
+                    }
+                placeholders = ", ".join(["%s"] * len(ids))
+                status_placeholders = ", ".join(["%s"] * len(blocked_statuses))
+                cursor.execute(
+                    f"""
+                    UPDATE {self.table_name}
+                    SET deleted_at = NOW(), deleted_by = %s, updated_at = NOW()
+                    WHERE user_id = %s
+                      AND deleted_at IS NULL
+                      AND session_id IN ({placeholders})
+                      AND status NOT IN ({status_placeholders})
+                    """,
+                    tuple([user_id, user_id, *ids, *blocked_statuses]),
+                )
+                deleted_count = int(cursor.rowcount or 0)
+                if deleted_count != len(ids):
+                    conn.rollback()
+                    return {
+                        "session_ids": [],
+                        "deleted_count": 0,
+                        "blocked_count": len(ids) - deleted_count,
+                        "blocked_statuses": sorted(blocked_statuses),
+                    }
+                conn.commit()
+                return {
+                    "session_ids": ids,
+                    "deleted_count": deleted_count,
+                    "blocked_count": 0,
+                    "blocked_statuses": [],
+                }
 
     def count_active_sessions(self) -> int:
         """统计所有用户的活跃会话数量（status='active'）"""
