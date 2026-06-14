@@ -68,7 +68,7 @@ Browse all: https://gpumd.cn/database.html
 
 | Item | Default Value |
 |------|---------------|
-| image | `registry.dp.tech/dptech/dp/native/hub/mrdic2/gpumd:1.0.2-1777991160` |
+| image | `registry.dp.tech/dptech/matmaster:gpumd-1.0.2-1777991160` |
 | machine | `c16_m64_1 * NVIDIA 4090` |
 | cmd (gpumd) | `gpumd > log 2>&1` |
 | cmd (nep) | `nep > log 2>&1` |

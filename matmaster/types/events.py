@@ -1,8 +1,8 @@
 """Event type hierarchy for the matmaster event system.
 
-Defines all 21 event types in two categories:
-- AgentEvent (9 types): emitted by the kernel during agent execution
-- SystemEvent (12 types): emitted by service-layer components
+Defines all 23 event types in two categories:
+- AgentEvent (10 types): emitted by the kernel during agent execution
+- SystemEvent (13 types): emitted by service-layer components
 
 BusEvent = AgentEvent | SystemEvent -- the unified event union type.
 
@@ -314,6 +314,15 @@ class ResponseFiguresEvent(EventBase):
     figures: list[FigureDescriptor] = Field(default_factory=list)
 
 
+class SubagentSpawnEvent(EventBase):
+    """Spawn 绑定事件:宣告 spawn_id 与父 Agent 工具调用的对应关系。"""
+
+    type: Literal["subagent_spawn"] = "subagent_spawn"
+    parent_call_id: str | None = None
+    exp_name: str
+    task_summary: str = ""
+
+
 # ── Union definitions ───────────────────────────────────
 
 AgentEvent = Annotated[
@@ -346,6 +355,7 @@ SystemEvent = Annotated[
         McpServerStatusEvent,
         McpConnectEvent,
         ResponseFiguresEvent,
+        SubagentSpawnEvent,
     ],
     Field(discriminator="type"),
 ]
@@ -376,6 +386,7 @@ BusEvent = Annotated[
         McpServerStatusEvent,
         McpConnectEvent,
         ResponseFiguresEvent,
+        SubagentSpawnEvent,
     ],
     Field(discriminator="type"),
 ]

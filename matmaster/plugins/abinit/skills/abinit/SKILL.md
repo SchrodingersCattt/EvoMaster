@@ -11,7 +11,7 @@ ABINIT is an open-source suite for first-principles calculations using DFT, DFPT
 
 | Item | Default Value |
 |------|---------------|
-| image | `registry.dp.tech/dptech/dp/native/prod-19853/abinit:v9.10.3_pp` |
+| image | `registry.dp.tech/dptech/matmaster:abinit-v9.10.3_pp` |
 | machine | `c32_m128_cpu` (16 physical cores, 128 GB RAM) |
 | cmd | `OMPI_ALLOW_RUN_AS_ROOT=1 OMPI_ALLOW_RUN_AS_ROOT_CONFIRM=1 OMPI_MCA_rmaps_base_oversubscribe=1 OMP_NUM_THREADS=1 mpirun -np 16 abinit {input_file} > log 2>&1` |
 
@@ -67,7 +67,7 @@ If the user provides a complete `.abi` file, skip preparation and submit directl
 2. Generate: `render_input.py --software abinit --task gs_scf --structure struct.cif --output run.abi`
 3. Diagnose: `diagnose_input.py --software abinit --input run.abi`
 4. Collect into one directory (run.abi + PP files)
-5. Submit: `Bohrium(action="submit", input_dir="<dir>", image="registry.dp.tech/dptech/dp/native/prod-19853/abinit:v9.10.3_pp", cmd="OMPI_ALLOW_RUN_AS_ROOT=1 OMPI_ALLOW_RUN_AS_ROOT_CONFIRM=1 OMPI_MCA_rmaps_base_oversubscribe=1 OMP_NUM_THREADS=1 mpirun -np 16 abinit run.abi > log 2>&1")`
+5. Submit: `Bohrium(action="submit", input_dir="<dir>", image="registry.dp.tech/dptech/matmaster:abinit-v9.10.3_pp", cmd="OMPI_ALLOW_RUN_AS_ROOT=1 OMPI_ALLOW_RUN_AS_ROOT_CONFIRM=1 OMPI_MCA_rmaps_base_oversubscribe=1 OMP_NUM_THREADS=1 mpirun -np 16 abinit run.abi > log 2>&1")`
 6. Query current status when needed: `Bohrium(action="query", job_id=<id>)`
 
 ## Reference

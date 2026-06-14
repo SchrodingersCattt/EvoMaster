@@ -8,13 +8,12 @@ from typing import Any, ClassVar
 from matmaster.config.exp import ExpSubagentMeta
 from matmaster.tools.builtin.base import BuiltinTool
 from matmaster.tools.tool_result import ToolResult
-from matmaster.types.cancellation import CancellationToken
 from matmaster.types.stream_drain import DrainResult
 from matmaster.types.tool_decision import ToolDecision
 from matmaster.types.tool_runner_state import ToolRunnerState
 from matmaster.types.tool_spec import ResourceClaim, ToolExecutionContext
 
-SpawnFn = Callable[[str, str, CancellationToken | None], Awaitable[DrainResult]]
+SpawnFn = Callable[..., Awaitable[DrainResult]]
 
 
 class AgentTool(BuiltinTool):
@@ -199,6 +198,13 @@ class AgentTool(BuiltinTool):
         return ToolDecision(decision="allow", modified_args=normalized)
 
     async def execute(self, arguments: dict[str, Any]) -> str | ToolResult:
+        return await self.execute_with_context(arguments, None)
+
+    async def execute_with_context(
+        self,
+        arguments: dict[str, Any],
+        exec_ctx: ToolExecutionContext | None,
+    ) -> str | ToolResult:
         if self._spawn_fn is None:
             return "Error: Agent is not available in this context"
 
@@ -211,6 +217,8 @@ class AgentTool(BuiltinTool):
             normalized["exp_name"],
             normalized["prompt"],
             self._cancel_token_for_exec(),
+            parent_call_id=exec_ctx.tool_call_id if exec_ctx is not None else None,
+            task_summary=normalized["task_summary"],
         )
         content = (
             drain.final_content
@@ -224,20 +232,13 @@ class AgentTool(BuiltinTool):
                 "exp_name": normalized["exp_name"],
                 "task_summary": normalized["task_summary"],
                 "prompt": normalized["prompt"],
+                "spawn_id": drain.spawn_id,
                 "subagent_usage": dict(drain.usage or {}),
                 "subagent_status": drain.status,
                 "subagent_reason": drain.reason,
                 "subagent_num_turns": drain.num_turns,
             },
         )
-
-    async def execute_with_context(
-        self,
-        arguments: dict[str, Any],
-        exec_ctx: ToolExecutionContext | None,
-    ) -> str | ToolResult:
-        """Context-aware execution — delegates to async execute()."""
-        return await self.execute(arguments)
 
     def _execute(self, arguments: dict[str, Any]) -> str:
         raise NotImplementedError("AgentTool uses async execute() directly")
