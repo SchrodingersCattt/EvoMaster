@@ -24,6 +24,9 @@ class DeliverySnapshot:
     """一次 run 的交付边界快照 + run 内前台观察集（worker 内存对象，不落表）。
 
     rows 持全量行、不预截断：展开几条详情由 renderer 按 detail_limit 决定。
+    export_failure 由 read port 在 CSV 导出失败时写入（{reason, rows, target_path}），
+    confirm 据此 gate snapshot.rows 的 ack；写入在 run 内上下文装配、读取在 run 收尾，
+    与 observed_terminal 同属 frozen 字段绑定的可变容器，无时间重叠。
     observed_terminal 元素为 (sandbox, job_id)；frozen 冻结字段绑定，不妨碍
     集合自身 add。写入发生在 run 内工具执行，confirm 读取在 run 结束后，
     无时间重叠。
@@ -36,6 +39,7 @@ class DeliverySnapshot:
     rows: tuple[dict[str, Any], ...]
     detail_limit: int
     observed_terminal: set[tuple[bool, str]] = field(default_factory=set)
+    export_failure: dict[str, Any] = field(default_factory=dict)
 
 
 def snapshot(
@@ -116,7 +120,7 @@ def confirm(snap: DeliverySnapshot, *, jobs_table: Any | None = None) -> int:
 
         table = get_bohrium_jobs_table()
     affected = 0
-    if snap.rows:
+    if snap.rows and not snap.export_failure:
         affected += table.mark_handled_by_ids(
             user_id=snap.user_id,
             org_id=snap.org_id,

@@ -261,3 +261,46 @@ def test_snapshot_returns_none_without_workspace():
     )
     sessions.get_session.assert_not_called()
     table.list_pending_terminal_snapshot.assert_not_called()
+
+
+def test_confirm_skips_rows_when_export_failed_but_acks_observed():
+    table = MagicMock()
+    table.mark_handled_by_job_keys.return_value = 1
+    snap = bohrium_delivery_ack.DeliverySnapshot(
+        user_id="u1",
+        org_id="o1",
+        session_id="s",
+        workspace="/share/project",
+        rows=(_row(11, "f1", status="failed"),),
+        detail_limit=20,
+        export_failure={
+            "reason": "write_failed",
+            "rows": 1,
+            "target_path": "/share/project/x.csv",
+        },
+    )
+    snap.observed_terminal.add((True, "J"))
+
+    affected = bohrium_delivery_ack.confirm(snap, jobs_table=table)
+
+    table.mark_handled_by_ids.assert_not_called()
+    table.mark_handled_by_job_keys.assert_called_once()
+    assert affected == 1
+
+
+def test_confirm_acks_rows_when_export_failure_empty():
+    table = MagicMock()
+    table.mark_handled_by_ids.return_value = 1
+    snap = bohrium_delivery_ack.DeliverySnapshot(
+        user_id="u1",
+        org_id="o1",
+        session_id="s",
+        workspace="/share/project",
+        rows=(_row(11, "t1"),),
+        detail_limit=20,
+    )
+
+    affected = bohrium_delivery_ack.confirm(snap, jobs_table=table)
+
+    table.mark_handled_by_ids.assert_called_once()
+    assert affected == 1
