@@ -15,6 +15,7 @@ from matmaster.context.ports import (
     WorkspaceJobsQuery,
 )
 from matmaster.context.workspace_jobs_compute import (
+    compute_inline_chars,
     compute_summary,
     select_priority_samples,
 )
@@ -225,6 +226,8 @@ class _SessionWorkspaceDeliveryJobsPort:
 
 
 class _WorkspaceObservationJobsPort:
+    """observation：跨 session 完整快照，row+char 双阈值。"""
+
     def __init__(
         self,
         *,
@@ -232,13 +235,25 @@ class _WorkspaceObservationJobsPort:
         user_id: str,
         org_id: str,
         workspace: str,
-        detail_limit: int,
+        exporter: WorkspaceJobsCsvExporter,
+        snapshot: DeliverySnapshot | None,
+        row_limit: int,
+        char_limit: int,
+        action_sample_limit: int,
+        priority_sample_limit: int,
+        max_rows: int,
     ) -> None:
         self._table_ref = table_ref
         self._user_id = user_id
         self._org_id = org_id
         self._workspace = workspace
-        self._detail_limit = detail_limit
+        self._exporter = exporter
+        self._snapshot = snapshot
+        self._row_limit = row_limit
+        self._char_limit = char_limit
+        self._action_sample_limit = action_sample_limit
+        self._priority_sample_limit = priority_sample_limit
+        self._max_rows = max_rows
 
     async def load_workspace_jobs(self, query: WorkspaceJobsQuery) -> WorkspaceJobs:
         try:
@@ -255,14 +270,14 @@ class _WorkspaceObservationJobsPort:
                     user_id=self._user_id,
                     org_id=self._org_id,
                     workspace=self._workspace,
-                    limit=self._detail_limit,
+                    limit=self._max_rows,
                 ),
                 asyncio.to_thread(
                     table.query_workspace_recent_terminal,
                     user_id=self._user_id,
                     org_id=self._org_id,
                     workspace=self._workspace,
-                    limit=self._detail_limit,
+                    limit=self._max_rows,
                 ),
             )
         except Exception:  # noqa: BLE001
@@ -272,13 +287,63 @@ class _WorkspaceObservationJobsPort:
                 exc_info=True,
             )
             return WorkspaceJobs.empty()
+        active_t = tuple(active)
+        pending_t = tuple(pending)
+        recent_t = tuple(recent)
+        truncated = len(pending_t) >= self._max_rows or len(recent_t) >= self._max_rows
+        summary = compute_summary(active_t, pending_t, recent_t)
+        full = WorkspaceJobs(
+            workspace=self._workspace,
+            active_jobs=active_t,
+            pending_terminal_jobs=pending_t,
+            recent_terminal_jobs=recent_t,
+            summary=summary,
+            mode="workspace_observation",
+            snapshot_truncated=truncated,
+        )
+        if (
+            summary.total <= self._row_limit
+            and compute_inline_chars(full) <= self._char_limit
+        ):
+            return full
+        samples = select_priority_samples(
+            active_t,
+            pending_t,
+            recent_t,
+            action_limit=self._action_sample_limit,
+            fill_limit=self._priority_sample_limit,
+        )
+        reason = "row_limit" if summary.total > self._row_limit else "char_limit"
+        result = self._exporter.export(full, reason=reason)
+        if isinstance(result, WorkspaceJobsExportError):
+            self._record_export_failure(result)
+            return WorkspaceJobs(
+                workspace=self._workspace,
+                summary=summary,
+                priority_samples=samples,
+                export_error=result,
+                mode="workspace_observation",
+                snapshot_truncated=truncated,
+            )
         return WorkspaceJobs(
             workspace=self._workspace,
-            active_jobs=tuple(active),
-            pending_terminal_jobs=tuple(pending),
-            recent_terminal_jobs=tuple(recent),
-            detail_limit=self._detail_limit,
+            summary=summary,
+            priority_samples=samples,
+            export=result,
+            omitted_count=summary.total - len(samples),
             mode="workspace_observation",
+            snapshot_truncated=truncated,
+        )
+
+    def _record_export_failure(self, err: WorkspaceJobsExportError) -> None:
+        if self._snapshot is None:
+            return
+        self._snapshot.export_failure.update(
+            {
+                "reason": err.reason,
+                "rows": err.rows,
+                "target_path": err.target_path,
+            }
         )
 
 
@@ -306,6 +371,9 @@ def build_bohrium_jobs_ports(
     normalized_workspace = _normalize_ledger_workspace(workspace)
     row_limit = env_int("BOHRIUM_WORKSPACE_JOBS_INLINE_ROW_LIMIT", 50)
     action_sample_limit = env_int("BOHRIUM_WORKSPACE_JOBS_ACTION_SAMPLE_LIMIT", 200)
+    char_limit = env_int("BOHRIUM_WORKSPACE_JOBS_INLINE_CHAR_LIMIT", 12000)
+    priority_sample_limit = env_int("BOHRIUM_WORKSPACE_JOBS_PRIORITY_SAMPLE_LIMIT", 20)
+    max_rows = env_int("BOHRIUM_WORKSPACE_JOBS_OBSERVATION_MAX_ROWS", 2000)
     ledger = (
         _BohriumJobLedger(
             table_ref=table_ref,
@@ -332,7 +400,13 @@ def build_bohrium_jobs_ports(
             user_id=user_id,
             org_id=org_id,
             workspace=normalized_workspace,
-            detail_limit=env_int("BOHRIUM_DELIVERY_DETAIL_LIMIT", 20),
+            exporter=exporter,
+            snapshot=delivery_snapshot,
+            row_limit=row_limit,
+            char_limit=char_limit,
+            action_sample_limit=action_sample_limit,
+            priority_sample_limit=priority_sample_limit,
+            max_rows=max_rows,
         )
     elif job_context_mode == "session_workspace_delivery":
         jobs = _SessionWorkspaceDeliveryJobsPort(

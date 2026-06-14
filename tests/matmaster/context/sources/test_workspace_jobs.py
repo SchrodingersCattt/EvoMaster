@@ -237,3 +237,23 @@ def test_delivery_export_failure_renders_samples_and_warning_no_path() -> None:
     assert "完整明细导出失败，被省略的作业未必已交付。" in text
     assert "/share/p/x.csv" not in text
     assert "已导出" not in text
+
+
+def test_compact_truncated_renders_snapshot_hint() -> None:
+    jobs = WorkspaceJobs(
+        workspace="/share/p",
+        mode="workspace_observation",
+        summary=_summary(),
+        snapshot_truncated=True,
+        export=WorkspaceJobsExport(
+            path="/share/p/.matmaster/context/workspace_jobs/s-i.csv",
+            format="csv",
+            row_count=3000,
+            columns=("group", "job_id"),
+            reason="row_limit",
+        ),
+    )
+
+    lines = WorkspaceJobsSource.from_jobs(jobs).lines
+
+    assert any("snapshot_truncated_hint" in line for line in lines)

@@ -38,6 +38,10 @@ _DELIVERY_READ_HINT = (
     "需要某个作业的 input_dir / result_dir 等，用 Read 或 Bash 读取该 CSV。"
 )
 _DELIVERY_EXPORT_FAILED_TEXT = "完整明细导出失败，被省略的作业未必已交付。"
+_SNAPSHOT_TRUNCATED_HINT = (
+    "Workspace snapshot hit the row cap and may be incomplete; some jobs are "
+    "absent from both this summary and the exported CSV."
+)
 
 
 @dataclass(frozen=True)
@@ -132,6 +136,8 @@ class WorkspaceJobsSource:
             lines.append(f"mode {jobs.mode}")
         if jobs.summary is not None:
             lines.append(f"summary {render_job_json(summary_to_dict(jobs.summary))}")
+        if jobs.snapshot_truncated:
+            lines.append(f'snapshot_truncated_hint "{_SNAPSHOT_TRUNCATED_HINT}"')
         return lines
 
     @classmethod

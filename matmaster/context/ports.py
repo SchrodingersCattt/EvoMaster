@@ -138,6 +138,7 @@ class WorkspaceJobs:
     export_error: WorkspaceJobsExportError | None = None
     priority_samples: tuple[JsonObject, ...] = ()
     omitted_count: int | None = None
+    snapshot_truncated: bool = False
 
     @classmethod
     def empty(cls) -> WorkspaceJobs:
