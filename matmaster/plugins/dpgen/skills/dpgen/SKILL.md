@@ -11,6 +11,29 @@ DP-GEN builds Deep Potential / DeePMD training workflows through active learning
 
 Use for DP-GEN `param.json` / `machine.json`, DeePMD training input setup, model-deviation loops, LAMMPS exploration, CP2K/VASP/QE/ABACUS FP labeling, and launch-readiness triage. For one-off inference with pretrained DPA/MACE/SevenNet/MatterSim potentials, use `mlips`.
 
+## Installing the checker
+
+Use the released tag:
+
+```bash
+uv pip install git+https://github.com/SchrodingersCattt/dpgen-lsp.git@0.0.1
+uv tool install git+https://github.com/SchrodingersCattt/dpgen-lsp.git@0.0.1
+```
+
+Useful inspection commands:
+
+```bash
+dpgen-lsp-tool capabilities
+dpgen-lsp-tool init --list
+dpgen-lsp-tool context param.json --line 1 --character 1
+dpgen-lsp-tool hover param.json --line 1 --character 1
+dpgen-lsp-tool complete param.json --line 1 --character 1
+dpgen-lsp-tool symbols param.json
+dpgen-lsp-tool fix param.json --line 1 --character 1
+```
+
+`fix` is advisory/preview only. Do not blindly auto-apply a fix without preserving the user’s scientific intent.
+
 ## Template generation
 
 Use `dpgen-lsp-tool init` to create starting files instead of hand-copying GitHub examples:
@@ -48,29 +71,6 @@ dpgen-lsp-tool check machine.json --fail-on-blocking
 ```
 
 Report `commands`, `files_checked`, `tool_available`, `diagnostics`, `blocking_findings`, `readiness`, and `reason`.
-
-## Installing the checker
-
-Use the current main branch for now:
-
-```bash
-uv pip install git+https://github.com/SchrodingersCattt/dpgen-lsp.git@main
-uv tool install git+https://github.com/SchrodingersCattt/dpgen-lsp.git@main
-```
-
-Useful inspection commands:
-
-```bash
-dpgen-lsp-tool capabilities
-dpgen-lsp-tool init --list
-dpgen-lsp-tool context param.json --line 1 --character 1
-dpgen-lsp-tool hover param.json --line 1 --character 1
-dpgen-lsp-tool complete param.json --line 1 --character 1
-dpgen-lsp-tool symbols param.json
-dpgen-lsp-tool fix param.json --line 1 --character 1
-```
-
-`fix` is advisory/preview only. Do not blindly auto-apply a fix without preserving the user’s scientific intent.
 
 ## Repair rules
 
