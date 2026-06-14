@@ -613,6 +613,31 @@ def test_query_workspace_recent_terminal_ignores_handled_and_orders_desc(
     assert [r["job_id"] for r in rows] == ["802", "801"]
 
 
+def test_query_session_active_scoped_by_session_and_workspace(
+    jobs_table, sessions_shadow
+):
+    _register_session(sessions_shadow)
+    _seed_job(jobs_table, job_id="901")
+    jobs_table.insert_submitted(
+        session_id="sess-1",
+        invocation_id="inv-1",
+        spawn_id=None,
+        user_id="u1",
+        org_id="o1",
+        job_id="902",
+        job_name="name-902",
+        project_id=42,
+        sandbox=False,
+        input_dir="data/in",
+        workspace="/share/other",
+    )
+
+    rows = jobs_table.query_session_active(
+        user_id="u1", org_id="o1", session_id="sess-1", workspace="/share/project"
+    )
+    assert [r["job_id"] for r in rows] == ["901"]
+
+
 def test_scan_exposes_unknown_count_and_pending_age(jobs_table, sessions_shadow):
     _register_session(sessions_shadow)
     _seed_job(jobs_table, job_id="501", status="finished")

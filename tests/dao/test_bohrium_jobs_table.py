@@ -168,7 +168,10 @@ def test_query_session_active_returns_active_only_sorted(jobs_table) -> None:
         backoff_seconds=30,
     )
     active = jobs_table.query_session_active(
-        user_id="user-1", org_id="org-1", session_id="sess-1"
+        user_id="user-1",
+        org_id="org-1",
+        session_id="sess-1",
+        workspace="/share/project",
     )
     ids = [j["job_id"] for j in active]
     assert ids == ["a1"]

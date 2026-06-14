@@ -199,17 +199,18 @@ class BohriumJobsTable(BaseTable):
         }
 
     def query_session_active(
-        self, *, user_id: str, org_id: str, session_id: str
+        self, *, user_id: str, org_id: str, session_id: str, workspace: str
     ) -> list[dict[str, Any]]:
         sql = f"""
             SELECT {self._AGENT_COLUMNS} FROM {self.table_name}
             WHERE user_id = %s AND org_id = %s AND session_id = %s
+              AND workspace = %s
               AND status IN ({_SQL_ACTIVE})
             ORDER BY submitted_at ASC
         """
         with self.get_connection() as conn:
             with conn.cursor() as cur:
-                cur.execute(sql, (user_id, org_id, session_id))
+                cur.execute(sql, (user_id, org_id, session_id, workspace))
                 return [self._to_agent_job(r) for r in cur.fetchall()]
 
     def query_workspace_active(
