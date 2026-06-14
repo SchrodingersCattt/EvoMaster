@@ -25,6 +25,7 @@ INTERACTION_RUN_ACTIVE_TTL_SEC = 3600
 
 # 多 worker 时 run 所在 pod 向其它 pod 的 subscribe 流推送事件（Pub/Sub）
 STREAM_CHANNEL_PREFIX = "chat:stream:"
+USER_WAKEUP_CHANNEL_PREFIX = "chat:user:"
 
 # agent run 队列（API 入队，Worker BLPOP）；用户停止标记（Worker 轮询）
 AGENT_RUN_QUEUE_KEY = "chat:agent_run_queue"
@@ -58,6 +59,10 @@ def _reply_list_key(session_id: str) -> str:
 
 def _stop_key(session_id: str, task_id: str) -> str:
     return AGENT_STOP_KEY_PREFIX + session_id.strip() + ":" + (task_id or "").strip()
+
+
+def user_wakeup_channel(user_id: str) -> str:
+    return USER_WAKEUP_CHANNEL_PREFIX + (user_id or "").strip() + ":wakeup"
 
 
 def _session_run_queued_key(session_id: str) -> str:
@@ -127,6 +132,18 @@ class RedisDao:
                 "Redis publish_stream_event json failed session_id=%s: %s",
                 session_id,
                 e,
+            )
+            return False
+
+    def publish_user_wakeup(self, user_id: str, payload: dict) -> bool:
+        """向该用户的 wakeup channel 发布一条 session 唤醒信号。"""
+        channel = user_wakeup_channel(user_id)
+        try:
+            message = json.dumps(payload, ensure_ascii=False)
+            return self.publish(channel, message)
+        except (TypeError, ValueError) as e:
+            logger.warning(
+                "Redis publish_user_wakeup json failed user_id=%s: %s", user_id, e
             )
             return False
 
