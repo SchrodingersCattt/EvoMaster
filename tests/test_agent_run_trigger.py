@@ -491,3 +491,59 @@ def test_trigger_run_keeps_none_when_no_inheritable_profile():
     assert res.status == "enqueued"
     pushed = fake_redis.lpush_agent_run_job.call_args.args[0]
     assert pushed["model"] is None
+
+
+def test_trigger_run_publishes_wakeup_on_enqueue():
+    service, sessions_service, events_service = _make_trigger_service()
+    fake_redis = MagicMock()
+    fake_redis.dedup_key_exists.return_value = False
+    fake_redis.lpush_agent_run_job.return_value = True
+    p1, p2, p3, p4 = _trigger_patches(fake_redis)
+    with p1, p2, p3, p4:
+        res = service.trigger_run("s1", "作业完成", origin="bohrium_completion")
+    assert res.status == "enqueued"
+    fake_redis.publish_user_wakeup.assert_called_once()
+    uid, payload = fake_redis.publish_user_wakeup.call_args.args
+    assert uid == "owner-1"
+    assert payload == {
+        "source": "System",
+        "type": "session_wakeup",
+        "reason": "trigger_enqueued",
+        "session_id": "s1",
+    }
+
+
+def test_trigger_run_deduped_does_not_publish():
+    service, sessions_service, events_service = _make_trigger_service()
+    fake_redis = MagicMock()
+    fake_redis.dedup_key_exists.return_value = True
+    p1, p2, p3, p4 = _trigger_patches(fake_redis)
+    with p1, p2, p3, p4:
+        res = service.trigger_run("s1", "x", origin="loop", dedup_key="job:1:done")
+    assert res.status == "deduped"
+    fake_redis.publish_user_wakeup.assert_not_called()
+
+
+def test_trigger_run_busy_does_not_publish():
+    service, sessions_service, events_service = _make_trigger_service()
+    sessions_service.try_acquire_session_run.return_value = (False, "already_in_run")
+    fake_redis = MagicMock()
+    fake_redis.dedup_key_exists.return_value = False
+    p1, p2, p3, p4 = _trigger_patches(fake_redis)
+    with p1, p2, p3, p4:
+        res = service.trigger_run("s1", "x", origin="loop")
+    assert res.status == "busy"
+    fake_redis.publish_user_wakeup.assert_not_called()
+
+
+def test_trigger_run_enqueue_failed_does_not_publish():
+    service, sessions_service, events_service = _make_trigger_service()
+    fake_redis = MagicMock()
+    fake_redis.dedup_key_exists.return_value = False
+    fake_redis.lpush_agent_run_job.return_value = False
+    p1, p2, p3, p4 = _trigger_patches(fake_redis)
+    with p1, p2, p3, p4:
+        res = service.trigger_run("s1", "x", origin="loop")
+    assert res.status == "error"
+    assert res.reason == "enqueue_failed"
+    fake_redis.publish_user_wakeup.assert_not_called()

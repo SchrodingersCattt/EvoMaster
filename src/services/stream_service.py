@@ -131,6 +131,18 @@ class TriggerResult:
 
 
 @dataclass
+class TriggerStreamContext:
+    """内部 trigger 已写好发起事件、已组好 job，待订阅就绪后入队。"""
+
+    task_id: str
+    invocation_id: str
+    owner: str
+    job: dict
+    event: dict  # 已落库的 System/trigger 发起事件
+    dedup_key: str | None = None
+
+
+@dataclass
 class SendStreamContext:
     """发送消息流所需上下文，由 prepare_send_message 返回。"""
 
@@ -350,7 +362,25 @@ class ChatStreamService:
             return False
         return True
 
-    def trigger_run(
+    def _publish_user_wakeup(
+        self, user_id: str, session_id: str, reason: str
+    ) -> None:
+        """向用户级 wakeup channel 发布一条 session 唤醒信号。"""
+        payload = {
+            "source": "System",
+            "type": "session_wakeup",
+            "reason": reason,
+            "session_id": session_id.strip(),
+        }
+        if not get_redis_dao().publish_user_wakeup(user_id, payload):
+            logger.warning(
+                "publish_user_wakeup failed user_id=%s session_id=%s reason=%s",
+                user_id,
+                session_id,
+                reason,
+            )
+
+    def prepare_internal_trigger_run(
         self,
         session_id: str,
         prompt: str,
@@ -361,20 +391,20 @@ class ChatStreamService:
         mode: str | None = None,
         model: str | None = None,
         workspace: str | None = None,
-    ) -> TriggerResult:
-        """程序化触发一次 agent run。"""
+    ) -> TriggerResult | TriggerStreamContext:
+        """准备内部 trigger：校验 owner/dedup，写 System/trigger，组装 job，不入队。"""
         sid = session_id.strip()
         owner = self._sessions_service.get_session_user_id(sid)
         if not owner:
             logger.warning(
-                "trigger_run rejected: session not found or no owner session_id=%s",
+                "trigger prepare rejected: session not found or no owner session_id=%s",
                 sid,
             )
             return TriggerResult(status="error", reason="session_not_found_or_no_owner")
 
         if dedup_key and get_redis_dao().dedup_key_exists(dedup_key):
             logger.info(
-                "trigger_run deduped session_id=%s dedup_key=%s", sid, dedup_key
+                "trigger prepare deduped session_id=%s dedup_key=%s", sid, dedup_key
             )
             return TriggerResult(status="deduped", dedup_key=dedup_key)
 
@@ -413,24 +443,63 @@ class ChatStreamService:
             delivery=delivery_payload,
         )
         if isinstance(handle, Busy):
-            logger.info("trigger_run busy session_id=%s reason=%s", sid, handle.reason)
+            logger.info(
+                "trigger prepare busy session_id=%s reason=%s", sid, handle.reason
+            )
             return TriggerResult(status="busy", reason=handle.reason)
 
-        if not self._enqueue_run(sid, handle.job):
+        return TriggerStreamContext(
+            task_id=handle.task_id,
+            invocation_id=handle.invocation_id,
+            owner=owner,
+            job=handle.job,
+            event=handle.event,
+            dedup_key=dedup_key,
+        )
+
+    def trigger_run(
+        self,
+        session_id: str,
+        prompt: str,
+        *,
+        origin: str,
+        dedup_key: str | None = None,
+        delivery: DeliverySpec | None = None,
+        mode: str | None = None,
+        model: str | None = None,
+        workspace: str | None = None,
+    ) -> TriggerResult:
+        """程序化触发一次 agent run。"""
+        sid = session_id.strip()
+        prep = self.prepare_internal_trigger_run(
+            sid,
+            prompt,
+            origin=origin,
+            dedup_key=dedup_key,
+            delivery=delivery,
+            mode=mode,
+            model=model,
+            workspace=workspace,
+        )
+        if isinstance(prep, TriggerResult):
+            return prep
+
+        if not self._enqueue_run(sid, prep.job):
             return TriggerResult(status="error", reason="enqueue_failed")
 
-        if dedup_key:
-            get_redis_dao().mark_dedup_key_nx(dedup_key, handle.task_id)
+        if prep.dedup_key:
+            get_redis_dao().mark_dedup_key_nx(prep.dedup_key, prep.task_id)
+        self._publish_user_wakeup(prep.owner, sid, "trigger_enqueued")
         logger.info(
             "trigger_run enqueued session_id=%s task_id=%s origin=%s",
             sid,
-            handle.task_id,
+            prep.task_id,
             origin,
         )
         return TriggerResult(
             status="enqueued",
-            task_id=handle.task_id,
-            invocation_id=handle.invocation_id,
+            task_id=prep.task_id,
+            invocation_id=prep.invocation_id,
         )
 
     async def generate_subscribe_stream(
