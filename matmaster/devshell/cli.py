@@ -244,7 +244,7 @@ def _bootstrap_runner(args: argparse.Namespace) -> tuple[Any, Any, Any, Any, Any
         )
     llm_provider = UsageCollectingProvider(
         llm_provider,
-        model=getattr(resolved, "model", "") or "",
+        model=getattr(getattr(resolved, "profile", None), "model", "") or "",
         reporter=reporter,
     )
 
