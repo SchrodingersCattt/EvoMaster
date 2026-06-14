@@ -38,6 +38,10 @@ class OverrideSource:
         )
 
 
+def _job(job_id: str, status: str = "finished") -> dict:
+    return {"job_id": job_id, "status": status}
+
+
 def test_composition_inputs_defaults_are_empty() -> None:
     inputs = ContextCompositionInputs()
 
@@ -69,6 +73,55 @@ def test_anchor_composition_includes_instructions_session_turn_and_jobs() -> Non
         "workspace_jobs",
     ]
     assert context.images[0].url == "https://example.com/a.png"
+
+
+def test_anchor_delivery_turn_renders_reason_listing_and_directive_in_order() -> None:
+    context = ANCHOR_COMPOSITION.apply(
+        ContextCompositionInputs(
+            user_instructions_text="Use SI units.",
+            turn_input=TurnInput(
+                instruction=TurnInstructionSource(
+                    user_text="本会话出现失败的 Bohrium 作业，仍有作业在运行。"
+                )
+            ),
+            workspace_jobs=WorkspaceJobs(
+                mode="delivery",
+                pending_terminal_jobs=(_job("t1", "failed"),),
+                active_jobs=(_job("a1", "running"),),
+            ),
+        )
+    )
+
+    runtime = context.render(ContextView.RUNTIME)
+
+    assert "<current_instruction>" in runtime
+    assert "<workspace_jobs>" in runtime
+    assert "<delivery_directive>" in runtime
+    assert (
+        runtime.index("<current_instruction>")
+        < runtime.index("<workspace_jobs>")
+        < runtime.index("<delivery_directive>")
+    )
+
+
+def test_anchor_observation_jobs_do_not_render_delivery_directive() -> None:
+    context = ANCHOR_COMPOSITION.apply(
+        ContextCompositionInputs(
+            user_instructions_text="Use SI units.",
+            turn_input=TurnInput(
+                instruction=TurnInstructionSource(user_text="Check workspace jobs.")
+            ),
+            workspace_jobs=WorkspaceJobs(
+                mode="observation",
+                pending_terminal_jobs=(_job("t1", "failed"),),
+            ),
+        )
+    )
+
+    runtime = context.render(ContextView.RUNTIME)
+
+    assert "<workspace_jobs>" in runtime
+    assert "<delivery_directive>" not in runtime
 
 
 def test_continuation_composition_excludes_user_instructions_and_session_sections() -> (
