@@ -19,6 +19,9 @@ from src.models.chat import (
     RunStatusData,
     SessionDirectoryApiResponse,
     SessionDirectoryData,
+    SessionDirectoryDeleteApiResponse,
+    SessionDirectoryDeleteData,
+    SessionDirectoryDeleteQuery,
     SessionDirectorySetRequest,
     SessionListApiResponse,
     SessionListMoreApiResponse,
@@ -41,7 +44,11 @@ from src.services.session_directory_service import (
     SessionDirectoryError,
     normalize_session_directory_for_storage,
 )
-from src.services.sessions_service import ChatSessionsService, get_sessions_service
+from src.services.sessions_service import (
+    DELETE_BLOCKED_STATUSES,
+    ChatSessionsService,
+    get_sessions_service,
+)
 from src.services.stream_service import (
     ChatStreamService,
     TriggerStreamContext,
@@ -782,10 +789,63 @@ def confirm_interrupt(
 
 
 @router.delete(
+    "/by-directory",
+    response_model=SessionDirectoryDeleteApiResponse,
+    summary="按会话目录整组删除会话",
+    description="仅删除当前用户在指定项目、指定 session_directory 组下的会话；"
+    "若组内存在 active/waiting 会话，则整组拒绝删除且不会部分删除。",
+    operation_id="deleteChatSessionsByDirectory",
+    responses={
+        400: COMMON_ERROR_RESPONSES[400],
+        401: COMMON_ERROR_RESPONSES[401],
+        409: COMMON_ERROR_RESPONSES[409],
+    },
+)
+def delete_sessions_by_directory(
+    query: SessionDirectoryDeleteQuery = Depends(),
+    user_id: str = Depends(UserService.require_user_id),
+    chat_svc: ChatSessionsService = Depends(get_sessions_service),
+):
+    """整组软删除某个会话目录下的会话；运行中/排队中会话会阻断整组删除。"""
+    directory: str | None = None
+    if not query.unset_directory:
+        try:
+            directory = normalize_session_directory_for_storage(query.directory)
+        except SessionDirectoryError as exc:
+            raise _session_directory_error(exc) from exc
+        if directory is None:
+            raise BaseErrorResponse(
+                http_status=400,
+                code=400,
+                msg="请指定 unset_directory=true 或非空 directory",
+            )
+
+    result = chat_svc.delete_sessions_by_directory(
+        user_id=user_id,
+        project_id=query.project_id,
+        directory=directory,
+    )
+    if result.get("blocked_count", 0) > 0:
+        raise ConflictErrorResponse(
+            msg="该目录下存在运行中或排队中的会话，无法删除",
+            data={
+                "blocked_count": result.get("blocked_count", 0),
+                "blocked_statuses": result.get("blocked_statuses", []),
+            },
+        )
+    return SessionDirectoryDeleteApiResponse(
+        msg="ok",
+        data=SessionDirectoryDeleteData(
+            deleted_count=int(result.get("deleted_count", 0)),
+        ),
+    )
+
+
+@router.delete(
     "/{session_id}",
     response_model=BaseResponse,
     summary="删除会话",
-    description="仅会话所有者可删除；关联聊天事件会随会话级联删除。",
+    description="仅会话所有者可删除；删除为软删除，用户侧不再展示，关联聊天事件保留。",
     operation_id="deleteChatSession",
     responses={
         401: COMMON_ERROR_RESPONSES[401],
@@ -797,8 +857,19 @@ def delete_session(
     user_id: str = Depends(UserService.require_user_id),
     chat_svc: ChatSessionsService = Depends(get_sessions_service),
 ):
-    """删除会话。仅会话所有者可删除；关联的聊天事件会随会话级联删除。"""
+    """软删除会话。仅会话所有者可删除；运行中/排队中的会话不可删除。"""
     sid = session_id.strip()
+    row = chat_svc.get_session(sid)
+    if not row or row.get("user_id") != user_id:
+        raise NotFoundErrorResponse(
+            msg="Session not found or you are not the owner",
+        )
+    status = chat_svc.reconcile_waiting_status(sid, row.get("status"))
+    if status in DELETE_BLOCKED_STATUSES:
+        raise ConflictErrorResponse(
+            msg="运行中或排队中的会话无法删除",
+            data={"blocked_status": status},
+        )
     if not chat_svc.delete_session(sid, user_id=user_id):
         raise NotFoundErrorResponse(
             msg="Session not found or you are not the owner",

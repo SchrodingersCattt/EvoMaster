@@ -5,3 +5,4 @@
 - **已有库迁移**：按需执行 `migrate_add_*.sql`（若表已包含对应列可跳过）。
 - **会话绑定目录**：`migrate_add_session_directory.sql` 为 `evo_chat_sessions` 增加 `session_directory`（对应 `GET/PUT …/session-directory`）。
 - **会话标题（重命名）**：`migrate_add_session_title.sql` 为 `evo_chat_sessions` 增加 `session_title`（对应 `PUT …/title`）；NULL 时前端回退到 `first_user_message`。
+- **会话软删除**：`migrate_add_session_soft_delete.sql` 为 `evo_chat_sessions` 增加 `deleted_at/deleted_by`；用户侧删除仅隐藏会话，保留历史事件。

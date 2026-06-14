@@ -12,8 +12,14 @@ from matmaster.context.sources.workspace_jobs import WorkspaceJobsSource
 
 def _summary() -> WorkspaceJobsSummary:
     return WorkspaceJobsSummary(
-        total=2, active=1, pending_terminal=1, recent_terminal=0,
-        by_status={"running": 1, "failed": 1}, failed=1, stopped=0, lost=0,
+        total=2,
+        active=1,
+        pending_terminal=1,
+        recent_terminal=0,
+        by_status={"running": 1, "failed": 1},
+        failed=1,
+        stopped=0,
+        lost=0,
     )
 
 
@@ -22,9 +28,7 @@ def test_inline_renders_summary_and_columnar_details() -> None:
     jobs = WorkspaceJobs(
         workspace="/share/p",
         active_jobs=({"job_id": "a1", "job_name": "n1", "status": "running"},),
-        pending_terminal_jobs=(
-            {"job_id": "p1", "job_name": "n2", "status": "failed"},
-        ),
+        pending_terminal_jobs=({"job_id": "p1", "job_name": "n2", "status": "failed"},),
         mode="observation",
         summary=_summary(),
     )
@@ -51,12 +55,12 @@ def test_compact_renders_export_samples_omitted() -> None:
         summary=_summary(),
         export=WorkspaceJobsExport(
             path="/share/p/.matmaster/context/workspace_jobs/s-i.csv",
-            format="csv", row_count=1020, columns=("group", "job_id"),
+            format="csv",
+            row_count=1020,
+            columns=("group", "job_id"),
             reason="row_limit",
         ),
-        priority_samples=(
-            {"job_id": "p1", "job_name": "n2", "status": "failed"},
-        ),
+        priority_samples=({"job_id": "p1", "job_name": "n2", "status": "failed"},),
         omitted_count=1019,
     )
     content = WorkspaceJobsSource.from_jobs(jobs).to_sections()[0].content

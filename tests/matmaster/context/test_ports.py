@@ -5,8 +5,8 @@ from matmaster.context.ports import (
     ContextAssemblyPorts,
     SessionEvent,
     SessionEventQuery,
-    WorkspaceJobs,
     UserInstructions,
+    WorkspaceJobs,
 )
 
 

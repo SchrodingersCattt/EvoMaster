@@ -20,7 +20,7 @@ def _exporter(session, *, workdir="/share/p") -> WorkspaceJobsCsvExporter:
     return WorkspaceJobsCsvExporter(
         session=session,
         execution_workdir=workdir,
-        session_id="sess 123",   # 含空格，验证 slug
+        session_id="sess 123",  # 含空格，验证 slug
         invocation_id="inv-456",
         task_id="task-789",
     )

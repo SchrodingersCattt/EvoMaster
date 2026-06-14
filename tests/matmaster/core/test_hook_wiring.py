@@ -59,6 +59,25 @@ def _stub_child_run_factory(exp_name, task, *, cancel_token=None, spawn_id=None)
     return _gen()
 
 
+def _fake_drain(events=(), usage=None):
+    """Build a drain_run_stream stub that replays ``events`` then completes."""
+
+    async def fake_drain_run_stream(_stream, on_event=None, *, forward_terminal=False):
+        if on_event is not None:
+            for event in events:
+                await on_event(event)
+        return SimpleNamespace(
+            status="completed",
+            final_content="child done",
+            reason="natural",
+            usage=dict(usage or {}),
+            num_turns=1,
+            messages=[],
+        )
+
+    return fake_drain_run_stream
+
+
 class RecordingProvider(ProviderProtocolAttrs):
     def __init__(self) -> None:
         self.seen_messages: list[list[dict[str, object]]] = []
@@ -279,16 +298,6 @@ class TestExpWiring:
         executor.on(HookEvent.SUBAGENT_START, on_start)
         executor.on(HookEvent.SUBAGENT_STOP, on_stop)
 
-        async def fake_drain_run_stream(_stream, on_event=None):
-            return SimpleNamespace(
-                status="completed",
-                final_content="child done",
-                reason="natural",
-                usage={"prompt_tokens": 3},
-                num_turns=1,
-                messages=[],
-            )
-
         orchestrator = SubagentOrchestrator(
             child_run_factory=_stub_child_run_factory,
             hook_executor=executor,
@@ -296,7 +305,7 @@ class TestExpWiring:
         )
         with patch(
             "matmaster.core.stream_drain.drain_run_stream",
-            side_effect=fake_drain_run_stream,
+            side_effect=_fake_drain(usage={"prompt_tokens": 3}),
         ):
             result = await orchestrator.make_spawn_fn()("direct", "summarize this task")
 
@@ -310,33 +319,11 @@ class TestExpWiring:
         assert stopped[0].agent_id == started[0].agent_id
 
     @pytest.mark.asyncio
-    async def test_orchestrator_forwards_child_events_with_source_and_spawn_id(
-        self,
-    ) -> None:
+    async def test_spawn_emits_binding_event_before_child_events(self) -> None:
         forwarded = []
 
         async def sink(event) -> None:
             forwarded.append(event)
-
-        async def fake_drain_run_stream(_stream, on_event=None):
-            if on_event is not None:
-                await on_event(ResponseEvent(source="agent", content="child answer"))
-                await on_event(
-                    ToolCallEvent(
-                        source="agent",
-                        call_id="c1",
-                        tool_name="Read",
-                        arguments={},
-                    )
-                )
-            return SimpleNamespace(
-                status="completed",
-                final_content="child done",
-                reason="natural",
-                usage={"prompt_tokens": 3},
-                num_turns=1,
-                messages=[],
-            )
 
         orchestrator = SubagentOrchestrator(
             child_run_factory=_stub_child_run_factory,
@@ -345,13 +332,59 @@ class TestExpWiring:
         )
         with patch(
             "matmaster.core.stream_drain.drain_run_stream",
-            side_effect=fake_drain_run_stream,
+            side_effect=_fake_drain(
+                events=[ResponseEvent(source="agent", content="child answer")]
+            ),
+        ):
+            result = await orchestrator.make_spawn_fn()(
+                "direct",
+                "summarize this task",
+                parent_call_id="call_42",
+                task_summary="summarize",
+            )
+
+        binding = forwarded[0]
+        assert binding.type == "subagent_spawn"
+        assert binding.parent_call_id == "call_42"
+        assert binding.exp_name == "direct"
+        assert binding.task_summary == "summarize"
+        assert binding.source == "MatMaster:direct"
+        assert binding.spawn_id
+        assert forwarded[1].spawn_id == binding.spawn_id
+        assert result.spawn_id == binding.spawn_id
+
+    @pytest.mark.asyncio
+    async def test_orchestrator_forwards_child_events_with_source_and_spawn_id(
+        self,
+    ) -> None:
+        forwarded = []
+
+        async def sink(event) -> None:
+            forwarded.append(event)
+
+        orchestrator = SubagentOrchestrator(
+            child_run_factory=_stub_child_run_factory,
+            child_event_sink=sink,
+            parent_session_id="session-1",
+        )
+        with patch(
+            "matmaster.core.stream_drain.drain_run_stream",
+            side_effect=_fake_drain(
+                events=[
+                    ResponseEvent(source="agent", content="child answer"),
+                    ToolCallEvent(
+                        source="agent", call_id="c1", tool_name="Read", arguments={}
+                    ),
+                ],
+                usage={"prompt_tokens": 3},
+            ),
         ):
             result = await orchestrator.make_spawn_fn()("direct", "summarize this task")
 
         assert result.final_content == "child done"
         assert result.usage == {"prompt_tokens": 3}
-        assert len(forwarded) == 2
+        assert len(forwarded) == 3
+        assert forwarded[0].type == "subagent_spawn"
         assert {event.source for event in forwarded} == {"MatMaster:direct"}
         assert all(event.spawn_id for event in forwarded)
         assert len({event.spawn_id for event in forwarded}) == 1
@@ -363,18 +396,6 @@ class TestExpWiring:
         async def sink(event) -> None:
             forwarded.append(event)
 
-        async def fake_drain_run_stream(_stream, on_event=None):
-            if on_event is not None:
-                await on_event(ResponseEvent(source="agent", content="child answer"))
-            return SimpleNamespace(
-                status="completed",
-                final_content="child done",
-                reason="natural",
-                usage={"prompt_tokens": 3},
-                num_turns=1,
-                messages=[],
-            )
-
         orchestrator = SubagentOrchestrator(
             child_run_factory=_stub_child_run_factory,
             child_event_sink=sink,
@@ -382,32 +403,25 @@ class TestExpWiring:
         )
         with patch(
             "matmaster.core.stream_drain.drain_run_stream",
-            side_effect=fake_drain_run_stream,
+            side_effect=_fake_drain(
+                events=[ResponseEvent(source="agent", content="child answer")],
+                usage={"prompt_tokens": 3},
+            ),
         ):
             result = await orchestrator.make_spawn_fn()("direct", "summarize this task")
 
         assert result.final_content == "child done"
         assert result.usage == {"prompt_tokens": 3}
-        assert len(forwarded) == 1
-        assert forwarded[0].source == "MatMaster:direct"
-        assert forwarded[0].spawn_id
+        assert len(forwarded) == 2
+        assert forwarded[0].type == "subagent_spawn"
+        assert forwarded[0].parent_call_id is None
+        assert forwarded[1].source == "MatMaster:direct"
+        assert forwarded[1].spawn_id
 
     @pytest.mark.asyncio
     async def test_orchestrator_without_event_sink_still_returns_child_summary(
         self,
     ) -> None:
-        async def fake_drain_run_stream(_stream, on_event=None):
-            if on_event is not None:
-                await on_event(ResponseEvent(source="agent", content="child answer"))
-            return SimpleNamespace(
-                status="completed",
-                final_content="child done",
-                reason="natural",
-                usage={"prompt_tokens": 3},
-                num_turns=1,
-                messages=[],
-            )
-
         orchestrator = SubagentOrchestrator(
             child_run_factory=_stub_child_run_factory,
             child_event_sink=None,
@@ -415,7 +429,10 @@ class TestExpWiring:
         )
         with patch(
             "matmaster.core.stream_drain.drain_run_stream",
-            side_effect=fake_drain_run_stream,
+            side_effect=_fake_drain(
+                events=[ResponseEvent(source="agent", content="child answer")],
+                usage={"prompt_tokens": 3},
+            ),
         ):
             result = await orchestrator.make_spawn_fn()("direct", "summarize this task")
 
@@ -972,6 +989,11 @@ class TestSpawnGuardWiring:
         assert result.status == "completed"
         assert received["allow_spawn"] is False
         assert received["spawn_id"]
-        assert len(forwarded) == 1
-        assert forwarded[0].source == "MatMaster:direct"
-        assert forwarded[0].spawn_id == received["spawn_id"]
+        assert result.spawn_id == received["spawn_id"]
+        assert [event.type for event in forwarded] == [
+            "subagent_spawn",
+            "response",
+            "run_result",
+        ]
+        assert {event.source for event in forwarded} == {"MatMaster:direct"}
+        assert {event.spawn_id for event in forwarded} == {received["spawn_id"]}

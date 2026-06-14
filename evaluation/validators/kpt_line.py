@@ -16,7 +16,7 @@ def _parse_kpt_line(content: str) -> tuple[str | None, list[dict]]:
 
     Returns (None, []) if not parseable as Line mode.
     """
-    lines = [l.strip() for l in content.split("\n") if l.strip()]
+    lines = [line.strip() for line in content.split("\n") if line.strip()]
     if len(lines) < 3:
         return None, []
 
@@ -24,7 +24,7 @@ def _parse_kpt_line(content: str) -> tuple[str | None, list[dict]]:
         return None, []
 
     try:
-        num_points = int(lines[1])
+        int(lines[1])
     except ValueError:
         return None, []
 
@@ -90,7 +90,10 @@ def check_kpt_line(
         return True, f"{fpath.name}: KPT mode=Line ({len(points)} points)"
 
     if mode is None:
-        return False, f"{fpath.name}: not a valid KPT Line-mode file (cannot run check '{check}')"
+        return (
+            False,
+            f"{fpath.name}: not a valid KPT Line-mode file (cannot run check '{check}')",
+        )
 
     if check == "segment_count":
         exp = int(expected or 0)
@@ -106,17 +109,13 @@ def check_kpt_line(
         actual = points[-1]["nk"]
         if actual == exp:
             return True, f"{fpath.name}: last point nk={actual}"
-        return False, (
-            f"{fpath.name}: last point nk={actual}, expected {exp}"
-        )
+        return False, (f"{fpath.name}: last point nk={actual}, expected {exp}")
 
     elif check == "no_nk_zero":
         zeros = [i for i, p in enumerate(points) if p["nk"] == 0]
         if not zeros:
             return True, f"{fpath.name}: no nk=0 found ({len(points)} points)"
-        return False, (
-            f"{fpath.name}: nk=0 found at point index(es) {zeros}"
-        )
+        return False, (f"{fpath.name}: nk=0 found at point index(es) {zeros}")
 
     elif check == "nk_per_segment":
         if not points:
@@ -132,9 +131,7 @@ def check_kpt_line(
                 f"{fpath.name}: all segment nk values {set(nk_values)} "
                 f"within [{lo}, {hi}]"
             )
-        return False, (
-            f"{fpath.name}: segment nk values {bad} outside [{lo}, {hi}]"
-        )
+        return False, (f"{fpath.name}: segment nk values {bad} outside [{lo}, {hi}]")
 
     else:
         return False, f"unknown kpt_line_check check type: {check!r}"

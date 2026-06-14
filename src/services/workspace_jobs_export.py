@@ -61,7 +61,11 @@ class WorkspaceJobsCsvExporter:
             logger.warning(
                 "workspace jobs csv serialize failed session_id=%s workspace=%s "
                 "rows=%d target_path=%s",
-                self._session_id, jobs.workspace, row_count, target, exc_info=True,
+                self._session_id,
+                jobs.workspace,
+                row_count,
+                target,
+                exc_info=True,
             )
             return self._error("serialize_failed", row_count, target)
         try:
@@ -70,7 +74,11 @@ class WorkspaceJobsCsvExporter:
             logger.warning(
                 "workspace jobs csv write failed session_id=%s workspace=%s "
                 "rows=%d target_path=%s",
-                self._session_id, jobs.workspace, row_count, target, exc_info=True,
+                self._session_id,
+                jobs.workspace,
+                row_count,
+                target,
+                exc_info=True,
             )
             return self._error("write_failed", row_count, target)
         return WorkspaceJobsExport(

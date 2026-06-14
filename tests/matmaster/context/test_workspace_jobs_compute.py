@@ -72,9 +72,7 @@ def test_select_priority_samples_action_first_then_fill() -> None:
 
 def test_select_priority_samples_action_limit_truncates() -> None:
     pending = tuple(_job(f"f{i}", "failed") for i in range(5))
-    samples = select_priority_samples(
-        (), pending, (), action_limit=2, fill_limit=20
-    )
+    samples = select_priority_samples((), pending, (), action_limit=2, fill_limit=20)
     # 只前 2 条 failed；其余 failed 既不在 action 也不在 fill
     assert len(samples) == 2
     assert [s["job_id"] for s in samples] == ["f0", "f1"]
@@ -94,9 +92,14 @@ def test_build_csv_rows_adds_group_and_total_matches() -> None:
 def test_build_csv_text_fixed_header_bool_none_and_extras_dropped() -> None:
     rows = [
         {
-            "group": "pending_terminal", "job_id": "1", "job_name": "n",
-            "status": "failed", "sandbox": True, "result_dir": None,
-            "user_id": "SECRET", "org_id": "SECRET",  # 列集外，必须被丢弃
+            "group": "pending_terminal",
+            "job_id": "1",
+            "job_name": "n",
+            "status": "failed",
+            "sandbox": True,
+            "result_dir": None,
+            "user_id": "SECRET",
+            "org_id": "SECRET",  # 列集外，必须被丢弃
         }
     ]
     text = build_csv_text(rows)

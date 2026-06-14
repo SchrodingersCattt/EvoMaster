@@ -892,3 +892,51 @@ def test_thought_complete_without_usage_serializes_to_plain_text() -> None:
 
     assert content == "some reasoning"
     assert not isinstance(content, dict)
+
+
+class TestSubagentSpawnContent:
+    def test_subagent_spawn_maps_binding_fields(self) -> None:
+        payload = {
+            'type': 'subagent_spawn',
+            'source': 'MatMaster:direct',
+            'spawn_id': 'ab12cd34ef56ab12',
+            'parent_call_id': 'call_x',
+            'exp_name': 'direct',
+            'task_summary': 'summarize logs',
+        }
+
+        assert _public_content_for_event('subagent_spawn', payload) == {
+            'parent_call_id': 'call_x',
+            'exp_name': 'direct',
+            'task_summary': 'summarize logs',
+        }
+
+    def test_build_public_sse_payload_carries_top_level_spawn_id(self) -> None:
+        from matmaster.types.events import SubagentSpawnEvent
+
+        event = SubagentSpawnEvent(
+            source='MatMaster:direct',
+            spawn_id='ab12cd34ef56ab12',
+            parent_call_id='call_x',
+            exp_name='direct',
+            task_summary='summarize logs',
+        )
+
+        out = build_public_sse_payload_from_bus_dump(
+            event.model_dump(mode='json'),
+            session_id='sess-1',
+            task_id='task-1',
+            invocation_id='inv-1',
+            spawn_id=event.spawn_id,
+        )
+
+        assert out['type'] == 'subagent_spawn'
+        assert out['source'] == 'MatMaster:direct'
+        assert out['spawn_id'] == 'ab12cd34ef56ab12'
+        assert out['content'] == {
+            'parent_call_id': 'call_x',
+            'exp_name': 'direct',
+            'task_summary': 'summarize logs',
+        }
+        assert 'parent_call_id' not in out
+        assert 'task_summary' not in out

@@ -6,6 +6,8 @@ A :class:`SubagentOrchestrator` owns one parent agent's spawn lifecycle:
   * emit ``SUBAGENT_START`` / ``SUBAGENT_STOP`` hooks
   * retag each child event's ``source`` / ``spawn_id`` and multiplex it back
     into the parent stream via the child-event sink
+  * announce the binding via a public ``SubagentSpawnEvent`` before any
+    child event reaches the sink
   * drain the child run and extract its final content
 
 It depends only on narrow seams -- a child-run factory (which actually builds
@@ -64,8 +66,17 @@ class SubagentOrchestrator:
             exp_name: str,
             task: str,
             cancel_token: CancellationToken | None = None,
+            *,
+            parent_call_id: str | None = None,
+            task_summary: str = "",
         ) -> DrainResult:
-            return await self.spawn(exp_name, task, cancel_token=cancel_token)
+            return await self.spawn(
+                exp_name,
+                task,
+                cancel_token=cancel_token,
+                parent_call_id=parent_call_id,
+                task_summary=task_summary,
+            )
 
         return spawn_fn
 
@@ -75,9 +86,12 @@ class SubagentOrchestrator:
         task: str,
         *,
         cancel_token: CancellationToken | None = None,
+        parent_call_id: str | None = None,
+        task_summary: str = "",
     ) -> DrainResult:
         """Run one child agent and return its drained terminal result."""
         from matmaster.core.stream_drain import drain_run_stream
+        from matmaster.types.events import SubagentSpawnEvent
 
         child_source = f"{self._source_prefix}:{exp_name}"
         spawn_id = uuid.uuid4().hex[:16]
@@ -102,13 +116,27 @@ class SubagentOrchestrator:
                 )
 
         await self._emit(HookEvent.SUBAGENT_START, spawn_id, exp_name, task)
+        # 绑定事件必须先于该 spawn 的任何子事件进入 fanout;经 _forward_child_event
+        # 发送以复用其失败告警不中断语义(重打标为同值幂等)。
+        await _forward_child_event(
+            SubagentSpawnEvent(
+                source=child_source,
+                spawn_id=spawn_id,
+                parent_call_id=parent_call_id,
+                exp_name=exp_name,
+                task_summary=task_summary,
+            )
+        )
         try:
-            return await drain_run_stream(
+            result = await drain_run_stream(
                 self._child_run_factory(
                     exp_name, task, cancel_token=cancel_token, spawn_id=spawn_id
                 ),
                 on_event=_forward_child_event,
+                forward_terminal=True,
             )
+            result.spawn_id = spawn_id
+            return result
         finally:
             await self._emit(HookEvent.SUBAGENT_STOP, spawn_id, exp_name, task)
 
