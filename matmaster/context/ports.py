@@ -102,6 +102,7 @@ class WorkspaceJobs:
     pending_terminal_jobs: tuple[JsonObject, ...] = ()
     recent_terminal_jobs: tuple[JsonObject, ...] = ()
     detail_limit: int | None = None
+    mode: Literal["delivery", "observation"] = "observation"
 
     @classmethod
     def empty(cls) -> WorkspaceJobs:

@@ -9,6 +9,12 @@ def test_workspace_jobs_empty_returns_no_sections() -> None:
     assert WorkspaceJobsSource.from_jobs(WorkspaceJobs.empty()).to_sections() == ()
 
 
+def test_workspace_jobs_mode_defaults_to_observation() -> None:
+    assert WorkspaceJobs().mode == "observation"
+    assert WorkspaceJobs.empty().mode == "observation"
+    assert WorkspaceJobs(mode="delivery").mode == "delivery"
+
+
 def test_workspace_jobs_renders_active_and_pending_terminal() -> None:
     jobs = WorkspaceJobs(
         active_jobs=(
