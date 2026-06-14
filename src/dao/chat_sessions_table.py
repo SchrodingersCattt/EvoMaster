@@ -317,6 +317,26 @@ class ChatSessionsTable(BaseTable):
                 row = cursor.fetchone()
                 return int(row["cnt"]) if row and row.get("cnt") is not None else 0
 
+    def list_session_ids_by_status(
+        self, user_id: str, statuses: list[str]
+    ) -> list[str]:
+        """返回该用户名下 status 命中给定集合的 session_id，按更新时间倒序。"""
+        if not statuses:
+            return []
+        placeholders = ", ".join(["%s"] * len(statuses))
+        with self.get_connection() as conn:
+            with conn.cursor() as cursor:
+                sql = f"""
+                    SELECT session_id
+                    FROM {self.table_name}
+                    WHERE user_id = %s
+                      AND status IN ({placeholders})
+                    ORDER BY updated_at DESC
+                """
+                cursor.execute(sql, (user_id, *statuses))
+                rows = cursor.fetchall()
+                return [str(r["session_id"]) for r in rows if r.get("session_id")]
+
     def reset_all_active_to_idle(self) -> int:
         """
         将当前所有 status='active' 的会话重置为 'idle'。
