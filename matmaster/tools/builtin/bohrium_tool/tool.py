@@ -16,8 +16,10 @@ Design decisions:
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
+import time
 from pathlib import Path
 from typing import Any, ClassVar
 
@@ -45,9 +47,9 @@ from matmaster.bohrium.status import (
 from matmaster.bohrium.types import BohriumContext
 from matmaster.bohrium.upload import upload_input_archive
 from matmaster.tools.builtin.base import BuiltinTool
-from matmaster.tools.tool_result import ToolResult
+from matmaster.tools.tool_result import ToolResult, normalize_tool_result
 from matmaster.types.tool_desc_ctx import ToolDescriptionContext
-from matmaster.types.tool_spec import ResourceClaim
+from matmaster.types.tool_spec import ResourceClaim, ToolExecutionContext
 from matmaster.types.topology import ToolPlane
 
 from .errors import BohriumJobStateError
@@ -250,6 +252,12 @@ class BohriumTool(BuiltinTool):
     exposed_to_model: ClassVar[bool] = True
     max_result_chars: ClassVar[int] = 0
 
+    # In-turn query pacing. Minimum seconds between two real platform queries
+    # for the same running job within one agent run. Kept as class attributes
+    # so this stays a fixed runtime policy while tests can monkeypatch it.
+    _QUERY_MIN_INTERVAL_SECONDS: ClassVar[float] = 30.0
+    _QUERY_PACING_STATE_KEY: ClassVar[str] = "bohrium_query_pacing"
+
     def __init__(
         self,
         *,
@@ -354,6 +362,44 @@ class BohriumTool(BuiltinTool):
             get_bohrium_service_env(),
             mask_secret(ctx.credentials.access_key),
         )
+
+    async def execute_with_context(
+        self,
+        arguments: dict[str, Any],
+        exec_ctx: ToolExecutionContext | None,
+    ) -> str | ToolResult:
+        """Pace repeated query calls for the same running job within one run."""
+        if arguments.get("action") != "query":
+            return await super().execute_with_context(arguments, exec_ctx)
+
+        raw_job_id = arguments.get("job_id")
+        runner_state = exec_ctx.runner_state if exec_ctx is not None else None
+        if raw_job_id is None or runner_state is None:
+            return await super().execute_with_context(arguments, exec_ctx)
+
+        pacing = runner_state.get(self._QUERY_PACING_STATE_KEY)
+        if pacing is None:
+            pacing = {}
+            runner_state.set(self._QUERY_PACING_STATE_KEY, pacing)
+
+        normalized_job_id = str(raw_job_id).strip()
+        record = pacing.get(normalized_job_id)
+        if record is not None and record["running"]:
+            wait = self._QUERY_MIN_INTERVAL_SECONDS - (
+                time.monotonic() - record["last_checked_monotonic"]
+            )
+            if wait > 0:
+                await asyncio.sleep(wait)
+
+        result = await asyncio.to_thread(self._execute, arguments)
+
+        normalized = normalize_tool_result(result)
+        if normalized.status == "success":
+            pacing[normalized_job_id] = {
+                "last_checked_monotonic": time.monotonic(),
+                "running": bool(normalized.meta.get("bohrium_running")),
+            }
+        return result
 
     def _execute(self, arguments: dict[str, Any]) -> str | ToolResult:
         action = arguments.get("action", "")
