@@ -16,6 +16,7 @@ from matmaster.context.sources.turn_input import TurnInput
 from src.dao.redis_dao import (
     STREAM_CHANNEL_PREFIX,
     get_redis_dao,
+    user_wakeup_channel,
 )
 from src.models.chat import ChatSendRequest, DeliverySpec
 from src.services.chat_history import ChatHistoryConverter
@@ -51,8 +52,8 @@ from src.utils.worker_id import get_worker_id
 logger = logging.getLogger(__name__)
 
 
-def _start_redis_stream_subscription(
-    session_id: str,
+def _start_redis_channel_subscription(
+    channel: str,
     loop: asyncio.AbstractEventLoop,
     *,
     thread_name: str,
@@ -60,7 +61,6 @@ def _start_redis_stream_subscription(
     redis_queue: asyncio.Queue = asyncio.Queue()
     shutdown_event = threading.Event()
     subscribe_ready = threading.Event()
-    channel = STREAM_CHANNEL_PREFIX + session_id
 
     def _redis_subscribe_loop() -> None:
         client = get_redis_dao().create_client()
@@ -100,6 +100,17 @@ def _start_redis_stream_subscription(
     )
     sub_thread.start()
     return redis_queue, shutdown_event, subscribe_ready, sub_thread
+
+
+def _start_redis_stream_subscription(
+    session_id: str,
+    loop: asyncio.AbstractEventLoop,
+    *,
+    thread_name: str,
+) -> tuple[asyncio.Queue, threading.Event, threading.Event, threading.Thread]:
+    return _start_redis_channel_subscription(
+        STREAM_CHANNEL_PREFIX + session_id, loop, thread_name=thread_name
+    )
 
 
 @dataclass
@@ -712,6 +723,64 @@ class ChatStreamService:
                 # 仅「已入队未接手」：ping 保活，等待 Worker 接手或 queued 超时
                 await asyncio.sleep(5.0)
                 yield self.sse_format(self._ping_payload(sid))
+
+    async def generate_wakeup_stream(
+        self, user_id: str
+    ) -> AsyncGenerator[str, None]:
+        """用户级 wakeup 流：订阅就绪后发送 snapshot，再转发 live wakeup。"""
+        uid = (user_id or "").strip()
+
+        def _snapshot_frames() -> list[str]:
+            return [
+                self.sse_format(
+                    {
+                        "source": "System",
+                        "type": "session_wakeup",
+                        "reason": "session_waiting_snapshot",
+                        "session_id": sid,
+                    }
+                )
+                for sid in self._sessions_service.list_waiting_or_active_session_ids(
+                    uid
+                )
+            ]
+
+        if not REDIS_URL:
+            for frame in _snapshot_frames():
+                yield frame
+            return
+
+        loop = asyncio.get_running_loop()
+        channel = user_wakeup_channel(uid)
+        (
+            redis_queue,
+            shutdown_event,
+            subscribe_ready,
+            sub_thread,
+        ) = _start_redis_channel_subscription(
+            channel,
+            loop,
+            thread_name=f"wakeup-{uid[:8]}",
+        )
+        try:
+            if not await asyncio.to_thread(subscribe_ready.wait, 3.0):
+                logger.warning(
+                    "generate_wakeup_stream: redis subscribe not ready before "
+                    "snapshot user_id=%s",
+                    uid,
+                )
+            for frame in _snapshot_frames():
+                yield frame
+            while True:
+                try:
+                    payload = await asyncio.wait_for(redis_queue.get(), timeout=30.0)
+                except TimeoutError:
+                    yield ": keepalive\n\n"
+                    continue
+                yield self.sse_format(payload)
+        finally:
+            shutdown_event.set()
+            sub_thread.join(timeout=2.0)
 
     def prepare_send_message(
         self,
