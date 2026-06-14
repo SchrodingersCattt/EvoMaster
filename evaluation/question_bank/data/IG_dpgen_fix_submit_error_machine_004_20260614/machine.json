@@ -9,8 +9,8 @@
         "batch_type": "Shell",
         "context_type": "ssh",
         "remote_profile": {
-          "hostname": "221.194.152.152",
-          "port": 5460,
+          "hostname": "123.123.123.123",
+          "port": 1234,
           "username": "root",
           "timeout": 20
         },
@@ -70,8 +70,8 @@
         "context_type": "LebesgueContext",
         "local_root": "path/to/xx",
         "remote_profile": {
-          "email": "matmaster@dp.tech",
-          "password": "matmaster",
+          "email": "user@example.com",
+          "password": "***",
           "program_id": 12345,
           "keep_backup": true,
           "input_data": {
@@ -81,7 +81,7 @@
             "checkpoint_time": 30,
             "platform": "ali",
             "job_type": "container",
-            "image_address": "registry.dp.tech/dptech/cp2k:2024.1"
+            "image_address": "registry.example.com/example/cp2k:2024.1"
           }
         }
       },

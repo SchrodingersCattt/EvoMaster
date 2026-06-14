@@ -9,8 +9,8 @@
         "batch_type": "Shell",
         "context_type": "ssh",
         "remote_profile": {
-          "hostname": "221.194.152.152",
-          "port": 5460,
+          "hostname": "123.123.123.123",
+          "port": 1234,
           "username": "root",
           "timeout": 20
         },
