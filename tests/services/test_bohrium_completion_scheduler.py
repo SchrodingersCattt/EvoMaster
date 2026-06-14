@@ -11,7 +11,6 @@ from src.services.bohrium_completion_scheduler import (
     Reason,
     SchedulerConfig,
     decide,
-    render_prompt,
 )
 
 
@@ -166,60 +165,6 @@ def test_reason_priority_order_for_session_merge():
     assert Reason.PROGRESS < Reason.STALLED < Reason.FIRST_FAILURE < Reason.FINAL
 
 
-# ---------- render_prompt ----------
-
-_SUFFIX = "本轮交付为 session 级"
-
-
-def test_render_final_prompt_has_counts_and_scope_suffix():
-    prompt = render_prompt(
-        Reason.FINAL,
-        {"total": 10, "active": 0, "succeeded": 8, "failed_total": 2},
-    )
-    assert "成功 8/10" in prompt and "失败 2" in prompt
-    assert _SUFFIX in prompt
-
-
-def test_render_first_failure_prompt_carries_job_info_and_suffix():
-    prompt = render_prompt(
-        Reason.FIRST_FAILURE,
-        {"total": 10, "active": 7, "succeeded": 2, "failed_total": 1},
-        first_failed={"job_id": "j-9", "job_name": "dft-9", "status": "failed"},
-    )
-    assert "j-9" in prompt and "dft-9" in prompt and "7 个作业仍在运行" in prompt
-    assert _SUFFIX in prompt
-
-
-def test_render_first_failure_prompt_degrades_when_row_vanished():
-    # §4d 查不到（竞态被并发 run ack）：降级文案，照常触发
-    prompt = render_prompt(
-        Reason.FIRST_FAILURE,
-        {"total": 3, "active": 2, "succeeded": 0, "failed_total": 1},
-        first_failed=None,
-    )
-    assert "unknown" in prompt and _SUFFIX in prompt
-
-
-def test_render_progress_prompt_has_terminal_ratio_and_suffix():
-    prompt = render_prompt(
-        Reason.PROGRESS,
-        {"total": 9, "active": 3, "succeeded": 6, "failed_total": 0},
-    )
-    assert "已终态 6/9" in prompt and "仍在运行 3" in prompt
-    assert _SUFFIX in prompt
-
-
-def test_render_stalled_prompt_states_unqueryable_jobs():
-    prompt = render_prompt(
-        Reason.STALLED,
-        {"total": 10, "active": 7, "succeeded": 3, "failed_total": 0, "unknown": 7},
-    )
-    assert "3/10" in prompt
-    assert "7 个作业状态长时间无法查询" in prompt
-    assert "仍在运行" not in prompt
-    assert _SUFFIX in prompt
-
-
 # ---------- tick 编排（假对象注入） ----------
 
 
@@ -333,13 +278,44 @@ def test_tick_merges_session_units_single_trigger_with_primary_reason():
     assert summary["triggered"] == 1 and len(stream.calls) == 1
     assert len(redis.calls) == 1  # 同 session 两单元只占一次位
     # NX key 用 session 内 max_pending_terminal_id 高水位
-    assert redis.calls[0]["key"] == "bohrium_delivery:u1:o1:s1:12"
-    # primary = FINAL：文案 + notify
-    assert "全部 Bohrium 作业已结束" in stream.calls[0]["prompt"]
+    assert redis.calls[0]["key"] == "bohrium_delivery:u1:o1:s1:/share/p:12"
+    # primary = FINAL：notify
     assert stream.calls[0]["delivery"] == DeliverySpec(notify=True)
 
 
-def test_tick_first_failure_fetches_job_info_into_prompt():
+def test_tick_separates_workspaces_into_distinct_reservations():
+    units = [
+        _unit(
+            workspace="/share/a",
+            active=0,
+            pending_terminal=1,
+            succeeded=1,
+            total=1,
+            max_pending_terminal_id=5,
+        ),
+        _unit(
+            workspace="/share/b",
+            active=0,
+            pending_terminal=1,
+            succeeded=1,
+            total=1,
+            max_pending_terminal_id=9,
+        ),
+    ]
+    sched, _, _, redis, stream = _scheduler(units)
+
+    summary = sched.tick()
+
+    # 两个 workspace 各占一次位、各触发一次（fake sessions 恒 idle）
+    assert summary["triggered"] == 2
+    assert {c["workspace"] for c in stream.calls} == {"/share/a", "/share/b"}
+    assert sorted(c["key"] for c in redis.calls) == [
+        "bohrium_delivery:u1:o1:s1:/share/a:5",
+        "bohrium_delivery:u1:o1:s1:/share/b:9",
+    ]
+
+
+def test_tick_first_failure_fetches_scoped_job_info():
     units = [_unit(total=3, active=2, pending_terminal=1, failed_total=1, succeeded=0)]
     table = _FakeJobsTable(
         units, first_failed={"job_id": "j-9", "job_name": "dft", "status": "failed"}
@@ -353,10 +329,10 @@ def test_tick_first_failure_fetches_job_info_into_prompt():
             "user_id": "u1",
             "org_id": "o1",
             "session_id": "s1",
+            "workspace": "/share/p",
             "invocation_key": "inv-1",
         }
     ]
-    assert "j-9" in stream.calls[0]["prompt"]
     assert stream.calls[0]["delivery"] == DeliverySpec(notify=False)
 
 
@@ -376,7 +352,6 @@ def test_tick_stalled_unit_triggers_without_notify():
     summary = sched.tick()
 
     assert summary["triggered"] == 1
-    assert "无法查询" in stream.calls[0]["prompt"]
     assert stream.calls[0]["delivery"] == DeliverySpec(notify=False)
 
 

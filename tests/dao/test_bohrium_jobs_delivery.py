@@ -255,7 +255,11 @@ def test_get_first_pending_failed_returns_earliest_unhandled(
     _shift_terminal_at(sessions_shadow, job_id="103", seconds_ago=100)
 
     row = jobs_table.get_first_pending_failed(
-        user_id="u1", org_id="o1", session_id="sess-1", invocation_key="inv-1"
+        user_id="u1",
+        org_id="o1",
+        session_id="sess-1",
+        workspace="/share/project",
+        invocation_key="inv-1",
     )
 
     assert row == {"job_id": "102", "job_name": "name-102", "status": "stopped"}
@@ -318,7 +322,11 @@ def test_scan_lost_with_active_has_first_failure_shape(jobs_table, sessions_shad
     assert unit["failed_handled"] == 0
 
     first = jobs_table.get_first_pending_failed(
-        user_id="u1", org_id="o1", session_id="sess-1", invocation_key="inv-1"
+        user_id="u1",
+        org_id="o1",
+        session_id="sess-1",
+        workspace="/share/project",
+        invocation_key="inv-1",
     )
     assert first is not None
     assert first["status"] == "lost"
@@ -465,6 +473,87 @@ def test_mark_handled_by_job_keys_does_not_cross_workspace(
         job_keys=[(False, "501")],
     )
     assert affected_ok == 1
+
+
+def test_scan_splits_same_session_by_workspace(jobs_table, sessions_shadow):
+    _register_session(sessions_shadow)
+    # 同 session 同 invocation，两个 workspace 各一终态未交付
+    _seed_job(jobs_table, inv="inv-1", job_id="601", status="finished")
+    jobs_table.insert_submitted(
+        session_id="sess-1",
+        invocation_id="inv-1",
+        spawn_id=None,
+        user_id="u1",
+        org_id="o1",
+        job_id="602",
+        job_name="name-602",
+        project_id=42,
+        sandbox=False,
+        input_dir="data/in",
+        workspace="/share/other",
+    )
+    jobs_table.apply_poll(
+        user_id="u1",
+        org_id="o1",
+        sandbox=False,
+        job_id="602",
+        status="finished",
+        is_terminal=True,
+        backoff_seconds=30,
+    )
+
+    units = jobs_table.scan_delivery_units(limit=10)
+
+    workspaces = sorted(u["workspace"] for u in units)
+    assert workspaces == ["/share/other", "/share/project"]
+    for u in units:
+        assert u["pending_terminal"] == 1
+
+
+def test_get_first_pending_failed_scoped_by_workspace(
+    jobs_table, sessions_shadow
+):
+    _register_session(sessions_shadow)
+    _seed_job(jobs_table, inv="inv-1", job_id="701", status="failed")
+    jobs_table.insert_submitted(
+        session_id="sess-1",
+        invocation_id="inv-1",
+        spawn_id=None,
+        user_id="u1",
+        org_id="o1",
+        job_id="702",
+        job_name="name-702",
+        project_id=42,
+        sandbox=False,
+        input_dir="data/in",
+        workspace="/share/other",
+    )
+    jobs_table.apply_poll(
+        user_id="u1",
+        org_id="o1",
+        sandbox=False,
+        job_id="702",
+        status="failed",
+        is_terminal=True,
+        backoff_seconds=30,
+    )
+
+    row_other = jobs_table.get_first_pending_failed(
+        user_id="u1",
+        org_id="o1",
+        session_id="sess-1",
+        workspace="/share/other",
+        invocation_key="inv-1",
+    )
+    assert row_other is not None and row_other["job_id"] == "702"
+    row_project = jobs_table.get_first_pending_failed(
+        user_id="u1",
+        org_id="o1",
+        session_id="sess-1",
+        workspace="/share/project",
+        invocation_key="inv-1",
+    )
+    assert row_project is not None and row_project["job_id"] == "701"
 
 
 def test_scan_exposes_unknown_count_and_pending_age(jobs_table, sessions_shadow):

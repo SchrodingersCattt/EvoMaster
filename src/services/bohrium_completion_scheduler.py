@@ -183,18 +183,24 @@ class BohriumCompletionScheduler:
             return summary
         summary["scanned"] = len(units)
 
-        groups: dict[tuple[str, str, str], list[dict[str, Any]]] = {}
+        groups: dict[tuple[str, str, str, str], list[dict[str, Any]]] = {}
         for unit in units:
-            key = (unit["user_id"], unit["org_id"], unit["session_id"])
+            key = (
+                unit["user_id"],
+                unit["org_id"],
+                unit["session_id"],
+                unit["workspace"],
+            )
             groups.setdefault(key, []).append(unit)
 
         failed_sessions: list[str] = []
-        for (user_id, org_id, session_id), session_units in groups.items():
+        for (user_id, org_id, session_id, workspace), session_units in groups.items():
             try:
                 self._process_session(
                     user_id,
                     org_id,
                     session_id,
+                    workspace,
                     session_units,
                     summary,
                     failed_sessions,
@@ -226,6 +232,7 @@ class BohriumCompletionScheduler:
         user_id: str,
         org_id: str,
         session_id: str,
+        workspace: str,
         session_units: list[dict[str, Any]],
         summary: dict[str, int],
         failed_sessions: list[str],
@@ -266,7 +273,10 @@ class BohriumCompletionScheduler:
         # (c) NX 原子占位（fail-closed）：同 tick 多实例竞态的防御纵深。
         # row-id 高水位避免秒级 terminal_at 碰撞压住新完成作业；短 TTL 无需释放。
         max_row_id = max(u["max_pending_terminal_id"] for u in session_units)
-        key = f"{_RESERVATION_KEY_PREFIX}{user_id}:{org_id}:{session_id}:{max_row_id}"
+        key = (
+            f"{_RESERVATION_KEY_PREFIX}{user_id}:{org_id}:{session_id}:"
+            f"{workspace}:{max_row_id}"
+        )
         reserved = self._redis.try_reserve_nx(
             key, "1", ttl_sec=self._cfg.reservation_ttl
         )
@@ -293,6 +303,7 @@ class BohriumCompletionScheduler:
                 user_id=user_id,
                 org_id=org_id,
                 session_id=session_id,
+                workspace=workspace,
                 invocation_key=primary_unit["invocation_key"],
             )
         prompt = render_prompt(primary_reason, counts, first_failed)
@@ -302,7 +313,7 @@ class BohriumCompletionScheduler:
             session_id,
             prompt,
             origin="bohrium_completion",
-            workspace=primary_unit["workspace"],
+            workspace=workspace,
             delivery=DeliverySpec(notify=primary_reason is Reason.FINAL),
         )
         if res.status == "enqueued":

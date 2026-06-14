@@ -340,7 +340,7 @@ class BohriumJobsTable(BaseTable):
                 t.org_id,
                 t.session_id,
                 COALESCE(t.invocation_id, '')                        AS invocation_key,
-                MIN(t.workspace)                                     AS workspace,
+                t.workspace                                          AS workspace,
                 COUNT(*)                                             AS total,
                 SUM(t.terminal_at IS NULL)                           AS active,
                 SUM(t.terminal_at IS NOT NULL
@@ -362,7 +362,7 @@ class BohriumJobsTable(BaseTable):
                          THEN t.terminal_at END)                     AS first_pending_terminal_at
             FROM {self.table_name} t
             JOIN (
-                SELECT DISTINCT user_id, org_id, session_id,
+                SELECT DISTINCT user_id, org_id, session_id, workspace,
                        COALESCE(invocation_id, '') AS invocation_key
                 FROM {self.table_name}
                 WHERE terminal_at IS NOT NULL AND handled_at IS NULL
@@ -370,6 +370,7 @@ class BohriumJobsTable(BaseTable):
               ON pending.user_id        = t.user_id
              AND pending.org_id         = t.org_id
              AND pending.session_id     = t.session_id
+             AND pending.workspace      = t.workspace
              AND pending.invocation_key = COALESCE(t.invocation_id, '')
             WHERE EXISTS (
                 SELECT 1 FROM evo_chat_sessions s
@@ -377,10 +378,11 @@ class BohriumJobsTable(BaseTable):
                   AND s.user_id    = t.user_id
                   AND s.org_id     = t.org_id
             )
-            GROUP BY t.user_id, t.org_id, t.session_id, COALESCE(t.invocation_id, '')
+            GROUP BY t.user_id, t.org_id, t.session_id, t.workspace,
+                     COALESCE(t.invocation_id, '')
             HAVING pending_terminal > 0
             ORDER BY first_pending_terminal_at ASC, t.user_id ASC, t.org_id ASC,
-                     t.session_id ASC, invocation_key ASC
+                     t.session_id ASC, t.workspace ASC, invocation_key ASC
             LIMIT %s
         """
         with self.get_connection() as conn:
@@ -525,13 +527,20 @@ class BohriumJobsTable(BaseTable):
         return affected
 
     def get_first_pending_failed(
-        self, *, user_id: str, org_id: str, session_id: str, invocation_key: str
+        self,
+        *,
+        user_id: str,
+        org_id: str,
+        session_id: str,
+        workspace: str,
+        invocation_key: str,
     ) -> dict[str, Any] | None:
         """该 invocation 最早一个未交付失败作业（FIRST_FAILURE prompt 用）。"""
         sql = f"""
             SELECT job_id, job_name, status
             FROM {self.table_name}
             WHERE user_id = %s AND org_id = %s AND session_id = %s
+              AND workspace = %s
               AND COALESCE(invocation_id, '') = %s
               AND status IN ({_SQL_FAILURE})
               AND handled_at IS NULL
@@ -540,7 +549,9 @@ class BohriumJobsTable(BaseTable):
         """
         with self.get_connection() as conn:
             with conn.cursor() as cur:
-                cur.execute(sql, (user_id, org_id, session_id, invocation_key))
+                cur.execute(
+                    sql, (user_id, org_id, session_id, workspace, invocation_key)
+                )
                 return cur.fetchone()
 
     def list_all_for_test(self) -> list[dict[str, Any]]:
