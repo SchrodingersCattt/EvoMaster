@@ -212,6 +212,53 @@ class BohriumJobsTable(BaseTable):
                 cur.execute(sql, (user_id, org_id, session_id))
                 return [self._to_agent_job(r) for r in cur.fetchall()]
 
+    def query_workspace_active(
+        self, *, user_id: str, org_id: str, workspace: str
+    ) -> list[dict[str, Any]]:
+        """workspace 观察视图：跨 session 的活跃作业。"""
+        sql = f"""
+            SELECT {self._AGENT_COLUMNS} FROM {self.table_name}
+            WHERE user_id = %s AND org_id = %s AND workspace = %s
+              AND status IN ({_SQL_ACTIVE})
+            ORDER BY submitted_at ASC
+        """
+        with self.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(sql, (user_id, org_id, workspace))
+                return [self._to_agent_job(r) for r in cur.fetchall()]
+
+    def query_workspace_pending_terminal(
+        self, *, user_id: str, org_id: str, workspace: str, limit: int
+    ) -> list[dict[str, Any]]:
+        """workspace 观察视图：跨 session 的未交付终态作业（非 ack 范围）。"""
+        sql = f"""
+            SELECT {self._AGENT_COLUMNS} FROM {self.table_name}
+            WHERE user_id = %s AND org_id = %s AND workspace = %s
+              AND terminal_at IS NOT NULL AND handled_at IS NULL
+            ORDER BY terminal_at ASC, submitted_at ASC
+            LIMIT %s
+        """
+        with self.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(sql, (user_id, org_id, workspace, int(limit)))
+                return [self._to_agent_job(r) for r in cur.fetchall()]
+
+    def query_workspace_recent_terminal(
+        self, *, user_id: str, org_id: str, workspace: str, limit: int
+    ) -> list[dict[str, Any]]:
+        """workspace 观察视图：跨 session 的最近终态作业（不论 handled）。"""
+        sql = f"""
+            SELECT {self._AGENT_COLUMNS} FROM {self.table_name}
+            WHERE user_id = %s AND org_id = %s AND workspace = %s
+              AND terminal_at IS NOT NULL
+            ORDER BY terminal_at DESC, id DESC
+            LIMIT %s
+        """
+        with self.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(sql, (user_id, org_id, workspace, int(limit)))
+                return [self._to_agent_job(r) for r in cur.fetchall()]
+
     def _select_due_for_update(self, conn, *, limit: int) -> list[dict[str, Any]]:
         """在给定连接的事务内 SELECT ... FOR UPDATE SKIP LOCKED。不提交。"""
         sql = f"""

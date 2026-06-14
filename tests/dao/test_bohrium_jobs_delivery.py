@@ -556,6 +556,63 @@ def test_get_first_pending_failed_scoped_by_workspace(
     assert row_project is not None and row_project["job_id"] == "701"
 
 
+def test_query_workspace_active_spans_sessions(jobs_table, sessions_shadow):
+    _register_session(sessions_shadow, session="sess-A")
+    _register_session(sessions_shadow, session="sess-B")
+    _seed_job(jobs_table, session="sess-A", job_id="601")
+    _seed_job(jobs_table, session="sess-B", job_id="602")
+
+    rows = jobs_table.query_workspace_active(
+        user_id="u1", org_id="o1", workspace="/share/project"
+    )
+    assert sorted(r["job_id"] for r in rows) == ["601", "602"]
+
+
+def test_query_workspace_pending_terminal_spans_sessions_with_limit(
+    jobs_table, sessions_shadow
+):
+    _register_session(sessions_shadow, session="sess-A")
+    _register_session(sessions_shadow, session="sess-B")
+    _seed_job(jobs_table, session="sess-A", job_id="701", status="finished")
+    _seed_job(jobs_table, session="sess-B", job_id="702", status="finished")
+
+    rows = jobs_table.query_workspace_pending_terminal(
+        user_id="u1", org_id="o1", workspace="/share/project", limit=10
+    )
+    assert sorted(r["job_id"] for r in rows) == ["701", "702"]
+
+    limited = jobs_table.query_workspace_pending_terminal(
+        user_id="u1", org_id="o1", workspace="/share/project", limit=1
+    )
+    assert len(limited) == 1
+
+
+def test_query_workspace_recent_terminal_ignores_handled_and_orders_desc(
+    jobs_table, sessions_shadow
+):
+    _register_session(sessions_shadow)
+    _seed_job(jobs_table, job_id="801", status="finished")
+    _seed_job(jobs_table, job_id="802", status="finished")
+    _shift_terminal_at(sessions_shadow, job_id="801", seconds_ago=300)
+    _shift_terminal_at(sessions_shadow, job_id="802", seconds_ago=100)
+    # 把 801 标 handled：recent 仍应包含它（不受 handled_at 影响）
+    snap_rows = jobs_table.list_pending_terminal_snapshot(
+        user_id="u1", org_id="o1", session_id="sess-1", workspace="/share/project"
+    )
+    jobs_table.mark_handled_by_ids(
+        user_id="u1",
+        org_id="o1",
+        session_id="sess-1",
+        workspace="/share/project",
+        row_ids=[r["id"] for r in snap_rows if r["job_id"] == "801"],
+    )
+
+    rows = jobs_table.query_workspace_recent_terminal(
+        user_id="u1", org_id="o1", workspace="/share/project", limit=10
+    )
+    assert [r["job_id"] for r in rows] == ["802", "801"]
+
+
 def test_scan_exposes_unknown_count_and_pending_age(jobs_table, sessions_shadow):
     _register_session(sessions_shadow)
     _seed_job(jobs_table, job_id="501", status="finished")
