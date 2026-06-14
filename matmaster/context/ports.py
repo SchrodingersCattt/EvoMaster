@@ -96,13 +96,48 @@ class SessionEventsPort(Protocol):
 
 
 @dataclass(frozen=True)
+class WorkspaceJobsExport:
+    path: str
+    format: Literal["csv"]
+    row_count: int
+    columns: tuple[str, ...]
+    reason: Literal["row_limit", "char_limit"]
+
+
+@dataclass(frozen=True)
+class WorkspaceJobsSummary:
+    total: int  # == active + pending_terminal + recent_terminal == CSV row_count
+    active: int
+    pending_terminal: int
+    recent_terminal: int
+    by_status: Mapping[str, int]
+    failed: int
+    stopped: int
+    lost: int
+
+
+@dataclass(frozen=True)
+class WorkspaceJobsExportError:
+    reason: Literal[
+        "session_missing", "bad_target_path", "write_failed", "serialize_failed"
+    ]
+    rows: int
+    target_path: str
+
+
+@dataclass(frozen=True)
 class WorkspaceJobs:
     workspace: str | None = None
     active_jobs: tuple[JsonObject, ...] = ()
     pending_terminal_jobs: tuple[JsonObject, ...] = ()
     recent_terminal_jobs: tuple[JsonObject, ...] = ()
-    detail_limit: int | None = None
-    mode: Literal["delivery", "observation"] = "observation"
+    detail_limit: int | None = None  # 过渡字段，Task 5 末尾移除
+    mode: Literal["workspace_observation", "session_workspace_delivery"] | None = None
+    summary: WorkspaceJobsSummary | None = None
+    export: WorkspaceJobsExport | None = None
+    export_error: WorkspaceJobsExportError | None = None
+    priority_samples: tuple[JsonObject, ...] = ()
+    omitted_count: int | None = None
 
     @classmethod
     def empty(cls) -> WorkspaceJobs:
