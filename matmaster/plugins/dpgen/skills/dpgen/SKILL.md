@@ -1,11 +1,11 @@
 ---
 name: dpgen
-description: "Use for DP-GEN / DeePMD active-learning and Deep Potential training workflows: preparing and checking param.json and machine.json, train-explore-label iteration planning, model-deviation campaigns, FP labeling setup, and launch-readiness triage. NOT for pretrained MLIP inference/optimization/MD/phonon/NEB; use mlips for those."
+description: "Use for DP-GEN as active-learning dataset sampling workflows: preparing and grammar-checking param.json and machine.json for launch-readiness triage. NOT for MLIP inference/calculations; use `mlips` for those."
 ---
 
 # DP-GEN Skill
 
-Use this skill when the user wants to build, repair, validate, or plan a DP-GEN workflow for DeePMD/Deep Potential potential training.
+DP-GEN (Deep Potential GENerator) is a software package for generating machine learning interatomic potentials using active learning. It automates the workflow of training, exploring, labeling, and retraining to create accurate potentials for molecular dynamics simulations.
 
 ## Scope
 
@@ -38,7 +38,6 @@ Record the result in a validation artifact when the user asks for reports or rea
 - `expected_path_warnings_ignored`: path diagnostics that are expected because the user used placeholders such as `/path/to/...` or `path/to/xx`.
 - `blocking_findings`: syntax, schema, or semantic findings that block launch.
 
-If `dpgen-lsp-tool` is unavailable, do not claim the inputs are ready. State that validation is incomplete and explain how to install the checker.
 
 ## Installing the checker
 
@@ -55,7 +54,7 @@ uv tool install git+https://github.com/SchrodingersCattt/dpgen-lsp.git@main
 ```
 
 If `uv` is unavailable, use the project environment’s package installer. Rich DP-GEN schema checks may also require DP-GEN-side packages such as `dpgen`, `dargs`, and `dpdispatcher`.
-
+If `dpgen-lsp-tool` is not available after install attempts, set `tool_available: false` in the validation artifact, perform manual JSON syntax and top-level key inspection, and report `readiness: "needs_review"`.
 Useful commands:
 
 ```bash
@@ -70,15 +69,6 @@ dpgen-lsp-tool fix param.json --line 1 --character 1
 ```
 
 `fix` is advisory/preview only. Do not blindly auto-apply a fix without preserving the user’s scientific intent.
-
-## Path placeholder rule
-
-Users often do not know final paths yet and may use placeholders such as `/path/to/...` or `path/to/xx`.
-
-- Missing-path diagnostics for these placeholders are expected preflight warnings.
-- Classify them as `advisory`, `needs_replace`, or `non_blocking` unless the user explicitly asked for a runnable final package.
-- Do not label placeholder path warnings as JSON syntax errors.
-- Do not fabricate real filesystem paths, dataset paths, pseudopotential paths, image names, queues, hosts, or credentials.
 
 ## Repair rules
 
@@ -115,5 +105,3 @@ When asked for readiness or validation reports, make them machine-readable where
   "reason": "short user-facing reason"
 }
 ```
-
-Keep final answers concise and user-facing. Mention that placeholder paths must be replaced before a real run.
