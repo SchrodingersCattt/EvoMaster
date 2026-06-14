@@ -872,3 +872,23 @@ class TestBuildPublicSsePayloadDedup:
         assert 'model' not in out
         assert 'model_profile' not in out
         assert 'model_route' not in out
+
+
+def test_thought_complete_without_usage_serializes_to_plain_text() -> None:
+    """Usage-free complete thoughts expose plain text content."""
+    from matmaster.integration.event_payloads import _public_content_for_event
+
+    payload = {
+        "type": "thought",
+        "content": "some reasoning",
+        "stream_state": "complete",
+        "reasoning_content": "some reasoning",
+        "turn_index": None,
+        "turn_usage": {},
+        "total_usage": {},
+    }
+
+    content = _public_content_for_event("thought", payload)
+
+    assert content == "some reasoning"
+    assert not isinstance(content, dict)
