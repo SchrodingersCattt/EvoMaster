@@ -20,6 +20,11 @@
       "transport": "sse",
       "url": "http://aubn1408899.bohrium.tech:50001/sse"
     },
+    "mat_recommend_db": {
+      "headers": {},
+      "transport": "http",
+      "url": "http://chvz1424099.bohrium.tech:50002/mcp"
+    },
     "mat_sg": {
       "headers": {},
       "transport": "http",
