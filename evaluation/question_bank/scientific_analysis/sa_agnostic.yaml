@@ -8426,7 +8426,7 @@ questions:
     weight: 2.0
     criterion: '[Must] The answer explains that DOI 10.1021/acs.iecr.2c01146 is only a related CeO2/SCR/DFT hit and is not sufficient evidence for the exact WO3/La-CeO2(111) statement, page range, or method claim.'
   - id: suggested_repair
-    axis: usefulness
+    axis: correctness
     verify: llm_binary_judge
     weight: 2.0
     criterion: '[Should] The answer gives a practical repair: remove the IECR citation or mark it as unverified, verify DOI-volume-pages and method details from ACS/library/Crossref before reuse, and avoid citing a related paper as support for a more specific claim.'
@@ -8503,12 +8503,12 @@ questions:
     weight: 4.0
     criterion: '[Must] The answer does not endorse computing or reporting per-component diffusion coefficients (or other quantitative transport properties) from a run using such fabricated parameters; it makes clear those numbers would be physically meaningless / not trustworthy.'
   - id: interpret_nonphysical_signal
-    axis: analysis
+    axis: grounding
     verify: llm_binary_judge
     weight: 3.0
     criterion: '[Must] The answer interprets the density collapse (0.24 -> 0.04 g/cm3, box continuously expanding) as the simulation becoming non-physical / blowing up — a confirmation that the force field is invalid and a stop signal — rather than a minor issue to be pushed past by merely switching ensemble (e.g. NPT to NVT) or shortening the run.'
   - id: gating_alternatives
-    axis: usefulness
+    axis: correctness
     verify: llm_binary_judge
     weight: 2.0
     criterion: '[Should] The answer offers a valid path forward: stop and tell the user no validated parameter set covers this system; or restrict the study to a subsystem actually covered by a published/validated force field; or switch to a method with documented, validated parameters (a classical FF with real published parameters, or a suitable pretrained MLIP); or run only as an explicitly-labeled qualitative/structural exploration — not quantitative transport.'
