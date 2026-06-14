@@ -126,9 +126,9 @@ def select_priority_samples(
     约束；其余按 pending(非 action) → active → recent 顺序填充，受 fill_limit 约束。
     样本只渲染 job_id/job_name/status，不加 group。
     """
-    action = [
-        j for j in pending if str(j.get("status")) in _ACTION_STATUSES
-    ][:action_limit]
+    action = [j for j in pending if str(j.get("status")) in _ACTION_STATUSES][
+        :action_limit
+    ]
     fill_candidates = (
         [j for j in pending if str(j.get("status")) not in _ACTION_STATUSES]
         + list(active)
@@ -169,7 +169,5 @@ def build_csv_text(rows: Iterable[Mapping[str, JsonValue]]) -> str:
     )
     writer.writeheader()
     for row in rows:
-        writer.writerow(
-            {k: _csv_cell(v) for k, v in row.items() if k in CSV_COLUMNS}
-        )
+        writer.writerow({k: _csv_cell(v) for k, v in row.items() if k in CSV_COLUMNS})
     return buf.getvalue()

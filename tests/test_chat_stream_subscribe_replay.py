@@ -194,12 +194,72 @@ def test_generate_subscribe_stream_replay_batches_frames_without_loss():
     assert any(chunk.count('event: ') > 1 for chunk in chunks)
 
 
+def test_generate_subscribe_stream_replays_subagent_spawn_binding():
+    from src.services.stream_service import ChatStreamService
+
+    assert 'subagent_spawn' not in REPLAY_DISCARDED_EVENT_TYPES
+
+    sessions_service = MagicMock()
+    sessions_service.get_session_status_payload.return_value = {
+        'source': 'System',
+        'type': 'status',
+        'content': '',
+        'session_id': 'sess-1',
+        'status': 'idle',
+    }
+    sessions_service.is_session_running_on_this_pod.return_value = False
+    sessions_service.is_session_run_on_another_pod.return_value = False
+
+    events_service = MagicMock()
+    events_service.get_session_events.return_value = [
+        {
+            'source': 'MatMaster:direct',
+            'type': 'subagent_spawn',
+            'content': {
+                'parent_call_id': 'call_x',
+                'exp_name': 'direct',
+                'task_summary': 'summarize logs',
+            },
+            'session_id': 'sess-1',
+            'task_id': 'task-0',
+            'spawn_id': 'ab12cd34ef56ab12',
+        }
+    ]
+
+    service = ChatStreamService(
+        sessions_service=sessions_service,
+        events_service=events_service,
+        deploy_state_service=MagicMock(),
+    )
+
+    async def _collect_frames() -> list[dict]:
+        frames = []
+        gen = service.generate_subscribe_stream('sess-1')
+        try:
+            async for frame in gen:
+                frames.append(_decode_sse_payload(frame))
+        finally:
+            await gen.aclose()
+        return frames
+
+    with patch('src.services.stream_service.REDIS_URL', None):
+        frames = asyncio.run(_collect_frames())
+
+    binding_frames = [f for f in frames if f['type'] == 'subagent_spawn']
+    assert len(binding_frames) == 1
+    assert binding_frames[0]['spawn_id'] == 'ab12cd34ef56ab12'
+    assert binding_frames[0]['source'] == 'MatMaster:direct'
+    assert binding_frames[0]['content']['parent_call_id'] == 'call_x'
+    events_service.get_session_events.assert_called_with(
+        'sess-1', include_spawn=True, exclude_types=REPLAY_DISCARDED_EVENT_TYPES
+    )
+
+
 async def test_generate_subscribe_stream_subscribes_before_replay_for_running_session():
     """后台 trigger 已入队后补接会话流时，先订阅 live channel 再查历史。"""
     from src.services.stream_service import ChatStreamService
 
     order: list[str] = []
-
     sessions_service = MagicMock()
     sessions_service.get_session_status_payload.return_value = {
         'source': 'System',

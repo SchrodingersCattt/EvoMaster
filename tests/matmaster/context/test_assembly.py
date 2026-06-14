@@ -15,8 +15,8 @@ from matmaster.context.ports import (
     ContextAssemblyPorts,
     SessionEvent,
     SessionEventQuery,
-    WorkspaceJobs,
     UserInstructions,
+    WorkspaceJobs,
 )
 from matmaster.context.sections import ContextSection, ContextView, SectionOrder
 from matmaster.context.session import SessionContextBuilder

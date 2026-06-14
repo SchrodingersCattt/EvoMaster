@@ -9,7 +9,7 @@ description: "Use to RUN GROMACS molecular dynamics (NVT/NPT, energy minimizatio
 
 | Item | CPU (default) | GPU |
 |------|--------------|-----|
-| image | `registry.dp.tech/dptech/dp/native/hub/mrdic2/a1:1.0.1-1779698340` | same |
+| image | `registry.dp.tech/dptech/matmaster:gromacs-1.0.1-1779698340` | same |
 | machine | `c32_m128_cpu` | `c8_m32_1 * NVIDIA 4090` |
 | cmd | `bash run.sh > log 2>&1` | same |
 

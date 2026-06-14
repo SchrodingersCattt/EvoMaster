@@ -21,3 +21,4 @@ class DrainResult:
     usage_vendor_by_turn: tuple[dict[str, Any], ...] = ()
     finish_detail: FinishDetail | None = None
     events: list[Any] = field(default_factory=list)
+    spawn_id: str | None = None
