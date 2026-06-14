@@ -412,7 +412,7 @@ class BohriumJobsTable(BaseTable):
         }
 
     def list_pending_terminal_snapshot(
-        self, *, user_id: str, org_id: str, session_id: str
+        self, *, user_id: str, org_id: str, session_id: str, workspace: str
     ) -> list[dict[str, Any]]:
         """本轮 delivery 的权威集合：全量 pending terminal 行，失败/停止优先。
 
@@ -423,6 +423,7 @@ class BohriumJobsTable(BaseTable):
             SELECT id, invocation_id, terminal_at, {self._AGENT_COLUMNS}
             FROM {self.table_name}
             WHERE user_id = %s AND org_id = %s AND session_id = %s
+              AND workspace = %s
               AND terminal_at IS NOT NULL AND handled_at IS NULL
             ORDER BY
                 (status IN ({_SQL_FAILURE})) DESC,
@@ -430,7 +431,7 @@ class BohriumJobsTable(BaseTable):
         """
         with self.get_connection() as conn:
             with conn.cursor() as cur:
-                cur.execute(sql, (user_id, org_id, session_id))
+                cur.execute(sql, (user_id, org_id, session_id, workspace))
                 rows = cur.fetchall()
         return [self._to_snapshot_job(r) for r in rows]
 
@@ -448,6 +449,7 @@ class BohriumJobsTable(BaseTable):
         user_id: str,
         org_id: str,
         session_id: str,
+        workspace: str,
         row_ids: Sequence[int],
         chunk_size: int = 500,
     ) -> int:
@@ -469,11 +471,12 @@ class BohriumJobsTable(BaseTable):
                         UPDATE {self.table_name}
                         SET handled_at = NOW()
                         WHERE user_id = %s AND org_id = %s AND session_id = %s
+                          AND workspace = %s
                           AND id IN ({placeholders})
                           AND terminal_at IS NOT NULL
                           AND handled_at IS NULL
                         """,
-                        (user_id, org_id, session_id, *chunk),
+                        (user_id, org_id, session_id, workspace, *chunk),
                     )
                     affected += cur.rowcount
             conn.commit()
@@ -485,6 +488,7 @@ class BohriumJobsTable(BaseTable):
         user_id: str,
         org_id: str,
         session_id: str,
+        workspace: str,
         job_keys: Sequence[tuple[bool, str]],
         chunk_size: int = 500,
     ) -> int:
@@ -509,11 +513,12 @@ class BohriumJobsTable(BaseTable):
                         UPDATE {self.table_name}
                         SET handled_at = NOW()
                         WHERE user_id = %s AND org_id = %s AND session_id = %s
+                          AND workspace = %s
                           AND (sandbox, job_id) IN ({placeholders})
                           AND terminal_at IS NOT NULL
                           AND handled_at IS NULL
                         """,
-                        (user_id, org_id, session_id, *flat),
+                        (user_id, org_id, session_id, workspace, *flat),
                     )
                     affected += cur.rowcount
             conn.commit()

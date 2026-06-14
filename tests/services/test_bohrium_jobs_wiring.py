@@ -220,6 +220,7 @@ def _snapshot(rows):
         user_id="u",
         org_id="o",
         session_id="s",
+        workspace="/share/project",
         rows=tuple(rows),
         detail_limit=20,
     )

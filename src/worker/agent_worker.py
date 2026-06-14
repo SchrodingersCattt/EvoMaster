@@ -414,7 +414,9 @@ def _run_worker_loop() -> None:
             acquired = True
             _current_session_id = session_id
             # run 起点固化本轮交付边界；查询失败返回 None 不阻断 run
-            delivery_snapshot = bohrium_delivery_ack.snapshot(session_id)
+            delivery_snapshot = bohrium_delivery_ack.snapshot(
+                session_id, workspace=workspace
+            )
             run_start_time = time.monotonic()
             queue_len = redis_dao.llen_agent_run_queue()
             active_count = get_worker_registry_service().count_active_runs()

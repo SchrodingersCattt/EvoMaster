@@ -360,7 +360,10 @@ def test_lost_job_enters_pending_terminal_queue(jobs_table) -> None:
         lost_after_seconds=3600,
     )
     pending = jobs_table.list_pending_terminal_snapshot(
-        user_id="user-1", org_id="org-1", session_id="sess-1"
+        user_id="user-1",
+        org_id="org-1",
+        session_id="sess-1",
+        workspace="/share/project",
     )
     assert [j["job_id"] for j in pending] == ["e7"]
     assert pending[0]["status"] == "lost"

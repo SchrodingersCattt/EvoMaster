@@ -32,6 +32,7 @@ class DeliverySnapshot:
     user_id: str
     org_id: str
     session_id: str
+    workspace: str
     rows: tuple[dict[str, Any], ...]
     detail_limit: int
     observed_terminal: set[tuple[bool, str]] = field(default_factory=set)
@@ -40,14 +41,18 @@ class DeliverySnapshot:
 def snapshot(
     session_id: str,
     *,
+    workspace: str | None,
     sessions_service: Any | None = None,
     jobs_table: Any | None = None,
 ) -> DeliverySnapshot | None:
-    """解析身份并查询全量 pending terminal rows。
+    """解析身份并查询全量 pending terminal rows，限定 session + workspace。
 
+    workspace 为空 → None（无有效 ack scope，与 identity 缺失对称）。
     身份不可解析（session 缺失 / org 未绑定 / 查库异常）→ None：既无法 ack 也
     无法渲染，未交付行下轮重投。rows 查询失败但身份正常 → 空 rows snapshot。
     """
+    if not workspace:
+        return None
     try:
         svc = sessions_service
         if svc is None:
@@ -76,18 +81,23 @@ def snapshot(
 
             table = get_bohrium_jobs_table()
         rows = table.list_pending_terminal_snapshot(
-            user_id=user_id, org_id=org_id, session_id=session_id
+            user_id=user_id,
+            org_id=org_id,
+            session_id=session_id,
+            workspace=workspace,
         )
     except Exception:  # noqa: BLE001
         logger.warning(
-            "bohrium delivery snapshot failed session_id=%s",
+            "bohrium delivery snapshot failed session_id=%s workspace=%s",
             session_id,
+            workspace,
             exc_info=True,
         )
     return DeliverySnapshot(
         user_id=user_id,
         org_id=org_id,
         session_id=session_id,
+        workspace=workspace,
         rows=tuple(rows),
         detail_limit=env_int("BOHRIUM_DELIVERY_DETAIL_LIMIT", 20),
     )
@@ -111,6 +121,7 @@ def confirm(snap: DeliverySnapshot, *, jobs_table: Any | None = None) -> int:
             user_id=snap.user_id,
             org_id=snap.org_id,
             session_id=snap.session_id,
+            workspace=snap.workspace,
             row_ids=tuple(int(j["id"]) for j in snap.rows),
         )
     if snap.observed_terminal:
@@ -118,6 +129,7 @@ def confirm(snap: DeliverySnapshot, *, jobs_table: Any | None = None) -> int:
             user_id=snap.user_id,
             org_id=snap.org_id,
             session_id=snap.session_id,
+            workspace=snap.workspace,
             job_keys=tuple(snap.observed_terminal),
         )
     return affected

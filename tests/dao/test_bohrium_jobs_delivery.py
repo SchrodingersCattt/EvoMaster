@@ -156,7 +156,10 @@ def test_snapshot_returns_full_rows_failed_first_with_fields(
     _shift_terminal_at(sessions_shadow, job_id="200", seconds_ago=600)  # 失败行最老
 
     rows = jobs_table.list_pending_terminal_snapshot(
-        user_id="u1", org_id="o1", session_id="sess-1"
+        user_id="u1",
+        org_id="o1",
+        session_id="sess-1",
+        workspace="/share/project",
     )
 
     assert len(rows) == 7
@@ -188,7 +191,10 @@ def test_mark_handled_by_ids_idempotent_and_chunked(jobs_table, sessions_shadow)
     for i in (1, 2, 3):
         _seed_job(jobs_table, job_id=str(100 + i), status="finished")
     rows = jobs_table.list_pending_terminal_snapshot(
-        user_id="u1", org_id="o1", session_id="sess-1"
+        user_id="u1",
+        org_id="o1",
+        session_id="sess-1",
+        workspace="/share/project",
     )
     ids = [r["id"] for r in rows]
 
@@ -197,26 +203,38 @@ def test_mark_handled_by_ids_idempotent_and_chunked(jobs_table, sessions_shadow)
         user_id="u1",
         org_id="o1",
         session_id="sess-1",
+        workspace="/share/project",
         row_ids=ids[:2],
         chunk_size=1,
     )
     assert affected == 2
     remaining = jobs_table.list_pending_terminal_snapshot(
-        user_id="u1", org_id="o1", session_id="sess-1"
+        user_id="u1",
+        org_id="o1",
+        session_id="sess-1",
+        workspace="/share/project",
     )
     assert [r["id"] for r in remaining] == [ids[2]]
 
     # 幂等：重复 ack 是 no-op
     assert (
         jobs_table.mark_handled_by_ids(
-            user_id="u1", org_id="o1", session_id="sess-1", row_ids=ids[:2]
+            user_id="u1",
+            org_id="o1",
+            session_id="sess-1",
+            workspace="/share/project",
+            row_ids=ids[:2],
         )
         == 0
     )
 
     # 全部 handled 后该 session 不再出现在扫描里
     jobs_table.mark_handled_by_ids(
-        user_id="u1", org_id="o1", session_id="sess-1", row_ids=ids
+        user_id="u1",
+        org_id="o1",
+        session_id="sess-1",
+        workspace="/share/project",
+        row_ids=ids,
     )
     assert jobs_table.scan_delivery_units(limit=10) == []
 
@@ -320,6 +338,7 @@ def test_mark_handled_by_job_keys_idempotent_and_session_scoped(
             user_id="u1",
             org_id="o1",
             session_id="sess-1",
+            workspace="/share/project",
             job_keys=[(True, "301")],
         )
         == 0
@@ -329,18 +348,22 @@ def test_mark_handled_by_job_keys_idempotent_and_session_scoped(
         user_id="u1",
         org_id="o1",
         session_id="sess-1",
+        workspace="/share/project",
         job_keys=[(False, "301"), (False, "302"), (False, "303")],
     )
 
     assert affected == 1
     assert (
         jobs_table.list_pending_terminal_snapshot(
-            user_id="u1", org_id="o1", session_id="sess-1"
+            user_id="u1",
+            org_id="o1",
+            session_id="sess-1",
+            workspace="/share/project",
         )
         == []
     )
     other = jobs_table.list_pending_terminal_snapshot(
-        user_id="u1", org_id="o1", session_id="sess-2"
+        user_id="u1", org_id="o1", session_id="sess-2", workspace="/share/project"
     )
     assert [r["job_id"] for r in other] == ["303"]
 
@@ -349,16 +372,99 @@ def test_mark_handled_by_job_keys_idempotent_and_session_scoped(
             user_id="u1",
             org_id="o1",
             session_id="sess-1",
+            workspace="/share/project",
             job_keys=[(False, "301")],
         )
         == 0
     )
     assert (
         jobs_table.mark_handled_by_job_keys(
-            user_id="u1", org_id="o1", session_id="sess-1", job_keys=[]
+            user_id="u1",
+            org_id="o1",
+            session_id="sess-1",
+            workspace="/share/project",
+            job_keys=[],
         )
         == 0
     )
+
+
+def test_snapshot_excludes_other_workspace(jobs_table, sessions_shadow):
+    _register_session(sessions_shadow)
+    _seed_job(jobs_table, job_id="301", status="finished")  # /share/project
+    jobs_table.insert_submitted(
+        session_id="sess-1",
+        invocation_id="inv-1",
+        spawn_id=None,
+        user_id="u1",
+        org_id="o1",
+        job_id="302",
+        job_name="name-302",
+        project_id=42,
+        sandbox=False,
+        input_dir="data/in",
+        workspace="/share/other",
+    )
+    jobs_table.apply_poll(
+        user_id="u1",
+        org_id="o1",
+        sandbox=False,
+        job_id="302",
+        status="finished",
+        is_terminal=True,
+        backoff_seconds=30,
+    )
+
+    rows = jobs_table.list_pending_terminal_snapshot(
+        user_id="u1", org_id="o1", session_id="sess-1", workspace="/share/project"
+    )
+    assert [r["job_id"] for r in rows] == ["301"]
+
+
+def test_mark_handled_by_ids_does_not_cross_workspace(jobs_table, sessions_shadow):
+    _register_session(sessions_shadow)
+    _seed_job(jobs_table, job_id="401", status="finished")  # /share/project
+    rows = jobs_table.list_pending_terminal_snapshot(
+        user_id="u1", org_id="o1", session_id="sess-1", workspace="/share/project"
+    )
+    ids = [r["id"] for r in rows]
+    # 用错 workspace ack：一行都不命中
+    affected = jobs_table.mark_handled_by_ids(
+        user_id="u1",
+        org_id="o1",
+        session_id="sess-1",
+        workspace="/share/other",
+        row_ids=ids,
+    )
+    assert affected == 0
+    still = jobs_table.list_pending_terminal_snapshot(
+        user_id="u1", org_id="o1", session_id="sess-1", workspace="/share/project"
+    )
+    assert [r["id"] for r in still] == ids
+
+
+def test_mark_handled_by_job_keys_does_not_cross_workspace(
+    jobs_table, sessions_shadow
+):
+    _register_session(sessions_shadow)
+    _seed_job(jobs_table, job_id="501", status="finished")  # /share/project
+    # 正确 workspace + 错 job_key 无效；错 workspace + 对 job_key 也无效
+    affected_wrong_ws = jobs_table.mark_handled_by_job_keys(
+        user_id="u1",
+        org_id="o1",
+        session_id="sess-1",
+        workspace="/share/other",
+        job_keys=[(False, "501")],
+    )
+    assert affected_wrong_ws == 0
+    affected_ok = jobs_table.mark_handled_by_job_keys(
+        user_id="u1",
+        org_id="o1",
+        session_id="sess-1",
+        workspace="/share/project",
+        job_keys=[(False, "501")],
+    )
+    assert affected_ok == 1
 
 
 def test_scan_exposes_unknown_count_and_pending_age(jobs_table, sessions_shadow):

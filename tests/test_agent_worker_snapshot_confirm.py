@@ -60,8 +60,9 @@ def _run_one_round(
     fake_ars.run_agent = fake_run_agent
     monkeypatch.setattr(agent_worker, "get_agent_run_service", lambda: fake_ars)
 
-    def fake_snapshot(session_id):
+    def fake_snapshot(session_id, *, workspace=None):
         calls.append("snapshot")
+        received["snapshot_workspace"] = workspace
         return snapshot_obj
 
     def fake_confirm(snap):
@@ -94,6 +95,7 @@ def test_success_path_orders_snapshot_run_confirm_release(monkeypatch):
 
     assert calls == ["acquire", "snapshot", "run_agent", "confirm", "release:True"]
     assert received["delivery_snapshot"] is snap
+    assert received["snapshot_workspace"] is None
 
 
 def test_failed_run_skips_confirm(monkeypatch):
