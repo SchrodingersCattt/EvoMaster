@@ -337,6 +337,7 @@ class AgentKernel:
             validate_tool_turn_sequence(canonical_messages)
 
             llm_response: LLMResponse | None = None
+            thought_persisted_this_turn = False
             try:
                 async for item in self._call_llm_streaming(
                     kernel_resources,
@@ -346,6 +347,13 @@ class AgentKernel:
                 ):
                     if item.llm_response is not None:
                         llm_response = item.llm_response
+                    elif (
+                        isinstance(item.event, ThoughtEvent)
+                        and item.event.stream_state == "complete"
+                    ):
+                        if not thought_persisted_this_turn:
+                            thought_persisted_this_turn = True
+                            yield item
                     elif item.event is not None:
                         yield self._with_model_identity(item, state)
             except _KernelStopRequested:
@@ -370,7 +378,7 @@ class AgentKernel:
             turn_usage_snapshot = dict(state.turn_usage)
             total_usage_snapshot = dict(state.total_usage)
             usage_vendor_snapshot = response.usage_vendor or None
-            if response.reasoning_content:
+            if not thought_persisted_this_turn and response.reasoning_content:
                 yield _KernelItem(
                     event=ThoughtEvent(
                         source="agent",
