@@ -921,3 +921,249 @@ questions:
     axis: efficiency
     verify: token_budget
     criterion: '[Must] Total tokens within 50000'
+- id: SR_crystal_li2sno3_c2c_cif_20260614
+  capability: structure_retrieval
+  domain: agnostic
+  intent: Retrieve the Li2SnO3 crystal structure, preferably C2/c, and provide CIF information if available.
+  human_prompt_seed: 帮我找一下 Li2SnO3 的晶体结构，最好是 C2/c 空间群的，返回 cif 文件。
+  tags:
+  - meta_database
+  data_files: []
+  reference_answers:
+  - key: grounding_source
+    value: {}
+  - key: turn_budget
+    value:
+      max: 6
+  - key: duration_budget
+    value:
+      max: 180000
+  - key: token_budget_total
+    value:
+      max: 9000
+  scoring_checklist:
+  - id: grounding_source
+    criterion: The answer retrieves or searches for Li2SnO3 crystal structures, prioritizes C2/c when available, and either provides CIF-access information or clearly explains availability limitations without fabricating provenance.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: no_retries
+    criterion: No repeated identical retrieval calls with the same parameters.
+    axis: efficiency
+    verify: no_retries
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Duration is within budget.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total tokens are within budget.
+    axis: efficiency
+    verify: token_budget
+- id: SR_crystal_oxide_semiconductor_bandgap_1_2ev_20260614
+  capability: structure_retrieval
+  domain: agnostic
+  intent: Retrieve oxide semiconductor structures with band gaps around 1 to 2 eV.
+  human_prompt_seed: 找几种带隙在 1 到 2 eV 左右的氧化物半导体结构。
+  tags:
+  - meta_database
+  data_files: []
+  reference_answers:
+  - key: grounding_source
+    value: {}
+  - key: turn_budget
+    value:
+      max: 6
+  - key: duration_budget
+    value:
+      max: 180000
+  - key: token_budget_total
+    value:
+      max: 9000
+  scoring_checklist:
+  - id: grounding_source
+    criterion: The answer provides oxide semiconductor structure candidates with band gaps around 1 to 2 eV and grounds structure/property claims in retrieval results or states uncertainty.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: no_retries
+    criterion: No repeated identical retrieval calls with the same parameters.
+    axis: efficiency
+    verify: no_retries
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Duration is within budget.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total tokens are within budget.
+    axis: efficiency
+    verify: token_budget
+- id: SR_crystal_zr_o_oxide_candidates_20260614
+  capability: structure_retrieval
+  domain: agnostic
+  intent: Retrieve several zirconium-oxygen oxide material structures.
+  human_prompt_seed: 帮我找含 Zr 和 O 的氧化物材料结构，返回几个候选。
+  tags:
+  - meta_database
+  data_files: []
+  reference_answers:
+  - key: grounding_source
+    value: {}
+  - key: turn_budget
+    value:
+      max: 6
+  - key: duration_budget
+    value:
+      max: 180000
+  - key: token_budget_total
+    value:
+      max: 9000
+  scoring_checklist:
+  - id: grounding_source
+    criterion: The answer returns several Zr/O oxide structure candidates and grounds formulas, sources, and structure identifiers in retrieval results.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: no_retries
+    criterion: No repeated identical retrieval calls with the same parameters.
+    axis: efficiency
+    verify: no_retries
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Duration is within budget.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total tokens are within budget.
+    axis: efficiency
+    verify: token_budget
+- id: SR_crystal_hkust1_cubtc_20260614
+  capability: structure_retrieval
+  domain: agnostic
+  intent: Retrieve the HKUST-1 or Cu-BTC crystal structure.
+  human_prompt_seed: 帮我查一下 HKUST-1 或 Cu-BTC 的结构。
+  tags:
+  - meta_database
+  data_files: []
+  reference_answers:
+  - key: grounding_source
+    value: {}
+  - key: turn_budget
+    value:
+      max: 6
+  - key: duration_budget
+    value:
+      max: 180000
+  - key: token_budget_total
+    value:
+      max: 9000
+  scoring_checklist:
+  - id: grounding_source
+    criterion: The answer recognizes HKUST-1/Cu-BTC as the target MOF and provides grounded structure information or source identifiers without confusing it with unrelated copper compounds.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: no_retries
+    criterion: No repeated identical retrieval calls with the same parameters.
+    axis: efficiency
+    verify: no_retries
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Duration is within budget.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total tokens are within budget.
+    axis: efficiency
+    verify: token_budget
+- id: SR_crystal_uio66_zr_mof_20260614
+  capability: structure_retrieval
+  domain: agnostic
+  intent: Retrieve the UiO-66 zirconium-based MOF crystal structure.
+  human_prompt_seed: 找一下 UiO-66 这种 Zr 基 MOF 的结构。
+  tags:
+  - meta_database
+  data_files: []
+  reference_answers:
+  - key: grounding_source
+    value: {}
+  - key: turn_budget
+    value:
+      max: 6
+  - key: duration_budget
+    value:
+      max: 180000
+  - key: token_budget_total
+    value:
+      max: 9000
+  scoring_checklist:
+  - id: grounding_source
+    criterion: The answer retrieves or identifies UiO-66 as a Zr-based MOF structure and provides grounded structure/source information without fabricating missing details.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: no_retries
+    criterion: No repeated identical retrieval calls with the same parameters.
+    axis: efficiency
+    verify: no_retries
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Duration is within budget.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total tokens are within budget.
+    axis: efficiency
+    verify: token_budget
+- id: SR_crystal_dihydroxylammonium_bistetrazole_diolate_20260614
+  capability: structure_retrieval
+  domain: agnostic
+  intent: Retrieve the crystal structure of dihydroxylammonium 5,5-bistetrazole-1,1-diolate.
+  human_prompt_seed: 我需要 dihydroxylammonium 5,5'-bistetrazole-1,1'-diolate 的晶体结构。
+  tags:
+  - meta_database
+  data_files: []
+  reference_answers:
+  - key: grounding_source
+    value: {}
+  - key: turn_budget
+    value:
+      max: 6
+  - key: duration_budget
+    value:
+      max: 180000
+  - key: token_budget_total
+    value:
+      max: 9000
+  scoring_checklist:
+  - id: grounding_source
+    criterion: The answer searches for the named molecular crystal structure, handles the exact chemical name carefully, and grounds any returned structure/source information without inventing identifiers.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: no_retries
+    criterion: No repeated identical retrieval calls with the same parameters.
+    axis: efficiency
+    verify: no_retries
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Duration is within budget.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total tokens are within budget.
+    axis: efficiency
+    verify: token_budget

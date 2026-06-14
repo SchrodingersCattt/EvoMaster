@@ -7,6 +7,7 @@ calculation_servers:
   - "mat_compdart"
   - "mat_doc"
   - "mat_struct_db"
+  - "mat_recommend_db"
   - "mat_nmr"
   - "mat_xrd"
   - "mat_electron_microscope"
@@ -62,6 +63,10 @@ mcp_concurrency:
       max_pending_requests: 16
     # 结构库查询更接近检索型 HTTP 路径，一期允许有限并发以验证吞吐收益。
     mat_struct_db:
+      mode: "multiplex"
+      max_inflight: 4
+      max_pending_requests: 64
+    mat_recommend_db:
       mode: "multiplex"
       max_inflight: 4
       max_pending_requests: 64
@@ -136,3 +141,9 @@ calculation_executors:
       env: {}
     sync_tools:
       - fetch_structures_from_db
+  mat_recommend_db:
+    executor:
+      type: "local"
+      env: {}
+    sync_tools:
+      - fetch_material_info_from_db

@@ -1,0 +1,503 @@
+version: v5
+capability: structure_retrieval
+domain: agnostic           # 本 bank 属于哪个材料场景；同文件内所有题必须一致
+
+questions:
+  - id: SR_recommend_20260430   # 题目 ID；建议格式：<前缀>_<主题>_<日期>
+    capability: structure_retrieval  # 必须与顶层 capability 一致
+    domain: agnostic              # 必须与顶层 domain 一致
+    intent: Recommend soluble acrylate NTD photoresist monomers and provide verified SMILES from databases.
+
+    human_prompt_seed: |-  # Direct prompt for the agent; be explicit about inputs, task, and output filename
+      Recommend acrylate-type monomers suitable for NTD photoresist formulations with relatively high solubility.
+      For each candidate include: `name`, `SMILES`, `CAS` (if available), `source_database` (where the SMILES/CAS was obtained).
+      DO NOT FABRICATE any SMILES, CAS, or identifiers. All chemistry identifiers must be retrieved from authoritative databases accessible via the system (do not invent values or guess SMILES).
+
+    tags:
+      - meta_database
+
+    data_files: []
+
+    reference_answers:  # 机器判分依据；不是给用户看的标准答案
+
+      - key: grounding_source        # 给 llm_binary_judge 使用；检查是否编造/是否有依据
+        value: {}
+
+      - key: recommendation_hit_rate
+        value:
+          filename: '*.json'
+          tokens:
+            - "四乙二醇二甲基丙烯酸酯"
+            - "C=C(C)C(OCCOCCOCCOCCOC(C(C)=C)=O)=O"
+            - "3-羟基-1-金刚烷基甲基丙烯酸酯"
+            - "C(OC12CC3CC(CC(O)(C3)C1)C2)(=O)C(C)=C"
+            - "1,6-己二醇二丙烯酸酯"
+            - "C=CC(=O)OCCCCCCOC(=O)C=C"
+            - "三羟甲基丙烯酸酯"
+            - "CCC(COC(=O)C=C)(COC(=O)C=C)COC(=O)C=C"
+            - "1-金刚烷基甲基丙烯酸酯"
+            - "C(OC12CC3CC(CC(C3)C1)C2)(=O)C(C)=C"
+            - "2-羰基-四氢呋喃-3-羟基-甲基丙烯酸酯"
+            - "C(OC1CCOC1=O)(=O)C(C)=C"
+            - "2-乙基-2-金刚烷基甲基丙烯酸酯"
+            - "C(OC1(CC)C2CC3CC1CC(C3)C2)(=O)C(C)=C"
+            - "4-羟基丁基丙烯酸酯"
+            - "C=CC(=O)OCCCCO"
+          min_ratio: 0.6
+
+      - key: turn_budget             # 最大交互轮次
+        value:
+          max: 5
+
+      - key: duration_budget         # 最大耗时；通常单位为毫秒
+        value:
+          max: 180000
+
+      - key: token_budget_total      # 最大 token 消耗
+        value:
+          max: 8000
+
+    scoring_checklist:  # 真正执行评分的清单；id 尽量与 reference_answers.key 对齐
+
+      - id: grounding_source
+        criterion: Outputs are grounded in provided inputs and do not fabricate.
+        axis: grounding              # grounding = 是否基于输入材料，不编造
+        verify: llm_binary_judge     # 语义判断；只做补充，不建议占比过高
+        weight: 1.0
+
+      - id: recommendation_hit_rate
+        criterion: "Recommendation hit rate >= 0.6 against provided reference list."
+        axis: correctness
+        verify: text_file_contains_all
+        weight: 1.0
+
+      - id: no_retries
+        criterion: No repeated identical tool calls.
+        axis: efficiency             # efficiency = 是否高效完成
+        verify: no_retries           # 检查是否重复无效调用
+
+      - id: turn_budget
+        criterion: Agent completes within turn budget.
+        axis: efficiency
+        verify: turn_budget
+
+      - id: duration_budget
+        criterion: Duration is within budget.
+        axis: efficiency
+        verify: duration_budget
+
+      - id: token_budget_total
+        criterion: Total tokens are within budget.
+        axis: efficiency
+        verify: token_budget
+
+  - id: SR_recommend_monomer_soluble_ntd_20260614
+    capability: structure_retrieval
+    domain: agnostic
+    intent: Recommend soluble acrylate or methacrylate monomers suitable for NTD photoresist systems.
+    human_prompt_seed: 推荐几种适合 NTD 光刻胶体系、溶解性较好的丙烯酸酯或甲基丙烯酸酯单体
+    tags:
+      - meta_database
+    data_files: []
+    reference_answers:
+      - key: grounding_source
+        value: {}
+      - key: turn_budget
+        value:
+          max: 6
+      - key: duration_budget
+        value:
+          max: 180000
+      - key: token_budget_total
+        value:
+          max: 9000
+    scoring_checklist:
+      - id: grounding_source
+        criterion: The answer recommends plausible acrylate or methacrylate monomer candidates for soluble NTD photoresist systems without fabricating unsupported identifiers.
+        axis: grounding
+        verify: llm_binary_judge
+      - id: no_retries
+        criterion: No repeated identical tool calls.
+        axis: efficiency
+        verify: no_retries
+      - id: turn_budget
+        criterion: Agent completes within turn budget.
+        axis: efficiency
+        verify: turn_budget
+      - id: duration_budget
+        criterion: Duration is within budget.
+        axis: efficiency
+        verify: duration_budget
+      - id: token_budget_total
+        criterion: Total tokens are within budget.
+        axis: efficiency
+        verify: token_budget
+  - id: SR_recommend_monomer_low_volatility_hydroxy_ether_20260614
+    capability: structure_retrieval
+    domain: agnostic
+    intent: Find low-volatility hydroxy- or ether-containing photoresist monomers that improve resin solubility.
+    human_prompt_seed: 找低挥发、含羟基或醚键、适合提高树脂溶解性的光刻胶单体候选
+    tags:
+      - meta_database
+    data_files: []
+    reference_answers:
+      - key: grounding_source
+        value: {}
+      - key: turn_budget
+        value:
+          max: 6
+      - key: duration_budget
+        value:
+          max: 180000
+      - key: token_budget_total
+        value:
+          max: 9000
+    scoring_checklist:
+      - id: grounding_source
+        criterion: The answer recommends low-volatility monomer candidates containing hydroxyl groups or ether bonds and explains their resin-solubility relevance without fabricating unsupported identifiers.
+        axis: grounding
+        verify: llm_binary_judge
+      - id: no_retries
+        criterion: No repeated identical tool calls.
+        axis: efficiency
+        verify: no_retries
+      - id: turn_budget
+        criterion: Agent completes within turn budget.
+        axis: efficiency
+        verify: turn_budget
+      - id: duration_budget
+        criterion: Duration is within budget.
+        axis: efficiency
+        verify: duration_budget
+      - id: token_budget_total
+        criterion: Total tokens are within budget.
+        axis: efficiency
+        verify: token_budget
+  - id: SR_recommend_monomer_fluorinated_hydrophobic_soluble_20260614
+    capability: structure_retrieval
+    domain: agnostic
+    intent: Recommend fluorinated hydrophobic photoresist monomers that still retain some formulation solubility.
+    human_prompt_seed: 推荐含氟疏水但仍需要有一定溶解性的光刻胶单体，给出候选和原因
+    tags:
+      - meta_database
+    data_files: []
+    reference_answers:
+      - key: grounding_source
+        value: {}
+      - key: turn_budget
+        value:
+          max: 6
+      - key: duration_budget
+        value:
+          max: 180000
+      - key: token_budget_total
+        value:
+          max: 9000
+    scoring_checklist:
+      - id: grounding_source
+        criterion: The answer recommends fluorinated hydrophobic monomer candidates while explaining the solubility tradeoff and avoids unsupported or non-monomer records.
+        axis: grounding
+        verify: llm_binary_judge
+      - id: no_retries
+        criterion: No repeated identical tool calls.
+        axis: efficiency
+        verify: no_retries
+      - id: turn_budget
+        criterion: Agent completes within turn budget.
+        axis: efficiency
+        verify: turn_budget
+      - id: duration_budget
+        criterion: Duration is within budget.
+        axis: efficiency
+        verify: duration_budget
+      - id: token_budget_total
+        criterion: Total tokens are within budget.
+        axis: efficiency
+        verify: token_budget
+  - id: SR_recommend_monomer_hydroxy_methacrylate_pgmea_20260614
+    capability: structure_retrieval
+    domain: agnostic
+    intent: Recommend hydroxy-containing methacrylate monomers for improving resin solubility in PGMEA.
+    human_prompt_seed: 推荐含羟基的甲基丙烯酸酯单体，用于提高树脂在 PGMEA 中的溶解性
+    tags:
+      - meta_database
+    data_files: []
+    reference_answers:
+      - key: grounding_source
+        value: {}
+      - key: turn_budget
+        value:
+          max: 6
+      - key: duration_budget
+        value:
+          max: 180000
+      - key: token_budget_total
+        value:
+          max: 9000
+    scoring_checklist:
+      - id: grounding_source
+        criterion: The answer recommends hydroxy-containing methacrylate monomers and explains PGMEA/resin-solubility relevance without fabricating unsupported identifiers.
+        axis: grounding
+        verify: llm_binary_judge
+      - id: no_retries
+        criterion: No repeated identical tool calls.
+        axis: efficiency
+        verify: no_retries
+      - id: turn_budget
+        criterion: Agent completes within turn budget.
+        axis: efficiency
+        verify: turn_budget
+      - id: duration_budget
+        criterion: Duration is within budget.
+        axis: efficiency
+        verify: duration_budget
+      - id: token_budget_total
+        criterion: Total tokens are within budget.
+        axis: efficiency
+        verify: token_budget
+  - id: SR_recommend_monomer_epoxy_crosslink_20260614
+    capability: structure_retrieval
+    domain: agnostic
+    intent: Recommend epoxy-functional acrylate or methacrylate monomers for photoresist crosslinking or post-reaction.
+    human_prompt_seed: 推荐含环氧基团的丙烯酸酯或甲基丙烯酸酯单体，要求适合光刻胶交联或后反应
+    tags:
+      - meta_database
+    data_files: []
+    reference_answers:
+      - key: grounding_source
+        value: {}
+      - key: turn_budget
+        value:
+          max: 6
+      - key: duration_budget
+        value:
+          max: 180000
+      - key: token_budget_total
+        value:
+          max: 9000
+    scoring_checklist:
+      - id: grounding_source
+        criterion: The answer recommends epoxy-functional acrylate or methacrylate monomers and connects them to crosslinking or post-reaction use without fabricating unsupported identifiers.
+        axis: grounding
+        verify: llm_binary_judge
+      - id: no_retries
+        criterion: No repeated identical tool calls.
+        axis: efficiency
+        verify: no_retries
+      - id: turn_budget
+        criterion: Agent completes within turn budget.
+        axis: efficiency
+        verify: turn_budget
+      - id: duration_budget
+        criterion: Duration is within budget.
+        axis: efficiency
+        verify: duration_budget
+      - id: token_budget_total
+        criterion: Total tokens are within budget.
+        axis: efficiency
+        verify: token_budget
+  - id: SR_recommend_monomer_alicyclic_methacrylate_etch_20260614
+    capability: structure_retrieval
+    domain: agnostic
+    intent: Recommend alicyclic methacrylate monomers for NTD photoresist etch resistance while preserving solubility.
+    human_prompt_seed: 推荐脂环族甲基丙烯酸酯单体，用于提高 NTD 光刻胶抗刻蚀性，同时保持一定溶解性
+    tags:
+      - meta_database
+    data_files: []
+    reference_answers:
+      - key: grounding_source
+        value: {}
+      - key: turn_budget
+        value:
+          max: 6
+      - key: duration_budget
+        value:
+          max: 180000
+      - key: token_budget_total
+        value:
+          max: 9000
+    scoring_checklist:
+      - id: grounding_source
+        criterion: The answer recommends alicyclic methacrylate monomers and explains the etch-resistance versus solubility tradeoff without fabricating unsupported identifiers.
+        axis: grounding
+        verify: llm_binary_judge
+      - id: no_retries
+        criterion: No repeated identical tool calls.
+        axis: efficiency
+        verify: no_retries
+      - id: turn_budget
+        criterion: Agent completes within turn budget.
+        axis: efficiency
+        verify: turn_budget
+      - id: duration_budget
+        criterion: Duration is within budget.
+        axis: efficiency
+        verify: duration_budget
+      - id: token_budget_total
+        criterion: Total tokens are within budget.
+        axis: efficiency
+        verify: token_budget
+  - id: SR_recommend_monomer_exclude_nonmonomers_20260614
+    capability: structure_retrieval
+    domain: agnostic
+    intent: Recommend photoresist monomers while explicitly excluding polymers, dispersants, inorganics, and unknown records.
+    human_prompt_seed: 推荐光刻胶单体，但不要返回聚合物、分散剂、无机物或 unknown 记录
+    tags:
+      - meta_database
+    data_files: []
+    reference_answers:
+      - key: grounding_source
+        value: {}
+      - key: turn_budget
+        value:
+          max: 6
+      - key: duration_budget
+        value:
+          max: 180000
+      - key: token_budget_total
+        value:
+          max: 9000
+    scoring_checklist:
+      - id: grounding_source
+        criterion: The answer recommends photoresist monomers and excludes polymers, dispersants, inorganics, and unknown records rather than treating them as candidates.
+        axis: grounding
+        verify: llm_binary_judge
+      - id: no_retries
+        criterion: No repeated identical tool calls.
+        axis: efficiency
+        verify: no_retries
+      - id: turn_budget
+        criterion: Agent completes within turn budget.
+        axis: efficiency
+        verify: turn_budget
+      - id: duration_budget
+        criterion: Duration is within budget.
+        axis: efficiency
+        verify: duration_budget
+      - id: token_budget_total
+        criterion: Total tokens are within budget.
+        axis: efficiency
+        verify: token_budget
+  - id: SR_recommend_monomer_methacrylate_ntd_20260614
+    capability: structure_retrieval
+    domain: agnostic
+    intent: Recommend methacrylate monomers suitable for NTD photoresist formulations.
+    human_prompt_seed: 推荐适合 NTD 光刻胶的甲基丙烯酸酯单体
+    tags:
+      - meta_database
+    data_files: []
+    reference_answers:
+      - key: grounding_source
+        value: {}
+      - key: turn_budget
+        value:
+          max: 6
+      - key: duration_budget
+        value:
+          max: 180000
+      - key: token_budget_total
+        value:
+          max: 9000
+    scoring_checklist:
+      - id: grounding_source
+        criterion: The answer recommends methacrylate monomers suitable for NTD photoresist formulation discussion without fabricating unsupported identifiers.
+        axis: grounding
+        verify: llm_binary_judge
+      - id: no_retries
+        criterion: No repeated identical tool calls.
+        axis: efficiency
+        verify: no_retries
+      - id: turn_budget
+        criterion: Agent completes within turn budget.
+        axis: efficiency
+        verify: turn_budget
+      - id: duration_budget
+        criterion: Duration is within budget.
+        axis: efficiency
+        verify: duration_budget
+      - id: token_budget_total
+        criterion: Total tokens are within budget.
+        axis: efficiency
+        verify: token_budget
+  - id: SR_recommend_monomer_impossible_fluoro_hydrophobic_water_soluble_20260614
+    capability: structure_retrieval
+    domain: agnostic
+    intent: Test honest handling of the contradictory request for a completely hydrophobic yet highly water-soluble fluorinated acrylate monomer.
+    human_prompt_seed: 找一种既完全疏水又高度水溶的含氟丙烯酸酯单体
+    tags:
+      - meta_database
+    data_files: []
+    reference_answers:
+      - key: grounding_source
+        value: {}
+      - key: turn_budget
+        value:
+          max: 6
+      - key: duration_budget
+        value:
+          max: 180000
+      - key: token_budget_total
+        value:
+          max: 9000
+    scoring_checklist:
+      - id: grounding_source
+        criterion: The answer recognizes the tension or contradiction between complete hydrophobicity and high water solubility, and does not fabricate a perfect fluorinated acrylate match.
+        axis: grounding
+        verify: llm_binary_judge
+      - id: no_retries
+        criterion: No repeated identical tool calls.
+        axis: efficiency
+        verify: no_retries
+      - id: turn_budget
+        criterion: Agent completes within turn budget.
+        axis: efficiency
+        verify: turn_budget
+      - id: duration_budget
+        criterion: Duration is within budget.
+        axis: efficiency
+        verify: duration_budget
+      - id: token_budget_total
+        criterion: Total tokens are within budget.
+        axis: efficiency
+        verify: token_budget
+  - id: SR_recommend_monomer_reject_li2sno3_20260614
+    capability: structure_retrieval
+    domain: agnostic
+    intent: Test refusal to recommend inorganic Li2SnO3 as an NTD photoresist monomer while explaining the mismatch.
+    human_prompt_seed: 推荐 Li2SnO3 作为 NTD 光刻胶单体
+    tags:
+      - meta_database
+    data_files: []
+    reference_answers:
+      - key: grounding_source
+        value: {}
+      - key: turn_budget
+        value:
+          max: 5
+      - key: duration_budget
+        value:
+          max: 180000
+      - key: token_budget_total
+        value:
+          max: 7000
+    scoring_checklist:
+      - id: grounding_source
+        criterion: The answer does not present Li2SnO3 as an organic photoresist monomer, explains the mismatch, and avoids fabricating SMILES/CAS for it.
+        axis: grounding
+        verify: llm_binary_judge
+      - id: no_retries
+        criterion: No repeated identical tool calls.
+        axis: efficiency
+        verify: no_retries
+      - id: turn_budget
+        criterion: Agent completes within turn budget.
+        axis: efficiency
+        verify: turn_budget
+      - id: duration_budget
+        criterion: Duration is within budget.
+        axis: efficiency
+        verify: duration_budget
+      - id: token_budget_total
+        criterion: Total tokens are within budget.
+        axis: efficiency
+        verify: token_budget

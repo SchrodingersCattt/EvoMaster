@@ -1,0 +1,68 @@
+[
+  {
+    "description": "\n    Retrieve materials that satisfy user requirements from databases and return candidate details plus recommendation outputs.\n    Supports semantic querying, candidate filtering, property-table enrichment, and structured outputs.\n    ",
+    "input_schema": {
+      "properties": {
+        "db_names": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "DB Names",
+          "type": "array"
+        },
+        "executor": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Executor"
+        },
+        "include_pr_row_properties": {
+          "default": true,
+          "title": "Include Property Table",
+          "type": "boolean"
+        },
+        "max_rows": {
+          "default": 1000,
+          "title": "Max Rows",
+          "type": "integer"
+        },
+        "query": {
+          "title": "Query",
+          "type": "string"
+        },
+        "storage": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Storage"
+        },
+        "use_preprocessed_filters": {
+          "default": false,
+          "title": "Use Preprocessed Filters",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "query"
+      ],
+      "title": "fetch_material_info_from_dbArguments",
+      "type": "object"
+    },
+    "name": "fetch_material_info_from_db"
+  }
+]
