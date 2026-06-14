@@ -5,8 +5,19 @@ questions:
 - id: IG_dpgen_hof_energetic_param_001_20260614
   capability: input_generation
   domain: agnostic
-  intent: Prepare DP-GEN param and machine inputs plus an init-dataset plan for an anonymized organic-framework energetic-molecule DeePMD potential workflow.
-  human_prompt_seed: "我想用 DP-GEN 给一个有机框架@含能分子体系构造 DeePMD 势函数，温度 300–4000 K、压强 0–120 GPa，exploration 用 LAMMPS、FP 用 CP2K，没定的文件位置可用 `/path/to/...` 占位；请先准备 `param.json`、`machine.json` 和 `init_dataset_plan.md`。"
+  intent: Prepare DP-GEN param and machine inputs plus an init-dataset plan for an anonymized organic-framework energetic-molecule
+    DeePMD potential workflow.
+  human_prompt_seed: '我想用 DP-GEN 给一个有机框架@含能分子体系构造 DeePMD 势函数，温度 300–4000 K、压强 0–120 GPa，exploration 用 LAMMPS、FP 用 CP2K，没定的文件位置可用
+    `/path/to/...` 占位；请先准备 `param.json`、`machine.json` 和 `init_dataset_plan.md`。
+
+
+    输入文件：
+
+    - `param.template.json`: `https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/IG_dpgen_hof_energetic_param_001_20260614/param.template.json`
+
+    - `machine.template.json`: `https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/IG_dpgen_hof_energetic_param_001_20260614/machine.template.json`
+
+    - `project_note.md`: `https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/IG_dpgen_hof_energetic_param_001_20260614/project_note.md`'
   tags:
   - code_mlip
   - eng_lammps
@@ -14,15 +25,15 @@ questions:
   data_files:
   - key: param_template
     path: data/IG_dpgen_hof_energetic_param_001_20260614/param.template.json
-    oss_url: ''
+    oss_url: https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/IG_dpgen_hof_energetic_param_001_20260614/param.template.json
     description: Canonical DP-GEN param template copied from _tmp/params.eval.json.
   - key: machine_template
     path: data/IG_dpgen_hof_energetic_param_001_20260614/machine.template.json
-    oss_url: ''
+    oss_url: https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/IG_dpgen_hof_energetic_param_001_20260614/machine.template.json
     description: Canonical DP-GEN machine template copied from _tmp/machine.eval.json.
   - key: project_note
     path: data/IG_dpgen_hof_energetic_param_001_20260614/project_note.md
-    oss_url: ''
+    oss_url: https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/IG_dpgen_hof_energetic_param_001_20260614/project_note.md
     description: Anonymized target workflow note.
   reference_answers:
   - key: param_artifact
@@ -77,7 +88,8 @@ questions:
       pattern: path/to|/path/to|placeholder|占位|not\s+found|missing.*path|non.?blocking|advisory|needs.?replace
       flags: is
   - key: no_real_submit
-    value: Agent prepares DP-GEN input files and an init dataset plan, but does not run DP-GEN, CP2K, LAMMPS, SSH, or Bohrium submission.
+    value: Agent prepares DP-GEN input files and an init dataset plan, but does not run DP-GEN, CP2K, LAMMPS, SSH, or Bohrium
+      submission.
   - key: turn_budget
     value:
       max: 16
@@ -107,7 +119,8 @@ questions:
     axis: correctness
     verify: text_file_contains_all
   - id: validation_report_schema
-    criterion: validation_report.json is valid JSON with command, file, diagnostic, expected path-warning, and blocking-finding fields.
+    criterion: validation_report.json is valid JSON with command, file, diagnostic, expected path-warning, and blocking-finding
+      fields.
     axis: grounding
     verify: json_file_schema
   - id: path_placeholders_reported
@@ -125,8 +138,18 @@ questions:
 - id: IG_dpgen_hof_energetic_review_002_20260614
   capability: input_generation
   domain: agnostic
-  intent: Review a prefilled DP-GEN input package for an anonymized organic-framework energetic-molecule training workflow and produce missing pre-run checklist items.
-  human_prompt_seed: "这份 DP-GEN 输入是给有机框架@含能分子体系训练 DeePMD 势函数用的，请帮我检查并补齐准备试跑前缺的清单，输出 `input_review.json` 和 `init_dataset_plan.md`。"
+  intent: Review a prefilled DP-GEN input package for an anonymized organic-framework energetic-molecule training workflow
+    and produce missing pre-run checklist items.
+  human_prompt_seed: '这份 DP-GEN 输入是给有机框架@含能分子体系训练 DeePMD 势函数用的，请帮我检查并补齐准备试跑前缺的清单，输出 `input_review.json` 和 `init_dataset_plan.md`。
+
+
+    输入文件：
+
+    - `param.json`: `https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/IG_dpgen_hof_energetic_review_002_20260614/param.json`
+
+    - `machine.json`: `https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/IG_dpgen_hof_energetic_review_002_20260614/machine.json`
+
+    - `project_note.md`: `https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/IG_dpgen_hof_energetic_review_002_20260614/project_note.md`'
   tags:
   - code_mlip
   - eng_lammps
@@ -134,15 +157,15 @@ questions:
   data_files:
   - key: param_json
     path: data/IG_dpgen_hof_energetic_review_002_20260614/param.json
-    oss_url: ''
+    oss_url: https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/IG_dpgen_hof_energetic_review_002_20260614/param.json
     description: Prefilled DP-GEN param fixture.
   - key: machine_json
     path: data/IG_dpgen_hof_energetic_review_002_20260614/machine.json
-    oss_url: ''
+    oss_url: https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/IG_dpgen_hof_energetic_review_002_20260614/machine.json
     description: Prefilled DP-GEN machine fixture.
   - key: project_note
     path: data/IG_dpgen_hof_energetic_review_002_20260614/project_note.md
-    oss_url: ''
+    oss_url: https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/IG_dpgen_hof_energetic_review_002_20260614/project_note.md
     description: Anonymized project note.
   reference_answers:
   - key: review_schema
@@ -172,13 +195,15 @@ questions:
       - label
       flags: i
   - key: no_dataset_fabrication
-    value: The init dataset plan lists required dataset classes and metadata without inventing actual existing file paths or labels beyond placeholders.
+    value: The init dataset plan lists required dataset classes and metadata without inventing actual existing file paths
+      or labels beyond placeholders.
   - key: turn_budget
     value:
       max: 14
   scoring_checklist:
   - id: review_schema
-    criterion: input_review.json is valid JSON with files_checked, diagnostics, missing_items, expected path warnings, and decision.
+    criterion: input_review.json is valid JSON with files_checked, diagnostics, missing_items, expected path warnings, and
+      decision.
     axis: correctness
     verify: json_file_schema
   - id: init_plan_artifact
@@ -205,21 +230,30 @@ questions:
   capability: input_generation
   domain: agnostic
   intent: Repair a DP-GEN param file that cannot be read before submission, preserving the original scientific settings.
-  human_prompt_seed: "我提交 DP-GEN 前检查时报参数文件读不进去，请帮我修好并给出 `param.fixed.json` 和 `repair_notes.md`。"
+  human_prompt_seed: '我提交 DP-GEN 前检查时报参数文件读不进去，请帮我修好并给出 `param.fixed.json` 和 `repair_notes.md`。
+
+
+    输入文件：
+
+    - `param.json`: `https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/IG_dpgen_fix_submit_error_param_003_20260614/param.json`
+
+    - `machine.json`: `https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/IG_dpgen_fix_submit_error_param_003_20260614/machine.json`
+
+    - `dpgen_error.log`: `https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/IG_dpgen_fix_submit_error_param_003_20260614/dpgen_error.log`'
   tags:
   - code_mlip
   data_files:
   - key: param_json
     path: data/IG_dpgen_fix_submit_error_param_003_20260614/param.json
-    oss_url: ''
+    oss_url: https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/IG_dpgen_fix_submit_error_param_003_20260614/param.json
     description: DP-GEN param file with a controlled JSON syntax error.
   - key: machine_json
     path: data/IG_dpgen_fix_submit_error_param_003_20260614/machine.json
-    oss_url: ''
+    oss_url: https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/IG_dpgen_fix_submit_error_param_003_20260614/machine.json
     description: Valid DP-GEN machine fixture.
   - key: error_log
     path: data/IG_dpgen_fix_submit_error_param_003_20260614/dpgen_error.log
-    oss_url: ''
+    oss_url: https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/IG_dpgen_fix_submit_error_param_003_20260614/dpgen_error.log
     description: User-visible DP-GEN precheck error excerpt.
   reference_answers:
   - key: fixed_param_artifact
@@ -292,21 +326,30 @@ questions:
   capability: input_generation
   domain: agnostic
   intent: Repair a DP-GEN machine file that fails JSON parsing at startup, without changing scheduler/resource semantics unnecessarily.
-  human_prompt_seed: "DP-GEN 一启动就报机器配置文件格式不对，请帮我修好并输出 `machine.fixed.json` 和 `repair_notes.md`。"
+  human_prompt_seed: 'DP-GEN 一启动就报机器配置文件格式不对，请帮我修好并输出 `machine.fixed.json` 和 `repair_notes.md`。
+
+
+    输入文件：
+
+    - `param.json`: `https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/IG_dpgen_fix_submit_error_machine_004_20260614/param.json`
+
+    - `machine.json`: `https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/IG_dpgen_fix_submit_error_machine_004_20260614/machine.json`
+
+    - `dpgen_error.log`: `https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/IG_dpgen_fix_submit_error_machine_004_20260614/dpgen_error.log`'
   tags:
   - code_mlip
   data_files:
   - key: param_json
     path: data/IG_dpgen_fix_submit_error_machine_004_20260614/param.json
-    oss_url: ''
+    oss_url: https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/IG_dpgen_fix_submit_error_machine_004_20260614/param.json
     description: Valid DP-GEN param fixture.
   - key: machine_json
     path: data/IG_dpgen_fix_submit_error_machine_004_20260614/machine.json
-    oss_url: ''
+    oss_url: https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/IG_dpgen_fix_submit_error_machine_004_20260614/machine.json
     description: DP-GEN machine file with a controlled JSON syntax error.
   - key: error_log
     path: data/IG_dpgen_fix_submit_error_machine_004_20260614/dpgen_error.log
-    oss_url: ''
+    oss_url: https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/IG_dpgen_fix_submit_error_machine_004_20260614/dpgen_error.log
     description: User-visible DP-GEN startup error excerpt.
   reference_answers:
   - key: fixed_machine_artifact
@@ -353,7 +396,8 @@ questions:
     axis: correctness
     verify: text_file_regex
   - id: preserves_machine_sections
-    criterion: machine.fixed.json preserves train, model_devi, FP, resource, and machine sections rather than replacing the file with an unrelated template.
+    criterion: machine.fixed.json preserves train, model_devi, FP, resource, and machine sections rather than replacing the
+      file with an unrelated template.
     axis: grounding
     verify: text_file_regex
   - id: turn_budget
@@ -364,21 +408,30 @@ questions:
   capability: input_generation
   domain: agnostic
   intent: Explain a DP-GEN validation error and propose a minimal patch plan for schema/semantic configuration issues.
-  human_prompt_seed: "这个 DP-GEN 报错我看不懂，帮我解释原因并给一个最小修改方案，输出 `error_explanation.md` 和 `patch_plan.json`。"
+  human_prompt_seed: '这个 DP-GEN 报错我看不懂，帮我解释原因并给一个最小修改方案，输出 `error_explanation.md` 和 `patch_plan.json`。
+
+
+    输入文件：
+
+    - `param.json`: `https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/IG_dpgen_error_explain_and_patch_005_20260614/param.json`
+
+    - `machine.json`: `https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/IG_dpgen_error_explain_and_patch_005_20260614/machine.json`
+
+    - `dpgen_error.log`: `https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/IG_dpgen_error_explain_and_patch_005_20260614/dpgen_error.log`'
   tags:
   - code_mlip
   data_files:
   - key: param_json
     path: data/IG_dpgen_error_explain_and_patch_005_20260614/param.json
-    oss_url: ''
+    oss_url: https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/IG_dpgen_error_explain_and_patch_005_20260614/param.json
     description: DP-GEN param file with a controlled schema/semantic mutation.
   - key: machine_json
     path: data/IG_dpgen_error_explain_and_patch_005_20260614/machine.json
-    oss_url: ''
+    oss_url: https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/IG_dpgen_error_explain_and_patch_005_20260614/machine.json
     description: DP-GEN machine file with a controlled schema/semantic mutation.
   - key: error_log
     path: data/IG_dpgen_error_explain_and_patch_005_20260614/dpgen_error.log
-    oss_url: ''
+    oss_url: https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/IG_dpgen_error_explain_and_patch_005_20260614/dpgen_error.log
     description: Realistic user-visible DP-GEN validation error excerpt.
   reference_answers:
   - key: explanation_artifact
@@ -413,7 +466,8 @@ questions:
     axis: correctness
     verify: artifact_exists
   - id: patch_schema
-    criterion: patch_plan.json is valid JSON with root cause, minimal changes, files, expected path warning, and validation next-step fields.
+    criterion: patch_plan.json is valid JSON with root cause, minimal changes, files, expected path warning, and validation
+      next-step fields.
     axis: correctness
     verify: json_file_schema
   - id: explanation_mentions_types
@@ -436,17 +490,24 @@ questions:
   capability: input_generation
   domain: agnostic
   intent: Summarize DP-GEN configuration issues when JSON opens successfully but settings may be unreasonable or incomplete.
-  human_prompt_seed: "这套 DP-GEN 配置能正常打开但我不确定设置是否合理，请帮我列出需要人工确认或修改的配置项，输出 `semantic_diagnostics.json` 和 `fix_plan.md`。"
+  human_prompt_seed: '这套 DP-GEN 配置能正常打开但我不确定设置是否合理，请帮我列出需要人工确认或修改的配置项，输出 `semantic_diagnostics.json` 和 `fix_plan.md`。
+
+
+    输入文件：
+
+    - `param.json`: `https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/IG_dpgen_config_issue_summary_006_20260614/param.json`
+
+    - `machine.json`: `https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/IG_dpgen_config_issue_summary_006_20260614/machine.json`'
   tags:
   - code_mlip
   data_files:
   - key: param_json
     path: data/IG_dpgen_config_issue_summary_006_20260614/param.json
-    oss_url: ''
+    oss_url: https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/IG_dpgen_config_issue_summary_006_20260614/param.json
     description: DP-GEN param file with controlled semantic-risk mutations but valid JSON syntax.
   - key: machine_json
     path: data/IG_dpgen_config_issue_summary_006_20260614/machine.json
-    oss_url: ''
+    oss_url: https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/IG_dpgen_config_issue_summary_006_20260614/machine.json
     description: DP-GEN machine file with controlled semantic-risk mutations but valid JSON syntax.
   reference_answers:
   - key: diagnostics_schema
@@ -471,13 +532,15 @@ questions:
       pattern: 人工|确认|review|manual|trust|fp|路径|path
       flags: is
   - key: syntax_not_confused
-    value: The agent recognizes the provided JSON is readable and focuses on schema/semantic/manual-review issues rather than falsely claiming JSON syntax is broken.
+    value: The agent recognizes the provided JSON is readable and focuses on schema/semantic/manual-review issues rather than
+      falsely claiming JSON syntax is broken.
   - key: turn_budget
     value:
       max: 14
   scoring_checklist:
   - id: diagnostics_schema
-    criterion: semantic_diagnostics.json is valid JSON with syntax status, issue list, expected path warnings, and blocking findings.
+    criterion: semantic_diagnostics.json is valid JSON with syntax status, issue list, expected path warnings, and blocking
+      findings.
     axis: correctness
     verify: json_file_schema
   - id: fix_plan_artifact

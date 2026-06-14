@@ -5,18 +5,27 @@ questions:
 - id: WO_dpgen_ready_check_001_20260614
   capability: workflow_orchestration
   domain: agnostic
-  intent: Check DP-GEN param/machine launch readiness from user-provided JSON files while treating placeholder paths as expected non-blocking preflight warnings.
-  human_prompt_seed: "我准备把这套 DP-GEN 配置交给同事试跑，没定下来的文件路径可以先用 `/path/to/...` 占位；请检查有没有会阻塞启动的问题，并输出 `dpgen_readiness_gate.md` 和 `validation_report.json`。"
+  intent: Check DP-GEN param/machine launch readiness from user-provided JSON files while treating placeholder paths as expected
+    non-blocking preflight warnings.
+  human_prompt_seed: '我准备把这套 DP-GEN 配置交给同事试跑，没定下来的文件路径可以先用 `/path/to/...` 占位；请检查有没有会阻塞启动的问题，并输出 `dpgen_readiness_gate.md`
+    和 `validation_report.json`。
+
+
+    输入文件：
+
+    - `param.json`: `https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/WO_dpgen_ready_check_001_20260614/param.json`
+
+    - `machine.json`: `https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/WO_dpgen_ready_check_001_20260614/machine.json`'
   tags:
   - code_mlip
   data_files:
   - key: param_json
     path: data/WO_dpgen_ready_check_001_20260614/param.json
-    oss_url: ''
+    oss_url: https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/WO_dpgen_ready_check_001_20260614/param.json
     description: DP-GEN param fixture copied from _tmp/params.eval.json with placeholder paths.
   - key: machine_json
     path: data/WO_dpgen_ready_check_001_20260614/machine.json
-    oss_url: ''
+    oss_url: https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/WO_dpgen_ready_check_001_20260614/machine.json
     description: DP-GEN machine fixture copied from _tmp/machine.eval.json with placeholder paths.
   reference_answers:
   - key: readiness_artifact
@@ -57,7 +66,8 @@ questions:
     axis: correctness
     verify: artifact_exists
   - id: validation_schema
-    criterion: validation_report.json is valid JSON and includes command, file, diagnostics, expected path-warning, and blocking-finding fields.
+    criterion: validation_report.json is valid JSON and includes command, file, diagnostics, expected path-warning, and blocking-finding
+      fields.
     axis: correctness
     verify: json_file_schema
   - id: validation_mentions_checker
@@ -65,7 +75,8 @@ questions:
     axis: correctness
     verify: text_file_regex
   - id: path_warning_classified
-    criterion: validation_report.json includes expected placeholder path diagnostics and classifies them as non-blocking/advisory or needing replacement.
+    criterion: validation_report.json includes expected placeholder path diagnostics and classifies them as non-blocking/advisory
+      or needing replacement.
     axis: correctness
     verify: text_file_regex
   - id: readiness_mentions_placeholders
@@ -83,18 +94,27 @@ questions:
 - id: WO_dpgen_preflight_decision_002_20260614
   capability: workflow_orchestration
   domain: agnostic
-  intent: Produce a DP-GEN preflight readiness decision from placeholder-path param/machine files, without treating expected missing paths as blocking syntax errors.
-  human_prompt_seed: "请帮我做一次 DP-GEN 配置预检查，路径还没定的地方用 `/path/to/...` 占位，最后用 `readiness_decision.json` 给出 `ready`、`blocked` 或 `needs_review` 结论并附一句原因。"
+  intent: Produce a DP-GEN preflight readiness decision from placeholder-path param/machine files, without treating expected
+    missing paths as blocking syntax errors.
+  human_prompt_seed: '请帮我做一次 DP-GEN 配置预检查，路径还没定的地方用 `/path/to/...` 占位，最后用 `readiness_decision.json` 给出 `ready`、`blocked` 或
+    `needs_review` 结论并附一句原因。
+
+
+    输入文件：
+
+    - `param.json`: `https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/WO_dpgen_preflight_decision_002_20260614/param.json`
+
+    - `machine.json`: `https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/WO_dpgen_preflight_decision_002_20260614/machine.json`'
   tags:
   - code_mlip
   data_files:
   - key: param_json
     path: data/WO_dpgen_preflight_decision_002_20260614/param.json
-    oss_url: ''
+    oss_url: https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/WO_dpgen_preflight_decision_002_20260614/param.json
     description: DP-GEN param fixture with placeholder paths.
   - key: machine_json
     path: data/WO_dpgen_preflight_decision_002_20260614/machine.json
-    oss_url: ''
+    oss_url: https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/WO_dpgen_preflight_decision_002_20260614/machine.json
     description: DP-GEN machine fixture with placeholder paths.
   reference_answers:
   - key: decision_schema
@@ -123,13 +143,15 @@ questions:
       pattern: path/to|/path/to|placeholder|占位|non.?blocking|advisory|needs.?replace|待替换
       flags: is
   - key: validation_gate_judge
-    value: Agent should base the readiness decision on a DP-GEN JSON validation pass or mark validation incomplete when the checker is unavailable.
+    value: Agent should base the readiness decision on a DP-GEN JSON validation pass or mark validation incomplete when the
+      checker is unavailable.
   - key: turn_budget
     value:
       max: 12
   scoring_checklist:
   - id: decision_schema
-    criterion: readiness_decision.json is valid JSON with decision, reason, files_checked, diagnostics, and expected_path_warnings_ignored fields.
+    criterion: readiness_decision.json is valid JSON with decision, reason, files_checked, diagnostics, and expected_path_warnings_ignored
+      fields.
     axis: correctness
     verify: json_file_schema
   - id: decision_value
@@ -145,7 +167,8 @@ questions:
     axis: grounding
     verify: text_file_regex
   - id: validation_gate_judge
-    criterion: The agent does not declare readiness without first validating both DP-GEN JSON files or explicitly marking validation incomplete.
+    criterion: The agent does not declare readiness without first validating both DP-GEN JSON files or explicitly marking
+      validation incomplete.
     axis: grounding
     verify: llm_binary_judge
   - id: turn_budget
@@ -155,26 +178,38 @@ questions:
 - id: WO_dpgen_choose_candidate_pair_003_20260614
   capability: workflow_orchestration
   domain: agnostic
-  intent: Compare two DP-GEN configuration candidate pairs and reject the syntax-broken pair while allowing placeholder path warnings on the clean pair.
-  human_prompt_seed: "这里有两套 DP-GEN 配置候选，请帮我选出更适合继续整理成试跑包的一套，并输出 `candidate_matrix.json` 和 `selection_rationale.md`。"
+  intent: Compare two DP-GEN configuration candidate pairs and reject the syntax-broken pair while allowing placeholder path
+    warnings on the clean pair.
+  human_prompt_seed: '这里有两套 DP-GEN 配置候选，请帮我选出更适合继续整理成试跑包的一套，并输出 `candidate_matrix.json` 和 `selection_rationale.md`。
+
+
+    输入文件：
+
+    - `candidate_a_param.json`: `https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/WO_dpgen_choose_candidate_pair_003_20260614/candidate_a_param.json`
+
+    - `candidate_a_machine.json`: `https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/WO_dpgen_choose_candidate_pair_003_20260614/candidate_a_machine.json`
+
+    - `candidate_b_param.json`: `https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/WO_dpgen_choose_candidate_pair_003_20260614/candidate_b_param.json`
+
+    - `candidate_b_machine.json`: `https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/WO_dpgen_choose_candidate_pair_003_20260614/candidate_b_machine.json`'
   tags:
   - code_mlip
   data_files:
   - key: candidate_a_param
     path: data/WO_dpgen_choose_candidate_pair_003_20260614/candidate_a_param.json
-    oss_url: ''
+    oss_url: https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/WO_dpgen_choose_candidate_pair_003_20260614/candidate_a_param.json
     description: Candidate A param file copied from the canonical fixture.
   - key: candidate_a_machine
     path: data/WO_dpgen_choose_candidate_pair_003_20260614/candidate_a_machine.json
-    oss_url: ''
+    oss_url: https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/WO_dpgen_choose_candidate_pair_003_20260614/candidate_a_machine.json
     description: Candidate A machine file copied from the canonical fixture.
   - key: candidate_b_param
     path: data/WO_dpgen_choose_candidate_pair_003_20260614/candidate_b_param.json
-    oss_url: ''
+    oss_url: https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/WO_dpgen_choose_candidate_pair_003_20260614/candidate_b_param.json
     description: Candidate B param file with a controlled JSON syntax mutation.
   - key: candidate_b_machine
     path: data/WO_dpgen_choose_candidate_pair_003_20260614/candidate_b_machine.json
-    oss_url: ''
+    oss_url: https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/WO_dpgen_choose_candidate_pair_003_20260614/candidate_b_machine.json
     description: Candidate B machine file copied from the canonical fixture.
   reference_answers:
   - key: matrix_schema
@@ -235,25 +270,36 @@ questions:
   capability: workflow_orchestration
   domain: agnostic
   intent: Validate two DP-GEN iteration configuration directories and block only the iteration with malformed JSON.
-  human_prompt_seed: "请检查这两个迭代目录里的 DP-GEN 配置，告诉我哪些目录可以继续、哪些需要先修，并输出 `iteration_validation_matrix.json`。"
+  human_prompt_seed: '请检查这两个迭代目录里的 DP-GEN 配置，告诉我哪些目录可以继续、哪些需要先修，并输出 `iteration_validation_matrix.json`。
+
+
+    输入文件：
+
+    - `iter000_param.json`: `https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/WO_dpgen_iter_configs_gate_004_20260614/iter000_param.json`
+
+    - `iter000_machine.json`: `https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/WO_dpgen_iter_configs_gate_004_20260614/iter000_machine.json`
+
+    - `iter001_param.json`: `https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/WO_dpgen_iter_configs_gate_004_20260614/iter001_param.json`
+
+    - `iter001_machine.json`: `https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/WO_dpgen_iter_configs_gate_004_20260614/iter001_machine.json`'
   tags:
   - code_mlip
   data_files:
   - key: iter000_param
     path: data/WO_dpgen_iter_configs_gate_004_20260614/iter000_param.json
-    oss_url: ''
+    oss_url: https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/WO_dpgen_iter_configs_gate_004_20260614/iter000_param.json
     description: Iteration 000 param file.
   - key: iter000_machine
     path: data/WO_dpgen_iter_configs_gate_004_20260614/iter000_machine.json
-    oss_url: ''
+    oss_url: https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/WO_dpgen_iter_configs_gate_004_20260614/iter000_machine.json
     description: Iteration 000 machine file.
   - key: iter001_param
     path: data/WO_dpgen_iter_configs_gate_004_20260614/iter001_param.json
-    oss_url: ''
+    oss_url: https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/WO_dpgen_iter_configs_gate_004_20260614/iter001_param.json
     description: Iteration 001 param file.
   - key: iter001_machine
     path: data/WO_dpgen_iter_configs_gate_004_20260614/iter001_machine.json
-    oss_url: ''
+    oss_url: https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/WO_dpgen_iter_configs_gate_004_20260614/iter001_machine.json
     description: Iteration 001 machine file with malformed JSON.
   reference_answers:
   - key: matrix_schema
@@ -281,7 +327,8 @@ questions:
       max: 14
   scoring_checklist:
   - id: matrix_schema
-    criterion: iteration_validation_matrix.json is valid JSON with iteration, blocked-iteration, diagnostics, and expected path-warning fields.
+    criterion: iteration_validation_matrix.json is valid JSON with iteration, blocked-iteration, diagnostics, and expected
+      path-warning fields.
     axis: correctness
     verify: json_file_schema
   - id: blocks_iter001
