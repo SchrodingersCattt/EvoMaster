@@ -3,23 +3,18 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 
-from matmaster.context.ports import SessionJobs
+from matmaster.context.ports import WorkspaceJobs
 from matmaster.context.sections import ALL_VIEWS, ContextSection, SectionOrder
 
 
 @dataclass(frozen=True)
-class SessionJobsSource:
-    """Renderer for active jobs.
-
-    The JSON-line shape is intentionally temporary; the Bohrium job ledger may
-    later define stable fields and replace this renderer without treating the
-    current string format as a product contract.
-    """
+class WorkspaceJobsSource:
+    """Renderer for the workspace job view."""
 
     lines: tuple[str, ...] = ()
 
     @classmethod
-    def from_jobs(cls, jobs: SessionJobs) -> SessionJobsSource:
+    def from_jobs(cls, jobs: WorkspaceJobs) -> WorkspaceJobsSource:
         active = cls._render_group(
             "active_job", "active_overflow", jobs.active_jobs, jobs.detail_limit
         )
@@ -29,7 +24,17 @@ class SessionJobsSource:
             jobs.pending_terminal_jobs,
             jobs.detail_limit,
         )
-        return cls(lines=active + pending)
+        recent = cls._render_group(
+            "recent_terminal_job",
+            "recent_terminal_overflow",
+            jobs.recent_terminal_jobs,
+            jobs.detail_limit,
+        )
+        body = active + pending + recent
+        if not body:
+            return cls(lines=())
+        header = (f"workspace {jobs.workspace}",) if jobs.workspace else ()
+        return cls(lines=header + body)
 
     @staticmethod
     def _render_group(
@@ -38,10 +43,7 @@ class SessionJobsSource:
         items: tuple,
         limit: int | None,
     ) -> tuple[str, ...]:
-        """前 limit 条完整详情，其余压成一行溢出摘要；全量 job_id 始终可见。
-
-        limit 为 None（无 delivery snapshot 的回退路径）时全量逐行，与历史行为一致。
-        """
+        """前 limit 条完整详情，其余压成一行溢出摘要；全量 job_id 始终可见。"""
         if limit is None or len(items) <= limit:
             shown, rest = items, ()
         else:
@@ -73,10 +75,10 @@ class SessionJobsSource:
             return ()
         return (
             ContextSection(
-                key="session_jobs",
-                tag="session_jobs",
+                key="workspace_jobs",
+                tag="workspace_jobs",
                 content="\n".join(self.lines),
-                order=SectionOrder.SESSION_JOBS,
+                order=SectionOrder.WORKSPACE_JOBS,
                 views=ALL_VIEWS,
             ),
         )

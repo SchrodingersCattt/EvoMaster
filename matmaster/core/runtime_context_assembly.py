@@ -21,10 +21,10 @@ from matmaster.context.ports import (
     ActiveSkill,
     ContextAssemblyPorts,
     SessionEvent,
-    SessionJobs,
-    SessionJobsQuery,
     SkillResolver,
     UserInstructions,
+    WorkspaceJobs,
+    WorkspaceJobsQuery,
 )
 from matmaster.context.session import SessionContextBuilder
 from matmaster.core.run_context import AgentRunContext
@@ -72,9 +72,9 @@ def build_session_context_factory(
     return factory
 
 
-class _EmptySessionJobsPort:
-    async def load_session_jobs(self, query: SessionJobsQuery) -> SessionJobs:
-        return SessionJobs.empty()
+class _EmptyWorkspaceJobsPort:
+    async def load_workspace_jobs(self, query: WorkspaceJobsQuery) -> WorkspaceJobs:
+        return WorkspaceJobs.empty()
 
 
 def build_runtime_context_assembly(
@@ -97,7 +97,7 @@ def build_runtime_context_assembly(
     user_instructions = ctx.request.user_instructions or UserInstructions.empty()
     assembly_ports = ContextAssemblyPorts(
         session_events=history_port,
-        session_jobs=ctx.request.ports.session_jobs or _EmptySessionJobsPort(),
+        workspace_jobs=ctx.request.ports.workspace_jobs or _EmptyWorkspaceJobsPort(),
     )
     context_assembler = ContextAssembler(
         ports=assembly_ports,

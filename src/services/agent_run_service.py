@@ -573,7 +573,7 @@ class AgentRunService:
                             session_id=session_id,
                         ),
                         bohrium_job_ledger=bohrium_ledger_port,
-                        session_jobs=bohrium_jobs_port,
+                        workspace_jobs=bohrium_jobs_port,
                     ),
                 ),
             )

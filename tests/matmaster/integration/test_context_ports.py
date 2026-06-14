@@ -3,8 +3,8 @@ from __future__ import annotations
 from matmaster.context.ports import (
     SessionEvent,
     SessionEventQuery,
-    SessionJobs,
-    SessionJobsQuery,
+    WorkspaceJobs,
+    WorkspaceJobsQuery,
 )
 from src.services.session_event_codec import decode_session_events
 
@@ -28,9 +28,9 @@ class TableSessionEventsPort:
         return decode_session_events(rows)
 
 
-class EmptySessionJobsPort:
-    async def load_session_jobs(
+class EmptyWorkspaceJobsPort:
+    async def load_workspace_jobs(
         self,
-        query: SessionJobsQuery,
-    ) -> SessionJobs:
-        return SessionJobs.empty()
+        query: WorkspaceJobsQuery,
+    ) -> WorkspaceJobs:
+        return WorkspaceJobs.empty()

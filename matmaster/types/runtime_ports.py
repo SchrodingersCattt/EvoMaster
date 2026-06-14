@@ -15,7 +15,7 @@ from matmaster.context.ports import (
     BohriumJobLedgerPort,
     SessionEvent,
     SessionEventQuery,
-    SessionJobsPort,
+    WorkspaceJobsPort,
 )
 from matmaster.types.events import BusEvent
 from matmaster.types.figures import FigureUploadConfig
@@ -179,7 +179,7 @@ class AgentRunPorts:
     interrupt_checker: InterruptChecker | None = None
     user_turn_context_writer: UserTurnContextWriter | None = None
     bohrium_job_ledger: BohriumJobLedgerPort | None = None
-    session_jobs: SessionJobsPort | None = None
+    workspace_jobs: WorkspaceJobsPort | None = None
 
 
 @dataclass(frozen=True)

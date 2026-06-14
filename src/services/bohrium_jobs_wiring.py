@@ -8,7 +8,7 @@ from collections.abc import Callable
 from typing import Any
 
 from matmaster.bohrium.status import to_ledger_status
-from matmaster.context.ports import SessionJobs, SessionJobsQuery
+from matmaster.context.ports import WorkspaceJobs, WorkspaceJobsQuery
 from src.dao.bohrium_jobs_table import BohriumJobsTable, get_bohrium_jobs_table
 from src.services.bohrium_delivery_ack import DeliverySnapshot
 from src.services.session_directory_service import (
@@ -152,9 +152,9 @@ class _RunSessionJobsPort:
         self._org_id = org_id
         self._snapshot = snapshot
 
-    async def load_session_jobs(self, query: SessionJobsQuery) -> SessionJobs:
+    async def load_workspace_jobs(self, query: WorkspaceJobsQuery) -> WorkspaceJobs:
         if not (self._user_id and self._org_id):
-            return SessionJobs.empty()
+            return WorkspaceJobs.empty()
         try:
             table = self._table_ref.get()
             active = await asyncio.to_thread(
@@ -171,12 +171,12 @@ class _RunSessionJobsPort:
                 detail_limit = None
         except Exception:  # noqa: BLE001
             logger.warning(
-                "load_session_jobs failed session_id=%s",
+                "load_workspace_jobs failed session_id=%s",
                 query.session_id,
                 exc_info=True,
             )
-            return SessionJobs.empty()
-        return SessionJobs(
+            return WorkspaceJobs.empty()
+        return WorkspaceJobs(
             active_jobs=tuple(active),
             pending_terminal_jobs=tuple(pending),
             detail_limit=detail_limit,

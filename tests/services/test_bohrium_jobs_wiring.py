@@ -152,9 +152,9 @@ async def test_jobs_port_without_snapshot_renders_empty_pending() -> None:
         workspace=None,
         table=table,
     )
-    from matmaster.context.ports import SessionJobsQuery
+    from matmaster.context.ports import WorkspaceJobsQuery
 
-    result = await jobs_port.load_session_jobs(SessionJobsQuery(session_id="s"))
+    result = await jobs_port.load_workspace_jobs(WorkspaceJobsQuery(session_id="s"))
     assert result.active_jobs == ({"job_id": "a"},)
     assert result.pending_terminal_jobs == ()
     assert result.detail_limit is None
@@ -243,9 +243,9 @@ async def test_jobs_port_serves_pending_from_snapshot_with_detail_limit() -> Non
         table=table,
         delivery_snapshot=_snapshot(snap_rows),
     )
-    from matmaster.context.ports import SessionJobsQuery
+    from matmaster.context.ports import WorkspaceJobsQuery
 
-    result = await jobs_port.load_session_jobs(SessionJobsQuery(session_id="s"))
+    result = await jobs_port.load_workspace_jobs(WorkspaceJobsQuery(session_id="s"))
 
     # pending 据 snapshot.rows（失败优先序原样），不再裸查 limit=5 定交付集合
     assert result.pending_terminal_jobs == tuple(snap_rows)
