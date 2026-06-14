@@ -26,11 +26,6 @@ logger = logging.getLogger(__name__)
 
 _RESERVATION_KEY_PREFIX = "bohrium_delivery:"
 
-_DELIVERY_SCOPE_SUFFIX = (
-    "本轮交付为 session 级：context 中全部 pending_terminal 详情行与"
-    "溢出 job_ids 均在本次确认范围内，请一并查看处理。"
-)
-
 
 class Reason(enum.IntEnum):
     """唤醒原因；数值即优先级，session 合并时取最高。"""
@@ -86,42 +81,14 @@ def decide(unit: dict[str, Any], cfg: SchedulerConfig) -> Reason | None:
     return None
 
 
-def render_prompt(
-    reason: Reason,
-    counts: dict[str, int],
-    first_failed: dict[str, Any] | None = None,
-) -> str:
-    """渲染唤醒 prompt；counts 为 session 级合计（tick 时刻聚合，run 实际执行时
-    可能已漂移——context 行才是权威，文案不做绝对化承诺）。"""
-    if reason is Reason.FINAL:
-        body = (
-            "触发批次的全部 Bohrium 作业已结束："
-            f"成功 {counts['succeeded']}/{counts['total']}，"
-            f"失败 {counts['failed_total']}。请汇总结果并给出下一步。"
-        )
-    elif reason is Reason.FIRST_FAILURE:
-        info = first_failed or {}
-        job_id = info.get("job_id") or "unknown"
-        job_name = info.get("job_name") or "-"
-        status = info.get("status") or "failed"
-        body = (
-            f"Bohrium 作业 {job_id}（{job_name}）首次失败（{status}），"
-            f"另有 {counts['active']} 个作业仍在运行。"
-        )
-    elif reason is Reason.STALLED:
-        terminal = counts["total"] - counts["active"]
-        body = (
-            f"本会话有 {terminal}/{counts['total']} 个 Bohrium 作业已结束、"
-            f"结果待处理；另有 {counts['unknown']} 个作业状态长时间无法查询"
-            "（可能已被平台清理或接口持续异常）。请处理已有结果并检查这些作业。"
-        )
-    else:
-        terminal = counts["total"] - counts["active"]
-        body = (
-            f"本会话又有 Bohrium 作业完成（已终态 {terminal}/{counts['total']}，"
-            f"仍在运行 {counts['active']}）。请汇报进度。"
-        )
-    return body + _DELIVERY_SCOPE_SUFFIX
+def render_prompt(reason: Reason) -> str:
+    """渲染唤醒原因头；具体 job 清单与处理指令由 delivery context 承载。"""
+    return {
+        Reason.FINAL: "本会话的 Bohrium 作业批次已全部到达终态。",
+        Reason.PROGRESS: "本会话又有 Bohrium 作业到达终态、结果待处理，仍有作业在运行。",
+        Reason.FIRST_FAILURE: "本会话出现失败的 Bohrium 作业，仍有作业在运行。",
+        Reason.STALLED: "本会话有 Bohrium 作业结果待处理，另有作业长时间无法查询状态。",
+    }[reason]
 
 
 class BohriumCompletionScheduler:
@@ -289,24 +256,8 @@ class BohriumCompletionScheduler:
             summary["skipped_busy"] += 1
             return
 
-        primary_reason, primary_unit = max(eligible, key=lambda e: e[0])
-        counts = {
-            "total": sum(u["total"] for u in session_units),
-            "active": sum(u["active"] for u in session_units),
-            "succeeded": sum(u["succeeded"] for u in session_units),
-            "failed_total": sum(u["failed_total"] for u in session_units),
-            "unknown": sum(u["unknown_count"] for u in session_units),
-        }
-        first_failed = None
-        if primary_reason is Reason.FIRST_FAILURE:
-            first_failed = self._jobs_table.get_first_pending_failed(
-                user_id=user_id,
-                org_id=org_id,
-                session_id=session_id,
-                workspace=workspace,
-                invocation_key=primary_unit["invocation_key"],
-            )
-        prompt = render_prompt(primary_reason, counts, first_failed)
+        primary_reason, _ = max(eligible, key=lambda e: e[0])
+        prompt = render_prompt(primary_reason)
         # 不传 dedup_key：占位已由 NX 接管。多 invocation 不同 workspace 合并时
         # 只取 primary 的（已知限制，作业级信息仍在 context 行内可见）。
         res = self._stream_service.trigger_run(

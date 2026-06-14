@@ -172,19 +172,13 @@ class _FakeJobsTable:
     """只实现 scheduler 用到的两个读方法；任何写方法被调用都会 AttributeError，
     这本身就是「enqueued 后不写任何持久状态」的守护。"""
 
-    def __init__(self, units=(), first_failed=None):
+    def __init__(self, units=()):
         self.units = list(units)
-        self.first_failed = first_failed
         self.scan_limits: list[int] = []
-        self.first_failed_calls: list[dict] = []
 
     def scan_delivery_units(self, *, limit):
         self.scan_limits.append(limit)
         return list(self.units)
-
-    def get_first_pending_failed(self, **kw):
-        self.first_failed_calls.append(kw)
-        return self.first_failed
 
 
 class _FakeSessions:
@@ -315,25 +309,17 @@ def test_tick_separates_workspaces_into_distinct_reservations():
     ]
 
 
-def test_tick_first_failure_fetches_scoped_job_info():
+def test_tick_first_failure_triggers_reason_header():
     units = [_unit(total=3, active=2, pending_terminal=1, failed_total=1, succeeded=0)]
-    table = _FakeJobsTable(
-        units, first_failed={"job_id": "j-9", "job_name": "dft", "status": "failed"}
-    )
+    table = _FakeJobsTable(units)
     sched, _, _, _, stream = _scheduler(units, table=table)
 
     sched.tick()
 
-    assert table.first_failed_calls == [
-        {
-            "user_id": "u1",
-            "org_id": "o1",
-            "session_id": "s1",
-            "workspace": "/share/p",
-            "invocation_key": "inv-1",
-        }
-    ]
     assert stream.calls[0]["delivery"] == DeliverySpec(notify=False)
+    assert stream.calls[0]["prompt"] == (
+        "本会话出现失败的 Bohrium 作业，仍有作业在运行。"
+    )
 
 
 def test_tick_stalled_unit_triggers_without_notify():
@@ -366,12 +352,11 @@ def test_tick_null_invocation_sentinel_unit_flows_through():
             succeeded=0,
         )
     ]
-    table = _FakeJobsTable(units, first_failed=None)
+    table = _FakeJobsTable(units)
     sched, _, _, _, stream = _scheduler(units, table=table)
 
     sched.tick()
 
-    assert table.first_failed_calls[0]["invocation_key"] == ""
     assert len(stream.calls) == 1
 
 
