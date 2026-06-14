@@ -48,8 +48,9 @@ class ThoughtEvent(TurnUsageCarrierEvent):
 
     Streaming and non-streaming are unified; use ``stream_state`` to
     distinguish: 'start' | 'streaming' | 'segment_end' | 'end' | 'complete' | None.
-    'complete' is the accepted-turn reasoning audit event and may carry usage;
-    all other states are ephemeral streaming/segment markers without usage.
+    'complete' is the persisted reasoning snapshot (plain text, no usage);
+    accepted-turn usage lives on sibling response / tool_call / assistant_state
+    events. All other states are ephemeral streaming markers.
     """
 
     type: Literal["thought"] = "thought"

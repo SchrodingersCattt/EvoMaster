@@ -377,10 +377,6 @@ class AgentKernel:
                         content=response.reasoning_content,
                         stream_state="complete",
                         reasoning_content=response.reasoning_content,
-                        turn_index=turn_index,
-                        turn_usage=turn_usage_snapshot,
-                        total_usage=total_usage_snapshot,
-                        usage_vendor=usage_vendor_snapshot,
                     )
                 )
             is_root_run = kernel_spec.run_identity.spawn_id is None
