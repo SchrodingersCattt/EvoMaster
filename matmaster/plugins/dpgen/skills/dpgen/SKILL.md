@@ -20,6 +20,15 @@ Use this skill for:
 
 Do not use this skill for one-off inference with an existing pretrained potential. For pretrained DPA/MACE/SevenNet/MatterSim optimization, MD, phonon, elastic, adsorption, or NEB calculations, use `mlips` instead.
 
+## Reference templates
+
+When the user asks for a new DP-GEN input package or a missing-field repair, use the official DP-GEN examples as the primary structural reference before inventing fields:
+
+- `param.json` templates: <https://github.com/deepmodeling/dpgen/tree/master/examples/run>
+- `machine.json` templates for DeePMD-kit 2.x: <https://github.com/deepmodeling/dpgen/tree/master/examples/machine/DeePMD-kit-2.x>
+
+Adapt these templates to the user's chemistry, exploration engine, FP engine, scheduler, and available paths. Do not copy example resource values, paths, credentials, or DFT settings as if they were valid for the user's system.
+
 ## Mandatory JSON validation gate
 
 Before declaring DP-GEN inputs ready, always validate both `param.json` and `machine.json` with the DP-GEN LSP CLI if it is available:
