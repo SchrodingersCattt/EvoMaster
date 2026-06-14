@@ -36,11 +36,11 @@ def _make_ctx(*, sandbox: bool = True) -> BohriumContext:
 
 
 def test_create_job_sandbox(monkeypatch: pytest.MonkeyPatch) -> None:
-    calls: list[tuple[str, dict]] = []
+    calls: list[tuple[str, dict, bool]] = []
 
-    def fake_post(base_url, path, access_key, payload, *, timeout=30):
+    def fake_post(base_url, path, access_key, payload, *, timeout=30, log_curl=False):
         del base_url, access_key, timeout
-        calls.append((path, payload))
+        calls.append((path, payload, log_curl))
         return {"code": 0, "data": {"jobId": "job-1"}}
 
     monkeypatch.setattr("matmaster.bohrium.client._post", fake_post)
@@ -48,16 +48,16 @@ def test_create_job_sandbox(monkeypatch: pytest.MonkeyPatch) -> None:
     create_job(_make_ctx(sandbox=True), job_name="demo")
 
     assert calls == [
-        ("/openapi/v1/sandbox/job/create", {"projectId": 42, "name": "demo"})
+        ("/openapi/v1/sandbox/job/create", {"projectId": 42, "name": "demo"}, True)
     ]
 
 
 def test_create_job_non_sandbox(monkeypatch: pytest.MonkeyPatch) -> None:
-    calls: list[tuple[str, dict]] = []
+    calls: list[tuple[str, dict, bool]] = []
 
-    def fake_post(base_url, path, access_key, payload, *, timeout=30):
+    def fake_post(base_url, path, access_key, payload, *, timeout=30, log_curl=False):
         del base_url, access_key, timeout
-        calls.append((path, payload))
+        calls.append((path, payload, log_curl))
         return {"code": 0, "data": {"jobId": "job-1"}}
 
     monkeypatch.setattr("matmaster.bohrium.client._post", fake_post)
@@ -65,6 +65,7 @@ def test_create_job_non_sandbox(monkeypatch: pytest.MonkeyPatch) -> None:
     create_job(_make_ctx(sandbox=False), job_name="demo")
 
     assert calls[0][0] == "/openapi/v1/job/create"
+    assert calls[0][2] is True
 
 
 def test_get_job_detail_sandbox(monkeypatch: pytest.MonkeyPatch) -> None:
