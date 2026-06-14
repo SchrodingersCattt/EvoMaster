@@ -96,27 +96,29 @@ class SessionEventsPort(Protocol):
 
 
 @dataclass(frozen=True)
-class SessionJobs:
+class WorkspaceJobs:
+    workspace: str | None = None
     active_jobs: tuple[JsonObject, ...] = ()
     pending_terminal_jobs: tuple[JsonObject, ...] = ()
+    recent_terminal_jobs: tuple[JsonObject, ...] = ()
     detail_limit: int | None = None
 
     @classmethod
-    def empty(cls) -> SessionJobs:
-        return cls(active_jobs=(), pending_terminal_jobs=())
+    def empty(cls) -> WorkspaceJobs:
+        return cls()
 
 
 @dataclass(frozen=True)
-class SessionJobsQuery:
+class WorkspaceJobsQuery:
     session_id: str
 
 
 @runtime_checkable
-class SessionJobsPort(Protocol):
-    async def load_session_jobs(
+class WorkspaceJobsPort(Protocol):
+    async def load_workspace_jobs(
         self,
-        query: SessionJobsQuery,
-    ) -> SessionJobs:
+        query: WorkspaceJobsQuery,
+    ) -> WorkspaceJobs:
         raise NotImplementedError
 
 
@@ -151,4 +153,4 @@ class BohriumJobLedgerPort(Protocol):
 @dataclass(frozen=True)
 class ContextAssemblyPorts:
     session_events: SessionEventsPort
-    session_jobs: SessionJobsPort | None = None
+    workspace_jobs: WorkspaceJobsPort | None = None

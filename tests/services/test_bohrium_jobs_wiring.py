@@ -140,24 +140,84 @@ def test_record_poll_normalizes_status_code() -> None:
 
 
 @pytest.mark.asyncio
-async def test_jobs_port_without_snapshot_renders_empty_pending() -> None:
-    # 渲染统一为冻结语义：无 snapshot（身份降级）→ pending 恒空，active 仍实时。
+async def test_delivery_mode_serves_active_and_pending_from_snapshot() -> None:
+    from matmaster.context.ports import WorkspaceJobsQuery
+
     table = MagicMock()
     table.query_session_active.return_value = [{"job_id": "a"}]
+    snap = _snapshot([{"id": 1, "job_id": "t"}])
+    _, jobs_port = build_bohrium_jobs_ports(
+        session_id="s",
+        invocation_id="inv",
+        user_id="u",
+        org_id="o",
+        workspace="/share/project",
+        job_context_mode="session_workspace_delivery",
+        delivery_snapshot=snap,
+        table=table,
+    )
+
+    result = await jobs_port.load_workspace_jobs(WorkspaceJobsQuery(session_id="s"))
+    assert result.workspace == "/share/project"
+    assert result.active_jobs == ({"job_id": "a"},)
+    assert result.pending_terminal_jobs == ({"id": 1, "job_id": "t"},)
+    assert result.recent_terminal_jobs == ()
+    assert table.query_session_active.call_args.kwargs == {
+        "user_id": "u",
+        "org_id": "o",
+        "session_id": "s",
+        "workspace": "/share/project",
+    }
+
+
+@pytest.mark.asyncio
+async def test_observation_mode_reads_three_groups_cross_session() -> None:
+    from matmaster.context.ports import WorkspaceJobsQuery
+
+    table = MagicMock()
+    table.query_workspace_active.return_value = [{"job_id": "a"}]
+    table.query_workspace_pending_terminal.return_value = [{"job_id": "p"}]
+    table.query_workspace_recent_terminal.return_value = [{"job_id": "r"}]
+    _, jobs_port = build_bohrium_jobs_ports(
+        session_id="s",
+        invocation_id="inv",
+        user_id="u",
+        org_id="o",
+        workspace="/share/project",
+        job_context_mode="workspace_observation",
+        table=table,
+    )
+
+    result = await jobs_port.load_workspace_jobs(WorkspaceJobsQuery(session_id="s"))
+    assert result.workspace == "/share/project"
+    assert result.active_jobs == ({"job_id": "a"},)
+    assert result.pending_terminal_jobs == ({"job_id": "p"},)
+    assert result.recent_terminal_jobs == ({"job_id": "r"},)
+    assert table.query_workspace_active.call_args.kwargs == {
+        "user_id": "u",
+        "org_id": "o",
+        "workspace": "/share/project",
+    }
+
+
+@pytest.mark.asyncio
+async def test_observation_mode_empty_when_workspace_missing() -> None:
+    from matmaster.context.ports import WorkspaceJobs, WorkspaceJobsQuery
+
+    table = MagicMock()
     _, jobs_port = build_bohrium_jobs_ports(
         session_id="s",
         invocation_id="inv",
         user_id="u",
         org_id="o",
         workspace=None,
+        job_context_mode="workspace_observation",
         table=table,
     )
-    from matmaster.context.ports import SessionJobsQuery
 
-    result = await jobs_port.load_session_jobs(SessionJobsQuery(session_id="s"))
-    assert result.active_jobs == ({"job_id": "a"},)
-    assert result.pending_terminal_jobs == ()
-    assert result.detail_limit is None
+    result = await jobs_port.load_workspace_jobs(WorkspaceJobsQuery(session_id="s"))
+    assert result == WorkspaceJobs.empty()
+    table.query_workspace_active.assert_not_called()
 
 
 def test_ports_do_not_construct_table_until_identity_allows_use() -> None:
@@ -220,13 +280,14 @@ def _snapshot(rows):
         user_id="u",
         org_id="o",
         session_id="s",
+        workspace="/share/project",
         rows=tuple(rows),
         detail_limit=20,
     )
 
 
 @pytest.mark.asyncio
-async def test_jobs_port_serves_pending_from_snapshot_with_detail_limit() -> None:
+async def test_delivery_mode_uses_snapshot_detail_limit() -> None:
     table = MagicMock()
     table.query_session_active.return_value = [{"job_id": "a"}]
     snap_rows = [
@@ -238,13 +299,14 @@ async def test_jobs_port_serves_pending_from_snapshot_with_detail_limit() -> Non
         invocation_id="inv",
         user_id="u",
         org_id="o",
-        workspace=None,
+        workspace="/share/project",
+        job_context_mode="session_workspace_delivery",
         table=table,
         delivery_snapshot=_snapshot(snap_rows),
     )
-    from matmaster.context.ports import SessionJobsQuery
+    from matmaster.context.ports import WorkspaceJobsQuery
 
-    result = await jobs_port.load_session_jobs(SessionJobsQuery(session_id="s"))
+    result = await jobs_port.load_workspace_jobs(WorkspaceJobsQuery(session_id="s"))
 
     # pending 据 snapshot.rows（失败优先序原样），不再裸查 limit=5 定交付集合
     assert result.pending_terminal_jobs == tuple(snap_rows)

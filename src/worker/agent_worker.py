@@ -352,6 +352,12 @@ def _run_worker_loop() -> None:
             raw_workspace.strip() or None if isinstance(raw_workspace, str) else None
         )
         delivery = payload.get('delivery')
+        origin = (payload.get('origin') or '').strip() or None
+        job_context_mode = (
+            'session_workspace_delivery'
+            if origin == 'bohrium_completion'
+            else 'workspace_observation'
+        )
 
         if not session_id:
             logger.warning('Agent worker: skip job with empty session_id')
@@ -414,7 +420,9 @@ def _run_worker_loop() -> None:
             acquired = True
             _current_session_id = session_id
             # run 起点固化本轮交付边界；查询失败返回 None 不阻断 run
-            delivery_snapshot = bohrium_delivery_ack.snapshot(session_id)
+            delivery_snapshot = bohrium_delivery_ack.snapshot(
+                session_id, workspace=workspace
+            )
             run_start_time = time.monotonic()
             queue_len = redis_dao.llen_agent_run_queue()
             active_count = get_worker_registry_service().count_active_runs()
@@ -459,6 +467,7 @@ def _run_worker_loop() -> None:
                     "workspace": workspace,
                     "bohrium_required": bohrium_required,
                     "delivery_snapshot": delivery_snapshot,
+                    "job_context_mode": job_context_mode,
                 }
                 result = asyncio.run(agent_run_service.run_agent(**run_agent_kwargs))
                 run_result = result

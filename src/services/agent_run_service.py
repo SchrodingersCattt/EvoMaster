@@ -265,6 +265,7 @@ class AgentRunService:
         bohrium_required: bool = False,
         workspace: str | None = None,
         delivery_snapshot: DeliverySnapshot | None = None,
+        job_context_mode: str = "workspace_observation",
         cancel_controller: CancellationController | None = None,
     ) -> tuple[bool | tuple[bool, str], int, dict[str, Any] | None]:
         """Execute agent pipeline using generator event stream with fanout dispatch.
@@ -545,6 +546,7 @@ class AgentRunService:
                 user_id=_ledger_user_id,
                 org_id=_ledger_org_id,
                 workspace=stage_result.workspace,
+                job_context_mode=job_context_mode,
                 delivery_snapshot=delivery_snapshot,
             )
             agent_run_ctx = AgentRunContext(
@@ -573,7 +575,7 @@ class AgentRunService:
                             session_id=session_id,
                         ),
                         bohrium_job_ledger=bohrium_ledger_port,
-                        session_jobs=bohrium_jobs_port,
+                        workspace_jobs=bohrium_jobs_port,
                     ),
                 ),
             )

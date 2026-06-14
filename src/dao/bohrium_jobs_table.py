@@ -199,17 +199,65 @@ class BohriumJobsTable(BaseTable):
         }
 
     def query_session_active(
-        self, *, user_id: str, org_id: str, session_id: str
+        self, *, user_id: str, org_id: str, session_id: str, workspace: str
     ) -> list[dict[str, Any]]:
         sql = f"""
             SELECT {self._AGENT_COLUMNS} FROM {self.table_name}
             WHERE user_id = %s AND org_id = %s AND session_id = %s
+              AND workspace = %s
               AND status IN ({_SQL_ACTIVE})
             ORDER BY submitted_at ASC
         """
         with self.get_connection() as conn:
             with conn.cursor() as cur:
-                cur.execute(sql, (user_id, org_id, session_id))
+                cur.execute(sql, (user_id, org_id, session_id, workspace))
+                return [self._to_agent_job(r) for r in cur.fetchall()]
+
+    def query_workspace_active(
+        self, *, user_id: str, org_id: str, workspace: str
+    ) -> list[dict[str, Any]]:
+        """workspace 观察视图：跨 session 的活跃作业。"""
+        sql = f"""
+            SELECT {self._AGENT_COLUMNS} FROM {self.table_name}
+            WHERE user_id = %s AND org_id = %s AND workspace = %s
+              AND status IN ({_SQL_ACTIVE})
+            ORDER BY submitted_at ASC
+        """
+        with self.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(sql, (user_id, org_id, workspace))
+                return [self._to_agent_job(r) for r in cur.fetchall()]
+
+    def query_workspace_pending_terminal(
+        self, *, user_id: str, org_id: str, workspace: str, limit: int
+    ) -> list[dict[str, Any]]:
+        """workspace 观察视图：跨 session 的未交付终态作业（非 ack 范围）。"""
+        sql = f"""
+            SELECT {self._AGENT_COLUMNS} FROM {self.table_name}
+            WHERE user_id = %s AND org_id = %s AND workspace = %s
+              AND terminal_at IS NOT NULL AND handled_at IS NULL
+            ORDER BY terminal_at ASC, submitted_at ASC
+            LIMIT %s
+        """
+        with self.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(sql, (user_id, org_id, workspace, int(limit)))
+                return [self._to_agent_job(r) for r in cur.fetchall()]
+
+    def query_workspace_recent_terminal(
+        self, *, user_id: str, org_id: str, workspace: str, limit: int
+    ) -> list[dict[str, Any]]:
+        """workspace 观察视图：跨 session 的最近终态作业（不论 handled）。"""
+        sql = f"""
+            SELECT {self._AGENT_COLUMNS} FROM {self.table_name}
+            WHERE user_id = %s AND org_id = %s AND workspace = %s
+              AND terminal_at IS NOT NULL
+            ORDER BY terminal_at DESC, id DESC
+            LIMIT %s
+        """
+        with self.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(sql, (user_id, org_id, workspace, int(limit)))
                 return [self._to_agent_job(r) for r in cur.fetchall()]
 
     def _select_due_for_update(self, conn, *, limit: int) -> list[dict[str, Any]]:
@@ -340,7 +388,7 @@ class BohriumJobsTable(BaseTable):
                 t.org_id,
                 t.session_id,
                 COALESCE(t.invocation_id, '')                        AS invocation_key,
-                MIN(t.workspace)                                     AS workspace,
+                t.workspace                                          AS workspace,
                 COUNT(*)                                             AS total,
                 SUM(t.terminal_at IS NULL)                           AS active,
                 SUM(t.terminal_at IS NOT NULL
@@ -362,7 +410,7 @@ class BohriumJobsTable(BaseTable):
                          THEN t.terminal_at END)                     AS first_pending_terminal_at
             FROM {self.table_name} t
             JOIN (
-                SELECT DISTINCT user_id, org_id, session_id,
+                SELECT DISTINCT user_id, org_id, session_id, workspace,
                        COALESCE(invocation_id, '') AS invocation_key
                 FROM {self.table_name}
                 WHERE terminal_at IS NOT NULL AND handled_at IS NULL
@@ -370,6 +418,7 @@ class BohriumJobsTable(BaseTable):
               ON pending.user_id        = t.user_id
              AND pending.org_id         = t.org_id
              AND pending.session_id     = t.session_id
+             AND pending.workspace      = t.workspace
              AND pending.invocation_key = COALESCE(t.invocation_id, '')
             WHERE EXISTS (
                 SELECT 1 FROM evo_chat_sessions s
@@ -377,10 +426,11 @@ class BohriumJobsTable(BaseTable):
                   AND s.user_id    = t.user_id
                   AND s.org_id     = t.org_id
             )
-            GROUP BY t.user_id, t.org_id, t.session_id, COALESCE(t.invocation_id, '')
+            GROUP BY t.user_id, t.org_id, t.session_id, t.workspace,
+                     COALESCE(t.invocation_id, '')
             HAVING pending_terminal > 0
             ORDER BY first_pending_terminal_at ASC, t.user_id ASC, t.org_id ASC,
-                     t.session_id ASC, invocation_key ASC
+                     t.session_id ASC, t.workspace ASC, invocation_key ASC
             LIMIT %s
         """
         with self.get_connection() as conn:
@@ -412,7 +462,7 @@ class BohriumJobsTable(BaseTable):
         }
 
     def list_pending_terminal_snapshot(
-        self, *, user_id: str, org_id: str, session_id: str
+        self, *, user_id: str, org_id: str, session_id: str, workspace: str
     ) -> list[dict[str, Any]]:
         """本轮 delivery 的权威集合：全量 pending terminal 行，失败/停止优先。
 
@@ -423,6 +473,7 @@ class BohriumJobsTable(BaseTable):
             SELECT id, invocation_id, terminal_at, {self._AGENT_COLUMNS}
             FROM {self.table_name}
             WHERE user_id = %s AND org_id = %s AND session_id = %s
+              AND workspace = %s
               AND terminal_at IS NOT NULL AND handled_at IS NULL
             ORDER BY
                 (status IN ({_SQL_FAILURE})) DESC,
@@ -430,7 +481,7 @@ class BohriumJobsTable(BaseTable):
         """
         with self.get_connection() as conn:
             with conn.cursor() as cur:
-                cur.execute(sql, (user_id, org_id, session_id))
+                cur.execute(sql, (user_id, org_id, session_id, workspace))
                 rows = cur.fetchall()
         return [self._to_snapshot_job(r) for r in rows]
 
@@ -448,6 +499,7 @@ class BohriumJobsTable(BaseTable):
         user_id: str,
         org_id: str,
         session_id: str,
+        workspace: str,
         row_ids: Sequence[int],
         chunk_size: int = 500,
     ) -> int:
@@ -469,11 +521,12 @@ class BohriumJobsTable(BaseTable):
                         UPDATE {self.table_name}
                         SET handled_at = NOW()
                         WHERE user_id = %s AND org_id = %s AND session_id = %s
+                          AND workspace = %s
                           AND id IN ({placeholders})
                           AND terminal_at IS NOT NULL
                           AND handled_at IS NULL
                         """,
-                        (user_id, org_id, session_id, *chunk),
+                        (user_id, org_id, session_id, workspace, *chunk),
                     )
                     affected += cur.rowcount
             conn.commit()
@@ -485,6 +538,7 @@ class BohriumJobsTable(BaseTable):
         user_id: str,
         org_id: str,
         session_id: str,
+        workspace: str,
         job_keys: Sequence[tuple[bool, str]],
         chunk_size: int = 500,
     ) -> int:
@@ -509,24 +563,32 @@ class BohriumJobsTable(BaseTable):
                         UPDATE {self.table_name}
                         SET handled_at = NOW()
                         WHERE user_id = %s AND org_id = %s AND session_id = %s
+                          AND workspace = %s
                           AND (sandbox, job_id) IN ({placeholders})
                           AND terminal_at IS NOT NULL
                           AND handled_at IS NULL
                         """,
-                        (user_id, org_id, session_id, *flat),
+                        (user_id, org_id, session_id, workspace, *flat),
                     )
                     affected += cur.rowcount
             conn.commit()
         return affected
 
     def get_first_pending_failed(
-        self, *, user_id: str, org_id: str, session_id: str, invocation_key: str
+        self,
+        *,
+        user_id: str,
+        org_id: str,
+        session_id: str,
+        workspace: str,
+        invocation_key: str,
     ) -> dict[str, Any] | None:
         """该 invocation 最早一个未交付失败作业（FIRST_FAILURE prompt 用）。"""
         sql = f"""
             SELECT job_id, job_name, status
             FROM {self.table_name}
             WHERE user_id = %s AND org_id = %s AND session_id = %s
+              AND workspace = %s
               AND COALESCE(invocation_id, '') = %s
               AND status IN ({_SQL_FAILURE})
               AND handled_at IS NULL
@@ -535,7 +597,9 @@ class BohriumJobsTable(BaseTable):
         """
         with self.get_connection() as conn:
             with conn.cursor() as cur:
-                cur.execute(sql, (user_id, org_id, session_id, invocation_key))
+                cur.execute(
+                    sql, (user_id, org_id, session_id, workspace, invocation_key)
+                )
                 return cur.fetchone()
 
     def list_all_for_test(self) -> list[dict[str, Any]]:

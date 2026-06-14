@@ -6,7 +6,7 @@ from matmaster.context.compositions import (
     CONTINUATION_COMPOSITION,
     ContextCompositionInputs,
 )
-from matmaster.context.ports import SessionJobs
+from matmaster.context.ports import WorkspaceJobs
 from matmaster.context.sections import ContextSection, ContextView, SectionOrder
 from matmaster.context.sources.turn_input import (
     TurnAttachmentsSource,
@@ -45,7 +45,7 @@ def test_composition_inputs_defaults_are_empty() -> None:
     assert inputs.compacted_history_summary == ""
     assert inputs.turn_input is None
     assert inputs.session_sections == ()
-    assert inputs.session_jobs == SessionJobs.empty()
+    assert inputs.workspace_jobs == WorkspaceJobs.empty()
     assert inputs.session_attachments_override is None
     assert inputs.defer_turn_instruction is False
 
@@ -58,7 +58,7 @@ def test_anchor_composition_includes_instructions_session_turn_and_jobs() -> Non
                 attachments=TurnAttachmentsSource(images=("https://example.com/a.png",))
             ),
             session_sections=(_session_section(),),
-            session_jobs=SessionJobs(active_jobs=({"id": "job-1"},)),
+            workspace_jobs=WorkspaceJobs(active_jobs=({"id": "job-1"},)),
         )
     )
 
@@ -66,7 +66,7 @@ def test_anchor_composition_includes_instructions_session_turn_and_jobs() -> Non
         "user_instructions",
         "session_tools",
         "current_instruction",
-        "session_jobs",
+        "workspace_jobs",
     ]
     assert context.images[0].url == "https://example.com/a.png"
 
@@ -79,13 +79,13 @@ def test_continuation_composition_excludes_user_instructions_and_session_section
             user_instructions_text="Use SI units.",
             turn_input=TurnInput(attachments=TurnAttachmentsSource(files=("a.cif",))),
             session_sections=(_session_section(),),
-            session_jobs=SessionJobs(active_jobs=({"id": "job-1"},)),
+            workspace_jobs=WorkspaceJobs(active_jobs=({"id": "job-1"},)),
         )
     )
 
     assert [section.key for section in context.sections] == [
         "current_instruction",
-        "session_jobs",
+        "workspace_jobs",
     ]
 
 
@@ -96,7 +96,7 @@ def test_compacted_composition_includes_compacted_history_and_override() -> None
             compacted_history_summary="Earlier turns mention FeO.",
             turn_input=TurnInput(),
             session_sections=(_session_section(),),
-            session_jobs=SessionJobs.empty(),
+            workspace_jobs=WorkspaceJobs.empty(),
             session_attachments_override=OverrideSource(),
         )
     )

@@ -45,15 +45,24 @@ def test_snapshot_holds_full_rows():
     table.list_pending_terminal_snapshot.return_value = rows
 
     snap = bohrium_delivery_ack.snapshot(
-        "sess-1", sessions_service=_sessions(), jobs_table=table
+        "sess-1",
+        workspace="/share/project",
+        sessions_service=_sessions(),
+        jobs_table=table,
     )
 
     assert snap.user_id == "u1" and snap.org_id == "o1"
     assert snap.session_id == "sess-1"
+    assert snap.workspace == "/share/project"
     assert snap.rows == tuple(rows)  # DAO 失败优先序原样保持
     assert snap.rows[0]["result_dir"] == "/share/project/out/f1"  # 取结果字段在场
     kw = table.list_pending_terminal_snapshot.call_args.kwargs
-    assert kw == {"user_id": "u1", "org_id": "o1", "session_id": "sess-1"}
+    assert kw == {
+        "user_id": "u1",
+        "org_id": "o1",
+        "session_id": "sess-1",
+        "workspace": "/share/project",
+    }
 
 
 def test_snapshot_reads_detail_limit_from_env(monkeypatch):
@@ -61,7 +70,10 @@ def test_snapshot_reads_detail_limit_from_env(monkeypatch):
     table = MagicMock()
     table.list_pending_terminal_snapshot.return_value = [_row(1, "a")]
     snap = bohrium_delivery_ack.snapshot(
-        "sess-1", sessions_service=_sessions(), jobs_table=table
+        "sess-1",
+        workspace="/share/project",
+        sessions_service=_sessions(),
+        jobs_table=table,
     )
     assert snap.detail_limit == 7
 
@@ -71,7 +83,10 @@ def test_snapshot_empty_rows_returns_object_not_none():
     table = MagicMock()
     table.list_pending_terminal_snapshot.return_value = []
     snap = bohrium_delivery_ack.snapshot(
-        "sess-1", sessions_service=_sessions(), jobs_table=table
+        "sess-1",
+        workspace="/share/project",
+        sessions_service=_sessions(),
+        jobs_table=table,
     )
     assert snap is not None
     assert snap.rows == ()
@@ -83,7 +98,12 @@ def test_snapshot_returns_none_without_org_binding():
     svc.get_session.return_value = {"user_id": "u1", "org_id": None}
     table = MagicMock()
     assert (
-        bohrium_delivery_ack.snapshot("sess-1", sessions_service=svc, jobs_table=table)
+        bohrium_delivery_ack.snapshot(
+            "sess-1",
+            workspace="/share/project",
+            sessions_service=svc,
+            jobs_table=table,
+        )
         is None
     )
     table.list_pending_terminal_snapshot.assert_not_called()
@@ -94,7 +114,10 @@ def test_snapshot_rows_query_failure_degrades_to_empty_rows():
     table = MagicMock()
     table.list_pending_terminal_snapshot.side_effect = RuntimeError("db down")
     snap = bohrium_delivery_ack.snapshot(
-        "sess-1", sessions_service=_sessions(), jobs_table=table
+        "sess-1",
+        workspace="/share/project",
+        sessions_service=_sessions(),
+        jobs_table=table,
     )
     assert snap is not None and snap.rows == ()
 
@@ -103,7 +126,10 @@ def test_confirm_acks_exactly_snapshot_row_ids():
     table = MagicMock()
     table.list_pending_terminal_snapshot.return_value = [_row(11, "a"), _row(12, "b")]
     snap = bohrium_delivery_ack.snapshot(
-        "sess-1", sessions_service=_sessions(), jobs_table=table
+        "sess-1",
+        workspace="/share/project",
+        sessions_service=_sessions(),
+        jobs_table=table,
     )
     table.mark_handled_by_ids.return_value = 2
 
@@ -113,6 +139,7 @@ def test_confirm_acks_exactly_snapshot_row_ids():
         "user_id": "u1",
         "org_id": "o1",
         "session_id": "sess-1",
+        "workspace": "/share/project",
         "row_ids": (11, 12),
     }
 
@@ -125,6 +152,7 @@ def test_confirm_propagates_failure_to_caller():
         user_id="u1",
         org_id="o1",
         session_id="s",
+        workspace="/share/project",
         rows=(_row(1, "a"),),
         detail_limit=20,
     )
@@ -137,7 +165,10 @@ def test_snapshot_detail_limit_defaults_when_env_unset(monkeypatch):
     table = MagicMock()
     table.list_pending_terminal_snapshot.return_value = [_row(1, "a")]
     snap = bohrium_delivery_ack.snapshot(
-        "sess-1", sessions_service=_sessions(), jobs_table=table
+        "sess-1",
+        workspace="/share/project",
+        sessions_service=_sessions(),
+        jobs_table=table,
     )
     assert snap.detail_limit == 20
 
@@ -147,7 +178,12 @@ def test_snapshot_returns_none_when_session_missing():
     svc.get_session.return_value = None
     table = MagicMock()
     assert (
-        bohrium_delivery_ack.snapshot("sess-1", sessions_service=svc, jobs_table=table)
+        bohrium_delivery_ack.snapshot(
+            "sess-1",
+            workspace="/share/project",
+            sessions_service=svc,
+            jobs_table=table,
+        )
         is None
     )
     table.list_pending_terminal_snapshot.assert_not_called()
@@ -157,7 +193,12 @@ def test_snapshot_identity_lookup_failure_returns_none():
     svc = MagicMock()
     svc.get_session.side_effect = RuntimeError("db down")
     assert (
-        bohrium_delivery_ack.snapshot("s", sessions_service=svc, jobs_table=MagicMock())
+        bohrium_delivery_ack.snapshot(
+            "s",
+            workspace="/share/project",
+            sessions_service=svc,
+            jobs_table=MagicMock(),
+        )
         is None
     )
 
@@ -170,18 +211,26 @@ def test_confirm_acks_union_of_rows_and_observed():
         user_id="u1",
         org_id="o1",
         session_id="s",
+        workspace="/share/project",
         rows=(_row(11, "a"), _row(12, "b")),
         detail_limit=20,
     )
     snap.observed_terminal.add((True, "J"))
 
     assert bohrium_delivery_ack.confirm(snap, jobs_table=table) == 3
-    assert table.mark_handled_by_ids.call_args.kwargs["row_ids"] == (11, 12)
+    assert table.mark_handled_by_ids.call_args.kwargs == {
+        "user_id": "u1",
+        "org_id": "o1",
+        "session_id": "s",
+        "workspace": "/share/project",
+        "row_ids": (11, 12),
+    }
     kw = table.mark_handled_by_job_keys.call_args.kwargs
     assert kw == {
         "user_id": "u1",
         "org_id": "o1",
         "session_id": "s",
+        "workspace": "/share/project",
         "job_keys": ((True, "J"),),
     }
 
@@ -189,8 +238,26 @@ def test_confirm_acks_union_of_rows_and_observed():
 def test_confirm_skips_dao_calls_for_empty_sets():
     table = MagicMock()
     snap = bohrium_delivery_ack.DeliverySnapshot(
-        user_id="u1", org_id="o1", session_id="s", rows=(), detail_limit=20
+        user_id="u1",
+        org_id="o1",
+        session_id="s",
+        workspace="/share/project",
+        rows=(),
+        detail_limit=20,
     )
     assert bohrium_delivery_ack.confirm(snap, jobs_table=table) == 0
     table.mark_handled_by_ids.assert_not_called()
     table.mark_handled_by_job_keys.assert_not_called()
+
+
+def test_snapshot_returns_none_without_workspace():
+    table = MagicMock()
+    sessions = _sessions()
+    assert (
+        bohrium_delivery_ack.snapshot(
+            "sess-1", workspace=None, sessions_service=sessions, jobs_table=table
+        )
+        is None
+    )
+    sessions.get_session.assert_not_called()
+    table.list_pending_terminal_snapshot.assert_not_called()

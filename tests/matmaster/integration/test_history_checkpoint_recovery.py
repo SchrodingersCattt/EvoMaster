@@ -24,7 +24,7 @@ from src.services.history_checkpoint_codec import serialize_base_messages
 from src.services.history_checkpoint_service import HistoryCheckpointService
 from src.services.model_history_restore_service import ModelHistoryRestoreService
 from tests.matmaster.integration.test_context_ports import (
-    EmptySessionJobsPort,
+    EmptyWorkspaceJobsPort,
     TableSessionEventsPort,
 )
 
@@ -62,7 +62,7 @@ def _make_compactor_for_table(
     assembler = ContextAssembler(
         ports=ContextAssemblyPorts(
             session_events=TableSessionEventsPort(events_table=events_table),
-            session_jobs=EmptySessionJobsPort(),
+            workspace_jobs=EmptyWorkspaceJobsPort(),
         ),
         session_context_factory=build_session_context_factory(
             skill_resolver=empty_skill_resolver,
