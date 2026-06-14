@@ -119,7 +119,7 @@ content
 写 System/trigger 到 chat history
 组装 job
 _enqueue_run 成功
-publish session_wakeup 到用户级 channel
+publish_user_wakeup(user_id, session_id, reason="trigger_enqueued")
 返回 TriggerResult(status="enqueued")
 ```
 
@@ -134,18 +134,28 @@ live wakeup payload：
 }
 ```
 
-以下情况不发布 wakeup：
+发布条件收敛为单一判定：当且仅当 `trigger_run` 返回 `status == "enqueued"` 时
+publish，其余一律不发。
+
+`TriggerResult.status` 实际只有四个取值：`enqueued`、`deduped`、`busy`、`error`
+（`enqueue_failed`、`session_not_found_or_no_owner` 都是 `error` 的 reason，不是独立
+status）。额度不足由 API 层在进入 `trigger_run` 之前抛异常，根本不产生 status，因此也
+不会 publish。所以不必逐个枚举失败原因：
 
 ```text
-deduped
-busy
-error
-enqueue_failed
-quota failed
-session not found
+status == "enqueued"  -> publish
+其他任何 status        -> 不 publish
 ```
 
-这些情况没有产生新的可消费 run，前端不应被打扰。
+deduped、busy、error 都没有产生新的可消费 run，前端不应被打扰。
+
+发布点约束：`publish_user_wakeup` 必须挂在 trigger 语义点，严禁下沉到 `_enqueue_run`。
+`_enqueue_run` 是普通用户前台发送、后台 trigger、内部 HTTP trigger 三条路径共享的入队
+核心。若把 publish 写进 `_enqueue_run`，普通用户自己发一条消息也会向自己的 user
+channel 推 wakeup，而 wakeup 协议里并没有“前台发送”这一类 reason。因此 publish 只允许
+出现在两处 trigger 入口：`trigger_run`（本节）与 `generate_internal_trigger_stream`
+（6.6），两处共用同一个 `publish_user_wakeup(user_id, session_id, reason)`，统一
+payload 构造，不各写一遍。
 
 ### 6.2 Publish 失败处理
 
@@ -182,8 +192,10 @@ GET /api/v1/chat/wakeup/stream
 
 行为：
 
-1. 仅允许登录用户访问。
-2. 不支持 share route。
+1. 仅允许登录用户访问：用 `require_user_id`（强制登录），不能用现有 session `/stream`
+   的 `optional_user_id`。
+2. 不支持 share route：挂在 api_router（`/api/v1`）下，绝不挂到 share_router
+   （`/pubapi/v1`），从路由层杜绝匿名或分享访问。
 3. 建连后先发送 snapshot wakeup。
 4. 然后订阅 `chat:user:{user_id}:wakeup`，转发 live wakeup。
 5. 网络异常或客户端断开时结束 generator，释放 Redis subscription。
@@ -199,6 +211,16 @@ GET /api/v1/chat/wakeup/stream
 当前用户下 status 为 waiting 或 active 的 session
 ```
 
+session status 实际有四个取值：`idle`、`active`、`waiting`、`failed`。snapshot 只取
+`waiting` 与 `active`。`idle` 与 `failed` 都代表上一轮已结束（failed 是被
+deploy/restart 中断后按失败收尾的态），没有仍需关注的在途 run，因此不纳入 snapshot；
+用户进入该 session 后，由 session stream 的 history replay（含 `run_interrupted`）
+展示完整结局。
+
+当前代码没有“按 user_id 过滤 status”的现成查询：`list_sessions` 不按 status 过滤，
+`count_active_sessions` 不按 user 过滤。第一版需新增 DAO 查询，例如
+`list_sessions_by_status(user_id, statuses=["waiting", "active"])`。
+
 每个 session 发一条：
 
 ```json
@@ -210,6 +232,9 @@ GET /api/v1/chat/wakeup/stream
 }
 ```
 
+snapshot 条数上界等于该用户当前 waiting/active session 数。活跃用户重连时可能一次性收到
+数十条，前端 reducer 必须保持幂等（见 7.2），不因重复 session_id 重复打开 stream。
+
 不从 chat history 或 notification history 回放 wakeup。第一版不新增 notification
 table。
 
@@ -218,7 +243,15 @@ session 后，由 session stream 的 history replay 展示完整历史。
 
 ### 6.6 内部 HTTP trigger 的时序修正
 
-内部 HTTP trigger 不能继续先入队再订阅。它需要拆成 prepare 与 generator 两段：
+内部 HTTP trigger 当前是 enqueue-then-subscribe：先在 `trigger_run` 内部
+`_enqueue_run` 入队，返回 `status == "enqueued"` 后才进 `generate_subscribe_stream`
+建立订阅。竞态窗口精确地说是：订阅建立之前、Worker 已把早期事件 publish 到
+`chat:stream:{session_id}`、但这些事件尚未落库的那一段。已落库的事件会被
+`generate_subscribe_stream` 开头的 history replay 兜底；只有这段“已发布未落库”的早期
+live 事件会被当前 HTTP 调用方错过。
+
+修正方式是对齐普通发送路径的 subscribe-before-enqueue，把链路拆成 prepare 与 generator
+两段：
 
 ```text
 prepare_internal_trigger_run
@@ -230,11 +263,18 @@ prepare_internal_trigger_run
 
 generate_internal_trigger_stream
   - 推送 status + history + System/trigger
-  - 建立 session Redis stream 订阅并等待 ready
+  - 建立 session Redis stream 订阅并等待 subscribe_ready
   - _enqueue_run(job)
-  - publish user wakeup
+  - publish_user_wakeup(user_id, session_id, reason="trigger_enqueued")
   - 转发 Worker live events
 ```
+
+这里“等待 subscribe_ready”沿用普通发送路径的既有语义，是 best-effort 软等待而非强阻塞：
+`subscribe_ready` 带 3s 超时，超时只记 warning 并照常入队，不阻断 run。修正目标是把竞态
+窗口收敛到与普通发送路径同等水平，而不是引入新的强同步保证。
+
+`publish_user_wakeup` 与 6.1 共用同一函数，在 generator 段、`_enqueue_run` 成功之后
+调用；prepare 段不入队也不 publish。
 
 后台 monitor 直接调用 `trigger_run` 仍可同步入队。它没有浏览器 response，前端感知靠
 用户级 wakeup stream。
@@ -243,7 +283,11 @@ generate_internal_trigger_stream
 
 ### 7.1 应用级生命周期
 
-用户级 wakeup stream 绑定到当前浏览器标签页中的 MatMaster 已登录应用实例。
+用户级 wakeup stream 绑定到当前浏览器标签页中的 MatMaster 已登录应用实例。同一用户开多个
+标签页时，每个标签页各持有一条 wakeup stream，都订阅同一个
+`chat:user:{user_id}:wakeup`。Redis pub/sub 会把 live wakeup 广播给该用户的所有标签
+页，每个标签页在建连或重连时也各自收一遍 snapshot。这是预期行为：每个打开的页面都应独立
+感知 session 唤醒。
 
 启动条件：
 
@@ -362,6 +406,10 @@ enqueue_failed 不 publish
 session_not_found 不 publish
 ```
 
+上述负路径分别对应 status 为 deduped、busy、error 的分支（enqueue_failed 与
+session_not_found 都归 error），共同验证 6.1 的判定：只有 status==enqueued 才
+publish。
+
 ### 9.2 Wakeup stream live 测试
 
 模拟 Redis channel 收到：
@@ -442,6 +490,11 @@ reason=trigger_enqueued -> 可标未读或轻提示
 ## 11. 实现注意事项
 
 - 用户级 wakeup stream 是感知层，不是业务执行层；publish 失败只记录 warning。
+- `publish_user_wakeup` 严禁下沉到共享的 `_enqueue_run`，否则普通前台发送也会误发
+  wakeup；只允许出现在 `trigger_run` 与 `generate_internal_trigger_stream` 两处（见
+  6.1 / 6.6）。
+- snapshot 依赖新增 DAO 查询 `list_sessions_by_status(user_id, statuses)`；当前代码
+  没有按 user_id 过滤 status 的现成方法（见 6.5）。
 - `System/trigger` 仍是会话历史事件，不能被 wakeup payload 取代。
 - 用户级 snapshot 只做当前状态恢复，不做通知历史回放。
 - 第一版不新增 notification table。若后续要做站内通知中心，再单独设计持久通知模型。

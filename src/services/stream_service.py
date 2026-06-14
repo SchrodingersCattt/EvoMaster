@@ -29,7 +29,11 @@ from src.services.session_directory_service import (
     normalize_remote_workspace_path,
 )
 from src.services.sessions_service import ChatSessionsService, get_sessions_service
-from src.services.stream_queue_forwarder import subscribe_enqueue_and_forward
+from src.services.stream_queue_forwarder import (
+    replay_history_and_follow_run_stream,
+    start_subscription_before_history_replay,
+    subscribe_enqueue_and_forward,
+)
 from src.services.stream_reply_queue import RedisReplyQueue
 from src.services.stream_sse_filter import (
     REPLAY_DISCARDED_EVENT_TYPES,
@@ -575,6 +579,8 @@ class ChatStreamService:
             owner_alive,
             get_worker_id(),
         )
+        early_stream_subscription = None
+
         if is_stale:
             # 先区分原因再设状态：reason=restart 或 deploy 时会话状态设为 failed，否则设为 idle
             reason, reason_meta = self._deploy_state_service.classify_restart_reason(
@@ -672,65 +678,30 @@ class ChatStreamService:
                 yield self.sse_format(payload)
                 return
         else:
-            yield self.sse_format(payload)
-        for batch in self._iter_history_replay_batches(sid):
-            yield batch
-
-        # 保持流打开直到 Worker 上的 run 结束，或「已入队未接手」结束；仅队列模式，run 不在 API 进程
-        def _run_still_active() -> bool:
-            if self._sessions_service.is_session_run_on_another_pod(sid):
-                return True
-            if REDIS_URL and get_redis_dao().is_session_run_queued(sid):
-                return True
-            return False
-
-        while _run_still_active():
-            if self._sessions_service.is_session_run_on_another_pod(sid):
-                # run 在别的 pod：有 Redis 时订阅 stream channel 收实时事件，否则轮询 + ping 保活
-                if REDIS_URL:
-                    loop = asyncio.get_event_loop()
-                    (
-                        redis_queue,
-                        shutdown_event,
-                        _subscribe_ready,
-                        sub_thread,
-                    ) = _start_redis_stream_subscription(
+            if REDIS_URL and (is_run_on_another_pod or is_run_queued):
+                early_stream_subscription = (
+                    await start_subscription_before_history_replay(
                         sid,
-                        loop,
+                        start_stream_subscription=_start_redis_stream_subscription,
                         thread_name=f"stream-sub-{sid[:8]}",
                     )
-                    try:
-                        while self._sessions_service.is_session_run_on_another_pod(sid):
-                            try:
-                                payload = await asyncio.wait_for(
-                                    redis_queue.get(), timeout=30.0
-                                )
-                            except TimeoutError:
-                                yield self.sse_format(self._ping_payload(sid))
-                                continue
-                            if payload.get('type') == 'stream_closed':
-                                yield self.sse_format(payload)
-                                break
-                            yield self.sse_format(payload)
-                        else:
-                            payload = self._sessions_service.get_session_status_payload(
-                                sid
-                            )
-                            yield self.sse_format(payload)
-                    finally:
-                        shutdown_event.set()
-                        sub_thread.join(timeout=2.0)
-                else:
-                    await asyncio.sleep(5.0)
-                    if not self._sessions_service.is_session_run_on_another_pod(sid):
-                        payload = self._sessions_service.get_session_status_payload(sid)
-                        yield self.sse_format(payload)
-                        break
-                    yield self.sse_format(self._ping_payload(sid))
-            else:
-                # 仅「已入队未接手」：ping 保活，等待 Worker 接手或 queued 超时
-                await asyncio.sleep(5.0)
-                yield self.sse_format(self._ping_payload(sid))
+                )
+            yield self.sse_format(payload)
+        async for chunk in replay_history_and_follow_run_stream(
+            self,
+            sid,
+            start_stream_subscription=_start_redis_stream_subscription,
+            initial_subscription=early_stream_subscription,
+            is_run_on_another_pod=lambda: self._sessions_service.is_session_run_on_another_pod(
+                sid
+            ),
+            is_run_queued=lambda: bool(
+                REDIS_URL and get_redis_dao().is_session_run_queued(sid)
+            ),
+            redis_enabled=bool(REDIS_URL),
+            thread_name=f"stream-sub-{sid[:8]}",
+        ):
+            yield chunk
 
     async def generate_wakeup_stream(self, user_id: str) -> AsyncGenerator[str, None]:
         """用户级 wakeup 流：订阅就绪后发送 snapshot，再转发 live wakeup。"""
