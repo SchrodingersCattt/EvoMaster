@@ -158,6 +158,25 @@ cases:
       - "AIS Square 上 DPA-3-NM 的 checkpoint 哪里下载"          # → aissq-explorer / retrieve-structure
       - "把这个OUTCAR转换成MLIP训练的数据集"
 
+  - skill: dpgen
+    positive:
+      - "帮我准备一套 DP-GEN 的 param.json 和 machine.json，用 LAMMPS 探索、CP2K 标注"
+      - "这个 DP-GEN 配置提交前帮我检查一下，路径没定的地方先用 /path/to 占位"
+      - "我想用 DP-GEN 给有机框架@含能分子体系训练 DeePMD 势函数，先把输入文件搭起来"
+      - "DP-GEN 一启动就说 machine.json 格式不对，帮我修一下"
+      - "param.json 读不进去，帮我找出 DP-GEN 配置里的语法问题并给修复版"
+      - "帮我规划 train-explore-label-retrain 的 DP-GEN 主动学习迭代流程"
+      - "这两套 DP-GEN 候选配置帮我选一套更适合继续试跑的"
+      - "用 DeepMD 做势函数训练前，帮我补齐 DP-GEN 的 model_devi_jobs 和 fp 设置"
+      - "Prepare DP-GEN inputs for a DeePMD active-learning run with LAMMPS exploration and CP2K labeling"
+      - "Review these DP-GEN param and machine files before the first dry run"
+    negative:
+      - "用本地已有的 DPA-3 模型给这个 CIF 做结构优化"          # → mlips
+      - "用 MACE-MP 跑一段 300 K 的 NVT 分子动力学"             # → mlips
+      - "这是 CP2K 输出，帮我转成 DeePMD 训练数据格式"           # → cp2k/data conversion, not DP-GEN workflow
+      - "帮我用 LAMMPS 写一个单独的 NPT input 脚本"             # → lammps
+      - "AIS Square 上找一个可下载的 DPA checkpoint"            # → aissq-explorer
+
   - skill: inspect-atomic-structure
     positive:
       - "看一下这个 CIF 的空间群和 Wyckoff 位点"
