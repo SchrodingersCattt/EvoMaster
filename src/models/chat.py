@@ -173,6 +173,51 @@ class SessionListApiResponse(BaseResponse[SessionListResponse]):
     )
 
 
+class SessionDirectoryDeleteQuery(BaseModel):
+    """DELETE /chat/sessions/by-directory 查询参数：整组删除某个 session_directory"""
+
+    project_id: int = Field(..., description="项目 ID", examples=[42])
+    directory: str | None = Field(
+        default=None,
+        description="工作区目录；与 unset_directory 二选一",
+        max_length=2048,
+    )
+    unset_directory: bool = Field(
+        default=False,
+        description="为 true 表示删除「未设置目录」分组（session_directory 为空）",
+    )
+
+    @model_validator(mode="after")
+    def directory_xor_unset(self) -> "SessionDirectoryDeleteQuery":
+        if self.unset_directory:
+            return self
+        d = (self.directory or "").strip()
+        if not d:
+            raise ValueError("请指定 unset_directory=true 或非空 directory")
+        self.directory = d
+        return self
+
+
+class SessionDirectoryDeleteData(BaseModel):
+    """DELETE /chat/sessions/by-directory 的 data 字段"""
+
+    deleted_count: int = Field(description="本次成功软删除的会话数量")
+
+
+class SessionDirectoryDeleteApiResponse(BaseResponse[SessionDirectoryDeleteData]):
+    """DELETE /chat/sessions/by-directory 规范响应"""
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "code": 0,
+                "msg": "ok",
+                "data": {"deleted_count": 12},
+            }
+        }
+    )
+
+
 class RunStatusData(BaseModel):
     """GET /chat/sessions/run_status 的 data 字段：执行中数、排队数"""
 
