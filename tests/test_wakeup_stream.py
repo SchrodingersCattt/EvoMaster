@@ -133,9 +133,7 @@ def test_wakeup_endpoint_success_invokes_generator():
     app.dependency_overrides[get_stream_service] = lambda: fake_stream
     try:
         client = TestClient(app)
-        resp = client.get(
-            "/api/v1/chat/wakeup/stream", headers={"X-User-Id": "user-1"}
-        )
+        resp = client.get("/api/v1/chat/wakeup/stream", headers={"X-User-Id": "user-1"})
         assert resp.status_code == 200, resp.text
         fake_stream.generate_wakeup_stream.assert_called_once_with("user-1")
     finally:
@@ -148,7 +146,5 @@ def test_wakeup_not_exposed_on_share_route():
     from app import app
 
     client = TestClient(app)
-    resp = client.get(
-        "/pubapi/v1/chat/wakeup/stream", headers={"X-User-Id": "user-1"}
-    )
+    resp = client.get("/pubapi/v1/chat/wakeup/stream", headers={"X-User-Id": "user-1"})
     assert resp.status_code == 404, resp.text

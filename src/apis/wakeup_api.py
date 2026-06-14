@@ -24,6 +24,4 @@ async def wakeup_stream(
     user_id: str = Depends(_require_wakeup_user_id),
     stream_svc: ChatStreamService = Depends(get_stream_service),
 ):
-    return _sse_streaming_response(
-        request, stream_svc.generate_wakeup_stream(user_id)
-    )
+    return _sse_streaming_response(request, stream_svc.generate_wakeup_stream(user_id))
