@@ -12,8 +12,14 @@ from matmaster.context.sources.workspace_jobs import WorkspaceJobsSource
 
 def _summary() -> WorkspaceJobsSummary:
     return WorkspaceJobsSummary(
-        total=2, active=1, pending_terminal=1, recent_terminal=0,
-        by_status={"running": 1, "failed": 1}, failed=1, stopped=0, lost=0,
+        total=2,
+        active=1,
+        pending_terminal=1,
+        recent_terminal=0,
+        by_status={"running": 1, "failed": 1},
+        failed=1,
+        stopped=0,
+        lost=0,
     )
 
 
@@ -22,9 +28,7 @@ def test_inline_renders_summary_and_columnar_details() -> None:
     jobs = WorkspaceJobs(
         workspace="/share/p",
         active_jobs=({"job_id": "a1", "job_name": "n1", "status": "running"},),
-        pending_terminal_jobs=(
-            {"job_id": "p1", "job_name": "n2", "status": "failed"},
-        ),
+        pending_terminal_jobs=({"job_id": "p1", "job_name": "n2", "status": "failed"},),
         mode="workspace_observation",
         summary=_summary(),
     )
@@ -51,12 +55,12 @@ def test_compact_renders_export_samples_omitted() -> None:
         summary=_summary(),
         export=WorkspaceJobsExport(
             path="/share/p/.matmaster/context/workspace_jobs/s-i.csv",
-            format="csv", row_count=1020, columns=("group", "job_id"),
+            format="csv",
+            row_count=1020,
+            columns=("group", "job_id"),
             reason="row_limit",
         ),
-        priority_samples=(
-            {"job_id": "p1", "job_name": "n2", "status": "failed"},
-        ),
+        priority_samples=({"job_id": "p1", "job_name": "n2", "status": "failed"},),
         omitted_count=1019,
     )
     content = WorkspaceJobsSource.from_jobs(jobs).to_sections()[0].content
@@ -170,3 +174,66 @@ def test_delivery_empty_jobs_render_no_sections() -> None:
         ).to_sections()
         == ()
     )
+
+
+def test_delivery_compact_renders_failed_samples_success_count_and_path() -> None:
+    jobs = WorkspaceJobs(
+        mode="session_workspace_delivery",
+        summary=WorkspaceJobsSummary(
+            total=982,
+            active=0,
+            pending_terminal=982,
+            recent_terminal=0,
+            by_status={"finished": 980, "failed": 2},
+            failed=2,
+            stopped=0,
+            lost=0,
+        ),
+        priority_samples=(
+            _job("f1", "failed", job_name="relax-fail"),
+            _job("l3", "lost", job_name="relax-lost"),
+        ),
+        export=WorkspaceJobsExport(
+            path="/share/p/.matmaster/context/workspace_jobs/s-i.csv",
+            format="csv",
+            row_count=982,
+            columns=("group", "job_id"),
+            reason="row_limit",
+        ),
+    )
+
+    text = WorkspaceJobsSource.delivery_instruction_text(jobs)
+
+    assert "以下作业失败：" in text
+    assert "f1, relax-fail" in text
+    assert "l3, relax-lost" in text
+    assert "以下作业成功结束：共 980 个（详见导出文件）" in text
+    assert "/share/p/.matmaster/context/workspace_jobs/s-i.csv" in text
+    assert "Read 或 Bash" in text
+
+
+def test_delivery_export_failure_renders_samples_and_warning_no_path() -> None:
+    jobs = WorkspaceJobs(
+        mode="session_workspace_delivery",
+        summary=WorkspaceJobsSummary(
+            total=600,
+            active=0,
+            pending_terminal=600,
+            recent_terminal=0,
+            by_status={"finished": 599, "failed": 1},
+            failed=1,
+            stopped=0,
+            lost=0,
+        ),
+        priority_samples=(_job("f1", "failed", job_name="relax-fail"),),
+        export_error=WorkspaceJobsExportError(
+            reason="write_failed", rows=600, target_path="/share/p/x.csv"
+        ),
+    )
+
+    text = WorkspaceJobsSource.delivery_instruction_text(jobs)
+
+    assert "f1, relax-fail" in text
+    assert "完整明细导出失败，被省略的作业未必已交付。" in text
+    assert "/share/p/x.csv" not in text
+    assert "已导出" not in text

@@ -10,8 +10,13 @@ from typing import Any
 from matmaster.bohrium.status import to_ledger_status
 from matmaster.context.ports import (
     WorkspaceJobs,
+    WorkspaceJobsExportError,
     WorkspaceJobsPort,
     WorkspaceJobsQuery,
+)
+from matmaster.context.workspace_jobs_compute import (
+    compute_summary,
+    select_priority_samples,
 )
 from src.dao.bohrium_jobs_table import BohriumJobsTable, get_bohrium_jobs_table
 from src.services.bohrium_delivery_ack import DeliverySnapshot
@@ -19,6 +24,7 @@ from src.services.session_directory_service import (
     SessionDirectoryError,
     normalize_remote_workspace_path,
 )
+from src.services.workspace_jobs_export import WorkspaceJobsCsvExporter
 from src.utils.constant import env_int
 
 logger = logging.getLogger(__name__)
@@ -144,51 +150,77 @@ class _BohriumJobLedger:
 
 
 class _SessionWorkspaceDeliveryJobsPort:
+    """delivery：只围绕本 session 的 snapshot.rows，只用 row 阈值。
+
+    未超阈值返回含完整 pending_terminal_jobs 的 WorkspaceJobs；超阈值仅选
+    action 样本并导出 pending CSV；导出失败时写 snapshot.export_failure。
+    """
+
     def __init__(
         self,
         *,
-        table_ref: _BohriumJobsTableRef,
-        user_id: str,
-        org_id: str,
         workspace: str,
-        snapshot: DeliverySnapshot | None = None,
+        snapshot: DeliverySnapshot | None,
+        exporter: WorkspaceJobsCsvExporter,
+        row_limit: int,
+        action_sample_limit: int,
     ) -> None:
-        self._table_ref = table_ref
-        self._user_id = user_id
-        self._org_id = org_id
         self._workspace = workspace
         self._snapshot = snapshot
+        self._exporter = exporter
+        self._row_limit = row_limit
+        self._action_sample_limit = action_sample_limit
 
     async def load_workspace_jobs(self, query: WorkspaceJobsQuery) -> WorkspaceJobs:
-        if self._snapshot is not None:
-            pending: tuple[dict[str, Any], ...] = self._snapshot.rows
-            detail_limit: int | None = self._snapshot.detail_limit
-        else:
-            pending = ()
-            detail_limit = None
-        try:
-            table = self._table_ref.get()
-            active = await asyncio.to_thread(
-                table.query_session_active,
-                user_id=self._user_id,
-                org_id=self._org_id,
-                session_id=query.session_id,
+        pending: tuple[dict[str, Any], ...] = (
+            self._snapshot.rows if self._snapshot is not None else ()
+        )
+        summary = compute_summary((), pending, ())
+        if len(pending) <= self._row_limit:
+            return WorkspaceJobs(
                 workspace=self._workspace,
+                pending_terminal_jobs=pending,
+                summary=summary,
+                mode="session_workspace_delivery",
             )
-        except Exception:  # noqa: BLE001
-            logger.warning(
-                "load_workspace_jobs(delivery active) failed session_id=%s workspace=%s",
-                query.session_id,
-                self._workspace,
-                exc_info=True,
+        samples = select_priority_samples(
+            (),
+            pending,
+            (),
+            action_limit=self._action_sample_limit,
+            fill_limit=0,
+        )
+        export_input = WorkspaceJobs(
+            workspace=self._workspace,
+            pending_terminal_jobs=pending,
+        )
+        result = self._exporter.export(export_input, reason="row_limit")
+        if isinstance(result, WorkspaceJobsExportError):
+            self._record_export_failure(result)
+            return WorkspaceJobs(
+                workspace=self._workspace,
+                summary=summary,
+                priority_samples=samples,
+                export_error=result,
+                mode="session_workspace_delivery",
             )
-            active = ()
         return WorkspaceJobs(
             workspace=self._workspace,
-            active_jobs=tuple(active),
-            pending_terminal_jobs=tuple(pending),
-            detail_limit=detail_limit,
+            summary=summary,
+            priority_samples=samples,
+            export=result,
             mode="session_workspace_delivery",
+        )
+
+    def _record_export_failure(self, err: WorkspaceJobsExportError) -> None:
+        if self._snapshot is None:
+            return
+        self._snapshot.export_failure.update(
+            {
+                "reason": err.reason,
+                "rows": err.rows,
+                "target_path": err.target_path,
+            }
         )
 
 
@@ -262,6 +294,7 @@ def build_bohrium_jobs_ports(
     user_id: str,
     org_id: str,
     workspace: str | None,
+    exporter: WorkspaceJobsCsvExporter,
     job_context_mode: str = "session_workspace_delivery",
     spawn_id: str | None = None,
     delivery_snapshot: DeliverySnapshot | None = None,
@@ -271,6 +304,8 @@ def build_bohrium_jobs_ports(
     """构造写 port 与读 port（共享同一个 DAO 实例）。"""
     table_ref = _BohriumJobsTableRef(table=table, table_factory=table_factory)
     normalized_workspace = _normalize_ledger_workspace(workspace)
+    row_limit = env_int("BOHRIUM_WORKSPACE_JOBS_INLINE_ROW_LIMIT", 50)
+    action_sample_limit = env_int("BOHRIUM_WORKSPACE_JOBS_ACTION_SAMPLE_LIMIT", 200)
     ledger = (
         _BohriumJobLedger(
             table_ref=table_ref,
@@ -301,11 +336,11 @@ def build_bohrium_jobs_ports(
         )
     elif job_context_mode == "session_workspace_delivery":
         jobs = _SessionWorkspaceDeliveryJobsPort(
-            table_ref=table_ref,
-            user_id=user_id,
-            org_id=org_id,
             workspace=normalized_workspace,
             snapshot=delivery_snapshot,
+            exporter=exporter,
+            row_limit=row_limit,
+            action_sample_limit=action_sample_limit,
         )
     else:
         jobs = _EmptyWorkspaceJobsPort()

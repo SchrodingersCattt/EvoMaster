@@ -32,6 +32,12 @@ _EXPORT_ERROR_HINT = (
     "Full job details could not be exported; do not assume omitted pending "
     "jobs were delivered."
 )
+_DELIVERY_SUCCEEDED_COUNT_TEMPLATE = "以下作业成功结束：共 {count} 个（详见导出文件）"
+_DELIVERY_EXPORTED_TEMPLATE = "完整明细已导出：{path}"
+_DELIVERY_READ_HINT = (
+    "需要某个作业的 input_dir / result_dir 等，用 Read 或 Bash 读取该 CSV。"
+)
+_DELIVERY_EXPORT_FAILED_TEXT = "完整明细导出失败，被省略的作业未必已交付。"
 
 
 @dataclass(frozen=True)
@@ -58,7 +64,17 @@ class WorkspaceJobsSource:
 
     @classmethod
     def delivery_instruction_text(cls, jobs: WorkspaceJobs) -> str:
-        if jobs.mode != "session_workspace_delivery" or not jobs.pending_terminal_jobs:
+        if jobs.mode != "session_workspace_delivery":
+            return ""
+        if jobs.export_error is not None:
+            return cls._delivery_export_failed_text(jobs)
+        if jobs.export is not None:
+            return cls._delivery_compact_text(jobs)
+        return cls._delivery_full_text(jobs)
+
+    @classmethod
+    def _delivery_full_text(cls, jobs: WorkspaceJobs) -> str:
+        if not jobs.pending_terminal_jobs:
             return ""
         failed = tuple(
             job
@@ -76,6 +92,34 @@ class WorkspaceJobsSource:
             cls._render_delivery_table(_DELIVERY_FAILED_HEADER, failed)
             + ("",)
             + cls._render_delivery_table(_DELIVERY_SUCCEEDED_HEADER, succeeded)
+        )
+        return "\n".join(lines)
+
+    @classmethod
+    def _delivery_compact_text(cls, jobs: WorkspaceJobs) -> str:
+        export = jobs.export
+        assert export is not None
+        finished = (
+            jobs.summary.by_status.get(_DELIVERY_SUCCESS_STATUS, 0)
+            if jobs.summary is not None
+            else 0
+        )
+        lines = (
+            *cls._render_delivery_table(_DELIVERY_FAILED_HEADER, jobs.priority_samples),
+            "",
+            _DELIVERY_SUCCEEDED_COUNT_TEMPLATE.format(count=finished),
+            "",
+            _DELIVERY_EXPORTED_TEMPLATE.format(path=export.path),
+            _DELIVERY_READ_HINT,
+        )
+        return "\n".join(lines)
+
+    @classmethod
+    def _delivery_export_failed_text(cls, jobs: WorkspaceJobs) -> str:
+        lines = (
+            *cls._render_delivery_table(_DELIVERY_FAILED_HEADER, jobs.priority_samples),
+            "",
+            _DELIVERY_EXPORT_FAILED_TEXT,
         )
         return "\n".join(lines)
 
