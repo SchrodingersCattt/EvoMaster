@@ -3,7 +3,7 @@ capability: structure_retrieval
 domain: agnostic           # 本 bank 属于哪个材料场景；同文件内所有题必须一致
 
 questions:
-  - id: SR_recommend_20260430   # 题目 ID；建议格式：<前缀>_<主题>_<日期>
+  - id: SR_recommend_20260614   # 题目 ID；建议格式：<前缀>_<主题>_<日期>
     capability: structure_retrieval  # 必须与顶层 capability 一致
     domain: agnostic              # 必须与顶层 domain 一致
     intent: Recommend soluble acrylate NTD photoresist monomers and provide verified SMILES from databases.
@@ -47,15 +47,15 @@ questions:
 
       - key: turn_budget             # 最大交互轮次
         value:
-          max: 5
+          max: 12
 
       - key: duration_budget         # 最大耗时；通常单位为毫秒
         value:
-          max: 180000
+          max: 300000
 
       - key: token_budget_total      # 最大 token 消耗
         value:
-          max: 8000
+          max: 80000
 
     scoring_checklist:  # 真正执行评分的清单；id 尽量与 reference_answers.key 对齐
 
@@ -91,7 +91,7 @@ questions:
         axis: efficiency
         verify: token_budget
 
-  - id: SR_recommend_monomer_soluble_ntd_20260614
+  - id: SR_recommend_monomer_soluble_ntd_20260614v2
     capability: structure_retrieval
     domain: agnostic
     intent: Recommend soluble acrylate or methacrylate monomers suitable for NTD photoresist systems.
@@ -104,13 +104,13 @@ questions:
         value: {}
       - key: turn_budget
         value:
-          max: 6
+          max: 10
       - key: duration_budget
         value:
-          max: 180000
+          max: 300000
       - key: token_budget_total
         value:
-          max: 9000
+          max: 50000
     scoring_checklist:
       - id: grounding_source
         criterion: The answer recommends plausible acrylate or methacrylate monomer candidates for soluble NTD photoresist systems without fabricating unsupported identifiers.
@@ -132,7 +132,7 @@ questions:
         criterion: Total tokens are within budget.
         axis: efficiency
         verify: token_budget
-  - id: SR_recommend_monomer_low_volatility_hydroxy_ether_20260614
+  - id: SR_recommend_monomer_low_volatility_hydroxy_ether_20260614v2
     capability: structure_retrieval
     domain: agnostic
     intent: Find low-volatility hydroxy- or ether-containing photoresist monomers that improve resin solubility.
@@ -145,13 +145,13 @@ questions:
         value: {}
       - key: turn_budget
         value:
-          max: 6
+          max: 10
       - key: duration_budget
         value:
-          max: 180000
+          max: 300000
       - key: token_budget_total
         value:
-          max: 9000
+          max: 50000
     scoring_checklist:
       - id: grounding_source
         criterion: The answer recommends low-volatility monomer candidates containing hydroxyl groups or ether bonds and explains their resin-solubility relevance without fabricating unsupported identifiers.
@@ -173,7 +173,7 @@ questions:
         criterion: Total tokens are within budget.
         axis: efficiency
         verify: token_budget
-  - id: SR_recommend_monomer_fluorinated_hydrophobic_soluble_20260614
+  - id: SR_recommend_monomer_fluorinated_hydrophobic_soluble_20260614v2
     capability: structure_retrieval
     domain: agnostic
     intent: Recommend fluorinated hydrophobic photoresist monomers that still retain some formulation solubility.
@@ -186,13 +186,13 @@ questions:
         value: {}
       - key: turn_budget
         value:
-          max: 6
+          max: 10
       - key: duration_budget
         value:
-          max: 180000
+          max: 300000
       - key: token_budget_total
         value:
-          max: 9000
+          max: 50000
     scoring_checklist:
       - id: grounding_source
         criterion: The answer recommends fluorinated hydrophobic monomer candidates while explaining the solubility tradeoff and avoids unsupported or non-monomer records.
@@ -214,7 +214,7 @@ questions:
         criterion: Total tokens are within budget.
         axis: efficiency
         verify: token_budget
-  - id: SR_recommend_monomer_hydroxy_methacrylate_pgmea_20260614
+  - id: SR_recommend_monomer_hydroxy_methacrylate_pgmea_20260614v2
     capability: structure_retrieval
     domain: agnostic
     intent: Recommend hydroxy-containing methacrylate monomers for improving resin solubility in PGMEA.
@@ -227,13 +227,13 @@ questions:
         value: {}
       - key: turn_budget
         value:
-          max: 6
+          max: 10
       - key: duration_budget
         value:
-          max: 180000
+          max: 300000
       - key: token_budget_total
         value:
-          max: 9000
+          max: 50000
     scoring_checklist:
       - id: grounding_source
         criterion: The answer recommends hydroxy-containing methacrylate monomers and explains PGMEA/resin-solubility relevance without fabricating unsupported identifiers.
@@ -255,7 +255,7 @@ questions:
         criterion: Total tokens are within budget.
         axis: efficiency
         verify: token_budget
-  - id: SR_recommend_monomer_epoxy_crosslink_20260614
+  - id: SR_recommend_monomer_epoxy_crosslink_20260614v2
     capability: structure_retrieval
     domain: agnostic
     intent: Recommend epoxy-functional acrylate or methacrylate monomers for photoresist crosslinking or post-reaction.
@@ -268,13 +268,13 @@ questions:
         value: {}
       - key: turn_budget
         value:
-          max: 6
+          max: 10
       - key: duration_budget
         value:
-          max: 180000
+          max: 300000
       - key: token_budget_total
         value:
-          max: 9000
+          max: 50000
     scoring_checklist:
       - id: grounding_source
         criterion: The answer recommends epoxy-functional acrylate or methacrylate monomers and connects them to crosslinking or post-reaction use without fabricating unsupported identifiers.
@@ -296,7 +296,7 @@ questions:
         criterion: Total tokens are within budget.
         axis: efficiency
         verify: token_budget
-  - id: SR_recommend_monomer_alicyclic_methacrylate_etch_20260614
+  - id: SR_recommend_monomer_alicyclic_methacrylate_etch_20260614v2
     capability: structure_retrieval
     domain: agnostic
     intent: Recommend alicyclic methacrylate monomers for NTD photoresist etch resistance while preserving solubility.
@@ -309,13 +309,13 @@ questions:
         value: {}
       - key: turn_budget
         value:
-          max: 6
+          max: 10
       - key: duration_budget
         value:
-          max: 180000
+          max: 300000
       - key: token_budget_total
         value:
-          max: 9000
+          max: 50000
     scoring_checklist:
       - id: grounding_source
         criterion: The answer recommends alicyclic methacrylate monomers and explains the etch-resistance versus solubility tradeoff without fabricating unsupported identifiers.
@@ -337,7 +337,7 @@ questions:
         criterion: Total tokens are within budget.
         axis: efficiency
         verify: token_budget
-  - id: SR_recommend_monomer_exclude_nonmonomers_20260614
+  - id: SR_recommend_monomer_exclude_nonmonomers_20260614v2
     capability: structure_retrieval
     domain: agnostic
     intent: Recommend photoresist monomers while explicitly excluding polymers, dispersants, inorganics, and unknown records.
@@ -350,13 +350,13 @@ questions:
         value: {}
       - key: turn_budget
         value:
-          max: 6
+          max: 10
       - key: duration_budget
         value:
-          max: 180000
+          max: 300000
       - key: token_budget_total
         value:
-          max: 9000
+          max: 50000
     scoring_checklist:
       - id: grounding_source
         criterion: The answer recommends photoresist monomers and excludes polymers, dispersants, inorganics, and unknown records rather than treating them as candidates.
@@ -378,7 +378,7 @@ questions:
         criterion: Total tokens are within budget.
         axis: efficiency
         verify: token_budget
-  - id: SR_recommend_monomer_methacrylate_ntd_20260614
+  - id: SR_recommend_monomer_methacrylate_ntd_20260614v2
     capability: structure_retrieval
     domain: agnostic
     intent: Recommend methacrylate monomers suitable for NTD photoresist formulations.
@@ -391,13 +391,13 @@ questions:
         value: {}
       - key: turn_budget
         value:
-          max: 6
+          max: 10
       - key: duration_budget
         value:
-          max: 180000
+          max: 300000
       - key: token_budget_total
         value:
-          max: 9000
+          max: 50000
     scoring_checklist:
       - id: grounding_source
         criterion: The answer recommends methacrylate monomers suitable for NTD photoresist formulation discussion without fabricating unsupported identifiers.
@@ -419,7 +419,7 @@ questions:
         criterion: Total tokens are within budget.
         axis: efficiency
         verify: token_budget
-  - id: SR_recommend_monomer_impossible_fluoro_hydrophobic_water_soluble_20260614
+  - id: SR_recommend_monomer_impossible_fluoro_hydrophobic_water_soluble_20260614v2
     capability: structure_retrieval
     domain: agnostic
     intent: Test honest handling of the contradictory request for a completely hydrophobic yet highly water-soluble fluorinated acrylate monomer.
@@ -432,13 +432,13 @@ questions:
         value: {}
       - key: turn_budget
         value:
-          max: 6
+          max: 10
       - key: duration_budget
         value:
-          max: 180000
+          max: 300000
       - key: token_budget_total
         value:
-          max: 9000
+          max: 50000
     scoring_checklist:
       - id: grounding_source
         criterion: The answer recognizes the tension or contradiction between complete hydrophobicity and high water solubility, and does not fabricate a perfect fluorinated acrylate match.
@@ -460,7 +460,7 @@ questions:
         criterion: Total tokens are within budget.
         axis: efficiency
         verify: token_budget
-  - id: SR_recommend_monomer_reject_li2sno3_20260614
+  - id: SR_recommend_monomer_reject_li2sno3_20260614v2
     capability: structure_retrieval
     domain: agnostic
     intent: Test refusal to recommend inorganic Li2SnO3 as an NTD photoresist monomer while explaining the mismatch.
@@ -473,13 +473,13 @@ questions:
         value: {}
       - key: turn_budget
         value:
-          max: 5
+          max: 8
       - key: duration_budget
         value:
-          max: 180000
+          max: 300000
       - key: token_budget_total
         value:
-          max: 7000
+          max: 50000
     scoring_checklist:
       - id: grounding_source
         criterion: The answer does not present Li2SnO3 as an organic photoresist monomer, explains the mismatch, and avoids fabricating SMILES/CAS for it.
