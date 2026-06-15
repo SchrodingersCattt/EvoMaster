@@ -19,6 +19,7 @@ from src.services.bohrium_poller import BohriumMonitor
 from src.utils.build_info import get_build_version
 from src.utils.logger import LoggingConfig, setup_logging
 from src.utils.worker_id import get_worker_id
+from utils.tracing import configure_tracing
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -61,6 +62,7 @@ def _run_monitor_loop() -> None:
 
 def main() -> None:
     setup_logging(**LoggingConfig.get_monitor_config())
+    configure_tracing("matmaster-evo-monitor")
 
     def _on_sigterm(_signum: int, _frame: object) -> None:
         logger.info(

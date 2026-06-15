@@ -9,7 +9,8 @@ from typing import Any
 
 import requests
 
-from .env import build_trace_env
+from utils.tracing import get_tracer, record_span_exception
+
 from .errors import BohriumAPIError
 from .status import FAILURE_CODES, status_name
 from .types import BohriumContext
@@ -17,6 +18,7 @@ from .upload import UploadedArchive
 
 logger = logging.getLogger(__name__)
 _SANDBOX_CATALOG: dict[str, Any] | None = None
+_TRACER = get_tracer(__name__)
 
 # Log prefix for the copy-pasteable curl line emitted on job submission.
 # Kept as a module constant so tests can match it without hardcoding the text.
@@ -147,16 +149,31 @@ def create_job(ctx: BohriumContext, *, job_name: str) -> dict[str, Any]:
             "jobName": job_name,
         }
     )
-    response = _post(
-        ctx.credentials.base_url,
-        path,
-        ctx.credentials.access_key,
-        payload,
-        log_curl=True,
-    )
-    if response.get("code") != 0:
-        raise BohriumAPIError(f"job/create failed: {response}")
-    return response["data"]
+    with _TRACER.start_as_current_span("bohrium.job.create") as span:
+        span.set_attribute("bohrium.sandbox", ctx.sandbox)
+        span.set_attribute("bohrium.openapi.path", path)
+        span.set_attribute("bohrium.project_id", ctx.credentials.project_id)
+        span.set_attribute("bohrium.job_name", job_name)
+        try:
+            response = _post(
+                ctx.credentials.base_url,
+                path,
+                ctx.credentials.access_key,
+                payload,
+                log_curl=True,
+            )
+            span.set_attribute("bohrium.response.code", int(response.get("code", -1)))
+            if response.get("code") != 0:
+                raise BohriumAPIError(f"job/create failed: {response}")
+            data = response["data"]
+            if isinstance(data, dict):
+                job_id = data.get("jobId") or data.get("id")
+                if job_id not in (None, ""):
+                    span.set_attribute("bohrium.job_id", str(job_id))
+            return data
+        except Exception as exc:
+            record_span_exception(span, exc)
+            raise
 
 
 def add_job(
@@ -170,7 +187,6 @@ def add_job(
     job_name: str,
     disk_size: int,
 ) -> dict[str, Any]:
-    trace_env = build_trace_env()
     if ctx.sandbox:
         payload = {
             "imageName": image,
@@ -197,18 +213,37 @@ def add_job(
             "logFiles": ["log"],
         }
         path = "/openapi/v2/job/add"
-    if trace_env:
-        payload["envs"] = trace_env
-    response = _post(
-        ctx.credentials.base_url,
-        path,
-        ctx.credentials.access_key,
-        payload,
-        log_curl=True,
-    )
-    if response.get("code") != 0:
-        raise BohriumAPIError(f"job/add failed: {response}")
-    return response["data"]
+    with _TRACER.start_as_current_span("bohrium.job.add") as span:
+        span.set_attribute("bohrium.sandbox", ctx.sandbox)
+        span.set_attribute("bohrium.openapi.path", path)
+        span.set_attribute("bohrium.project_id", ctx.credentials.project_id)
+        span.set_attribute("bohrium.job_name", job_name)
+        span.set_attribute("bohrium.image", image)
+        span.set_attribute("bohrium.machine", machine)
+        span.set_attribute("bohrium.disk_size", disk_size)
+        created_job_id = create_data.get("jobId") or create_data.get("id")
+        if created_job_id not in (None, ""):
+            span.set_attribute("bohrium.created_job_id", str(created_job_id).strip())
+        try:
+            response = _post(
+                ctx.credentials.base_url,
+                path,
+                ctx.credentials.access_key,
+                payload,
+                log_curl=True,
+            )
+            span.set_attribute("bohrium.response.code", int(response.get("code", -1)))
+            if response.get("code") != 0:
+                raise BohriumAPIError(f"job/add failed: {response}")
+            data = response["data"]
+            if isinstance(data, dict):
+                job_id = data.get("jobId") or data.get("bohrJobId")
+                if job_id not in (None, ""):
+                    span.set_attribute("bohrium.job_id", str(job_id))
+            return data
+        except Exception as exc:
+            record_span_exception(span, exc)
+            raise
 
 
 def get_job_detail(ctx: BohriumContext, *, job_id: int | str) -> dict[str, Any]:

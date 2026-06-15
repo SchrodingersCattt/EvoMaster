@@ -37,6 +37,7 @@ from src.utils.feishu_notifier import (
 from src.utils.logger import LogContext, LoggingConfig, setup_logging
 from src.utils.support_notifier import send_session_complete_email_async
 from src.utils.worker_id import get_worker_id
+from utils.tracing import configure_tracing
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -620,6 +621,7 @@ def _run_worker_loop() -> None:
 
 def main() -> None:
     setup_logging(**LoggingConfig.get_worker_config())
+    configure_tracing("matmaster-evo-worker")
 
     def _on_sigterm(_signum: int, _frame: object) -> None:
         global _drain_requested
