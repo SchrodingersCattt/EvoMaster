@@ -46,6 +46,9 @@ class _FakeSpan:
     def set_attribute(self, key: str, value: str) -> None:
         self.attributes[key] = value
 
+    def is_recording(self) -> bool:
+        return True
+
 
 def test_set_log_context_attributes() -> None:
     span = _FakeSpan()
@@ -99,3 +102,22 @@ def test_shutdown_tracing_uninstruments_requests(monkeypatch) -> None:
 
     assert calls == ["ok"]
     assert tracing._REQUESTS_INSTRUMENTED is False
+
+
+def test_record_requests_trace_headers() -> None:
+    class _Request:
+        headers = {
+            "traceparent": "00-497947a314b9d49abc6ae44dd11ba707-spanid0000000000-01",
+            "tracestate": "vendor=value",
+        }
+
+    span = _FakeSpan()
+
+    tracing._record_requests_trace_headers(span, _Request(), object())
+
+    assert span.attributes == {
+        "http.request.header.traceparent": (
+            "00-497947a314b9d49abc6ae44dd11ba707-spanid0000000000-01"
+        ),
+        "http.request.header.tracestate": "vendor=value",
+    }

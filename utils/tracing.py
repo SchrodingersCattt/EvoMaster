@@ -104,7 +104,7 @@ def configure_tracing(service_name: str) -> bool:
     provider = TracerProvider(resource=Resource.create(resource_attrs))
     provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter(**exporter_kwargs)))
     trace.set_tracer_provider(provider)
-    RequestsInstrumentor().instrument()
+    RequestsInstrumentor().instrument(response_hook=_record_requests_trace_headers)
     _REQUESTS_INSTRUMENTED = True
     _TRACER_PROVIDER = provider
     _INITIALIZED = True
@@ -157,6 +157,24 @@ def _uninstrument_requests() -> None:
         RequestsInstrumentor().uninstrument()
     except Exception as exc:  # noqa: BLE001
         logger.warning("OpenTelemetry requests uninstrument failed: %s", exc)
+
+
+def _record_requests_trace_headers(span, request, response) -> None:
+    """Record the propagated trace headers on requests client spans for debugging."""
+
+    del response
+    try:
+        if hasattr(span, "is_recording") and not span.is_recording():
+            return
+        headers = getattr(request, "headers", {}) or {}
+        traceparent = headers.get("traceparent")
+        if traceparent:
+            span.set_attribute("http.request.header.traceparent", traceparent)
+        tracestate = headers.get("tracestate")
+        if tracestate:
+            span.set_attribute("http.request.header.tracestate", tracestate)
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("failed to record requests trace headers: %s", exc)
 
 
 def set_log_context_attributes(span) -> None:
