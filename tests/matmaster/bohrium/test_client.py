@@ -380,6 +380,91 @@ def test_add_job_sandbox(monkeypatch: pytest.MonkeyPatch) -> None:
     assert calls[0]["projectId"] == 42
 
 
+def test_add_job_includes_trace_envs(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[dict] = []
+
+    monkeypatch.setenv("TRACE_EXPORTER_ENDPOINT", "trace.example.com:10010")
+    monkeypatch.setenv("TRACE_INSTANCE_ID", "test-instance")
+    monkeypatch.setenv("TRACE_PROJECT", "trace-project")
+    monkeypatch.setenv("TRACE_AK", "trace-ak")
+    monkeypatch.setenv("TRACE_SK", "trace-sk")
+    monkeypatch.setenv("TRACE_LOGSTORE", "trace-logstore")
+
+    def fake_post(base_url, path, access_key, payload, *, timeout=30, log_curl=False):
+        del base_url, access_key, timeout, log_curl
+        assert path == "/openapi/v1/sandbox/job/add"
+        calls.append(payload)
+        return {"code": 0, "data": {"jobId": "job-2"}}
+
+    monkeypatch.setattr("matmaster.bohrium.client._post", fake_post)
+    add_job(
+        _make_ctx(sandbox=True),
+        create_data={"jobId": "create-job-id"},
+        upload=UploadedArchive(
+            oss_key="key",
+            download_url="https://store.example.com/input.zip?token=abc",
+        ),
+        image="demo:latest",
+        cmd="python run.py",
+        machine="c32_m128_cpu",
+        job_name="demo",
+        disk_size=50,
+    )
+
+    assert calls[0]["envs"] == {
+        "TRACE_EXPORTER_ENDPOINT": "trace.example.com:10010",
+        "TRACE_INSTANCE_ID": "test-instance",
+        "TRACE_PROJECT": "trace-project",
+        "TRACE_AK": "trace-ak",
+        "TRACE_SK": "trace-sk",
+        "TRACE_LOGSTORE": "trace-logstore",
+    }
+
+
+def test_add_job_non_sandbox_includes_trace_envs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[dict] = []
+
+    for key in (
+        "TRACE_EXPORTER_ENDPOINT",
+        "TRACE_INSTANCE_ID",
+        "TRACE_PROJECT",
+        "TRACE_AK",
+        "TRACE_SK",
+        "TRACE_LOGSTORE",
+    ):
+        monkeypatch.delenv(key, raising=False)
+    monkeypatch.setenv("TRACE_EXPORTER_ENDPOINT", "trace.example.com:10010")
+    monkeypatch.setenv("TRACE_INSTANCE_ID", "test-instance")
+
+    def fake_post(base_url, path, access_key, payload, *, timeout=30, log_curl=False):
+        del base_url, access_key, timeout, log_curl
+        assert path == "/openapi/v2/job/add"
+        calls.append(payload)
+        return {"code": 0, "data": {"jobId": "job-2"}}
+
+    monkeypatch.setattr("matmaster.bohrium.client._post", fake_post)
+    add_job(
+        _make_ctx(sandbox=False),
+        create_data={"jobId": "create-job-id"},
+        upload=UploadedArchive(
+            oss_key="store/input.zip",
+            download_url="https://store.example.com/input.zip?token=abc",
+        ),
+        image="demo:latest",
+        cmd="python run.py",
+        machine="c32_m128_cpu",
+        job_name="demo",
+        disk_size=50,
+    )
+
+    assert calls[0]["envs"] == {
+        "TRACE_EXPORTER_ENDPOINT": "trace.example.com:10010",
+        "TRACE_INSTANCE_ID": "test-instance",
+    }
+
+
 class _FakeResponse:
     ok = True
     status_code = 200

@@ -61,6 +61,24 @@ def test_build_env_projects_runtime_credentials() -> None:
     assert env["BOHRIUM_BASE_URL"] == "https://openapi.test.dp.tech"
 
 
+def test_build_env_includes_trace_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("TRACE_EXPORTER_ENDPOINT", "trace.example.com:10010")
+    monkeypatch.setenv("TRACE_INSTANCE_ID", "test-instance")
+    monkeypatch.setenv("TRACE_PROJECT", "trace-project")
+    monkeypatch.setenv("TRACE_AK", "trace-ak")
+    monkeypatch.setenv("TRACE_SK", "trace-sk")
+    monkeypatch.setenv("TRACE_LOGSTORE", "trace-logstore")
+
+    env = _runtime().build_env()
+
+    assert env["TRACE_EXPORTER_ENDPOINT"] == "trace.example.com:10010"
+    assert env["TRACE_INSTANCE_ID"] == "test-instance"
+    assert env["TRACE_PROJECT"] == "trace-project"
+    assert env["TRACE_AK"] == "trace-ak"
+    assert env["TRACE_SK"] == "trace-sk"
+    assert env["TRACE_LOGSTORE"] == "trace-logstore"
+
+
 def test_build_submission_injects_dispatcher_credentials() -> None:
     submission = _runtime().build_submission(
         SubmissionRequest(
@@ -80,6 +98,35 @@ def test_build_submission_injects_dispatcher_credentials() -> None:
 
     assert submission.executor["machine"]["remote_profile"]["access_key"] == "ak"
     assert submission.storage["plugin"]["project_id"] == 42
+
+
+def test_build_submission_injects_dispatcher_trace_env(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("TRACE_EXPORTER_ENDPOINT", "trace.example.com:10010")
+    monkeypatch.setenv("TRACE_INSTANCE_ID", "test-instance")
+
+    submission = _runtime().build_submission(
+        SubmissionRequest(
+            executor_template={
+                "type": "dispatcher",
+                "resources": {"envs": {"EXISTING": "1"}},
+                "machine": {
+                    "remote_profile": {
+                        "machine_type": "c2_m8_cpu",
+                        "image_address": "repo/image:latest",
+                    }
+                },
+            },
+            needs_storage=False,
+            submission_mode="async",
+        )
+    )
+
+    envs = submission.executor["resources"]["envs"]
+    assert envs["EXISTING"] == "1"
+    assert envs["TRACE_EXPORTER_ENDPOINT"] == "trace.example.com:10010"
+    assert envs["TRACE_INSTANCE_ID"] == "test-instance"
 
 
 def test_require_runtime_raises_for_missing_runtime() -> None:

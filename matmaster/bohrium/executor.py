@@ -3,6 +3,7 @@ from __future__ import annotations
 import copy
 from typing import Any
 
+from .env import build_trace_env
 from .types import BohriumCredentials
 
 
@@ -23,9 +24,11 @@ def build_executor(
         remote_profile["real_user_id"] = credentials.user_id or -1
         resources = executor.setdefault("resources", {})
         envs = resources.setdefault("envs", {})
+        envs.update(build_trace_env())
         envs["BOHRIUM_PROJECT_ID"] = credentials.project_id
     elif executor.get("type") == "local":
         env = executor.setdefault("env", {})
+        env.update(build_trace_env())
         env["BOHRIUM_PROJECT_ID"] = str(credentials.project_id)
         env["BOHRIUM_ACCESS_KEY"] = credentials.access_key
     return executor

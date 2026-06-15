@@ -9,6 +9,7 @@ from typing import Any
 
 import requests
 
+from .env import build_trace_env
 from .errors import BohriumAPIError
 from .status import FAILURE_CODES, status_name
 from .types import BohriumContext
@@ -169,6 +170,7 @@ def add_job(
     job_name: str,
     disk_size: int,
 ) -> dict[str, Any]:
+    trace_env = build_trace_env()
     if ctx.sandbox:
         payload = {
             "imageName": image,
@@ -195,6 +197,8 @@ def add_job(
             "logFiles": ["log"],
         }
         path = "/openapi/v2/job/add"
+    if trace_env:
+        payload["envs"] = trace_env
     response = _post(
         ctx.credentials.base_url,
         path,
