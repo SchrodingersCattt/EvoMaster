@@ -13,6 +13,7 @@ from opentelemetry.propagate import inject
 from utils.tracing import (
     get_tracer,
     record_span_exception,
+    set_bohrium_http_request_attributes,
     set_log_context_attributes,
 )
 
@@ -68,6 +69,17 @@ def _build_curl_command(
     return " ".join(parts)
 
 
+def _post_headers(
+    access_key: str,
+    *,
+    include_trace_context: bool = False,
+) -> dict[str, str]:
+    headers = {"accessKey": access_key, "Content-Type": "application/json"}
+    if include_trace_context:
+        inject(headers)
+    return headers
+
+
 def _log_http_error(method: str, url: str, response: Any) -> None:
     logger.warning(
         "Bohrium HTTP error method=%s url=%s status=%s response_body=%s",
@@ -108,8 +120,7 @@ def _post(
     log_curl: bool = False,
 ) -> dict[str, Any]:
     url = f"{base_url}{path}"
-    headers = {"accessKey": access_key, "Content-Type": "application/json"}
-    inject(headers)
+    headers = _post_headers(access_key, include_trace_context=True)
     if log_curl:
         logger.info(
             "%s\n%s",
@@ -161,6 +172,16 @@ def create_job(ctx: BohriumContext, *, job_name: str) -> dict[str, Any]:
         span.set_attribute("bohrium.openapi.path", path)
         span.set_attribute("bohrium.project_id", ctx.credentials.project_id)
         span.set_attribute("bohrium.job_name", job_name)
+        set_bohrium_http_request_attributes(
+            span,
+            method="POST",
+            url=f"{ctx.credentials.base_url}{path}",
+            headers=_post_headers(
+                ctx.credentials.access_key,
+                include_trace_context=True,
+            ),
+            payload=payload,
+        )
         try:
             response = _post(
                 ctx.credentials.base_url,
@@ -232,6 +253,16 @@ def add_job(
         created_job_id = create_data.get("jobId") or create_data.get("id")
         if created_job_id not in (None, ""):
             span.set_attribute("bohrium.created_job_id", str(created_job_id).strip())
+        set_bohrium_http_request_attributes(
+            span,
+            method="POST",
+            url=f"{ctx.credentials.base_url}{path}",
+            headers=_post_headers(
+                ctx.credentials.access_key,
+                include_trace_context=True,
+            ),
+            payload=payload,
+        )
         try:
             response = _post(
                 ctx.credentials.base_url,

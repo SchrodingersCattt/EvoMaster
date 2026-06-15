@@ -471,6 +471,43 @@ def test_add_job_emits_trace_span(monkeypatch: pytest.MonkeyPatch) -> None:
     assert tracer.spans[0].attributes["bohrium.job_id"] == "job-2"
 
 
+def test_add_job_can_capture_full_http_request(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    tracer = _FakeTracer()
+
+    def fake_post(base_url, path, access_key, payload, *, timeout=30, log_curl=False):
+        del base_url, path, access_key, payload, timeout, log_curl
+        return {"code": 0, "data": {"jobId": "job-2"}}
+
+    monkeypatch.setattr(client_module, "_TRACER", tracer)
+    monkeypatch.setattr("matmaster.bohrium.client._post", fake_post)
+
+    add_job(
+        _make_ctx(sandbox=True),
+        create_data={"jobId": "create-job-id"},
+        upload=UploadedArchive(
+            oss_key="store/input.zip",
+            download_url="https://store.example.com/input.zip?token=abc",
+        ),
+        image="demo:latest",
+        cmd="python run.py",
+        machine="c32_m128_cpu",
+        job_name="demo",
+        disk_size=50,
+    )
+
+    span_attrs = tracer.spans[0].attributes
+    assert span_attrs["http.request.method"] == "POST"
+    assert span_attrs["url.full"] == (
+        "https://openapi.test.dp.tech/openapi/v1/sandbox/job/add"
+    )
+    assert '"accessKey": "ak"' in span_attrs["bohrium.request.headers_json"]
+    assert '"ossPath": ["https://store.example.com/input.zip?token=abc"]' in (
+        span_attrs["bohrium.request.body_json"]
+    )
+
+
 class _FakeResponse:
     ok = True
     status_code = 200

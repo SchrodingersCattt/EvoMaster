@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 import os
 import socket
@@ -152,6 +153,28 @@ def set_log_context_attributes(span) -> None:
         span.set_attribute("matmaster.session_id", session_id)
     if task_id and task_id != "-":
         span.set_attribute("matmaster.task_id", task_id)
+
+
+def set_bohrium_http_request_attributes(
+    span,
+    *,
+    method: str,
+    url: str,
+    headers: dict[str, str],
+    payload: dict[str, Any],
+) -> None:
+    """Attach the full Bohrium HTTP request for debugging platform submissions."""
+
+    span.set_attribute("http.request.method", method)
+    span.set_attribute("url.full", url)
+    span.set_attribute(
+        "bohrium.request.headers_json",
+        json.dumps(headers, ensure_ascii=False, sort_keys=True),
+    )
+    span.set_attribute(
+        "bohrium.request.body_json",
+        json.dumps(payload, ensure_ascii=False, sort_keys=True, default=str),
+    )
 
 
 def record_span_exception(span, exc: Exception) -> None:
