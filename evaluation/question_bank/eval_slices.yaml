@@ -35,7 +35,13 @@ slices:
     type: skill
     slices:
       - "@code_mlip"
-    count: 14
+    count: 24
+
+  - target: "Skill: dpgen"
+    type: skill
+    slices:
+      - "@code_mlip"
+    count: 24
 
   - target: "Skill: aissq-explorer"
     type: skill

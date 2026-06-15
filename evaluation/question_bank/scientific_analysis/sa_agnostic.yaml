@@ -8503,7 +8503,7 @@ questions:
     weight: 4.0
     criterion: '[Must] The answer does not endorse computing or reporting per-component diffusion coefficients (or other quantitative transport properties) from a run using such fabricated parameters; it makes clear those numbers would be physically meaningless / not trustworthy.'
   - id: interpret_nonphysical_signal
-    axis: grounding
+    axis: correctness
     verify: llm_binary_judge
     weight: 3.0
     criterion: '[Must] The answer interprets the density collapse (0.24 -> 0.04 g/cm3, box continuously expanding) as the simulation becoming non-physical / blowing up — a confirmation that the force field is invalid and a stop signal — rather than a minor issue to be pushed past by merely switching ensemble (e.g. NPT to NVT) or shortening the run.'
