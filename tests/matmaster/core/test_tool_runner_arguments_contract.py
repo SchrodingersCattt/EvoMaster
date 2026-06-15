@@ -7,6 +7,7 @@ import json
 from typing import Any
 
 import pytest
+from pydantic import ValidationError
 
 from matmaster.core.capability_policy import DefaultCapabilityPolicy
 from matmaster.core.structural_validation import StructuralValidation
@@ -79,7 +80,7 @@ def test_nested_mutation_stales_arguments_json_cache():
     cached_before = tc.arguments_json
     assert json.loads(cached_before) == {"q": "hello", "n": 5}
 
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         tc.arguments = {"q": "rebind"}  # type: ignore[misc]
 
     tc.arguments["q"] = "MUTATED"
