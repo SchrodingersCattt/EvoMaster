@@ -1,2 +1,0 @@
-category: simulation
-description: "DP-GEN active-learning workflows for DeePMD/Deep Potential training: param.json and machine.json preparation, validation, exploration/labeling loop planning, and launch-readiness checks."
