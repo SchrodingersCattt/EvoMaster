@@ -8,6 +8,10 @@ from typing import Any
 
 import anthropic
 
+from matmaster.providers.image_payloads import (
+    ImagePayloadError,
+    inline_image_url_as_base64,
+)
 from matmaster.providers.transport import Transport, dump_model_to_jsonable
 from matmaster.types.errors import LLMError
 from matmaster.types.message_normalization import validate_tool_turn_sequence
@@ -398,6 +402,31 @@ class AnthropicMessagesTransport(Transport):
         """automatic 时是否随请求发顶层 cache_control（native 默认发）。"""
         return True
 
+    def _image_block(self, image: ImageContentPart) -> dict[str, Any]:
+        return _image_block(image)
+
+    def _user_content_blocks(self, message: UserMessage) -> list[dict[str, Any]]:
+        blocks = _text_block(message.content)
+        blocks.extend(self._image_block(image) for image in message.images)
+        return blocks
+
+    def _tool_result_block(self, message: ToolMessage) -> dict[str, Any]:
+        if message.images:
+            blocks: list[dict[str, Any]] = []
+            if message.content:
+                blocks.append({"type": "text", "text": message.content})
+            blocks.extend(self._image_block(image) for image in message.images)
+            return {
+                "type": "tool_result",
+                "tool_use_id": message.tool_call_id,
+                "content": blocks,
+            }
+        return {
+            "type": "tool_result",
+            "tool_use_id": message.tool_call_id,
+            "content": message.content or "",
+        }
+
     def _assistant_to_wire(self, message: AssistantMessage) -> dict[str, Any]:
         blocks: list[dict[str, Any]] = []
         blocks.extend(
@@ -417,7 +446,9 @@ class AnthropicMessagesTransport(Transport):
                 idx += 1
                 continue
             if isinstance(message, UserMessage):
-                out.append({"role": "user", "content": _user_content_blocks(message)})
+                out.append(
+                    {"role": "user", "content": self._user_content_blocks(message)}
+                )
                 idx += 1
                 continue
             if isinstance(message, AssistantMessage):
@@ -427,16 +458,18 @@ class AnthropicMessagesTransport(Transport):
                     continue
                 result_blocks: list[dict[str, Any]] = []
                 while idx < len(messages) and isinstance(messages[idx], ToolMessage):
-                    result_blocks.append(_tool_result_block(messages[idx]))
+                    result_blocks.append(self._tool_result_block(messages[idx]))
                     idx += 1
                 if idx < len(messages) and isinstance(messages[idx], UserMessage):
-                    result_blocks.extend(_user_content_blocks(messages[idx]))
+                    result_blocks.extend(self._user_content_blocks(messages[idx]))
                     idx += 1
                 if result_blocks:
                     out.append({"role": "user", "content": result_blocks})
                 continue
             if isinstance(message, ToolMessage):
-                out.append({"role": "user", "content": [_tool_result_block(message)]})
+                out.append(
+                    {"role": "user", "content": [self._tool_result_block(message)]}
+                )
                 idx += 1
                 continue
             idx += 1
@@ -742,3 +775,21 @@ class BedrockAnthropicTransport(AnthropicMessagesTransport):
 
     def _emit_top_level_auto_cache(self) -> bool:
         return False
+
+    def _image_block(self, image: ImageContentPart) -> dict[str, Any]:
+        url = image.url
+        if url.startswith("data:") and ";base64," in url:
+            return _image_block(image)
+        try:
+            media_type, data = inline_image_url_as_base64(url)
+        except ImagePayloadError as exc:
+            raise LLMError(
+                "Anthropic Bedrock image input requires base64 data, but the "
+                f"image URL could not be inlined: {exc}",
+                retryable=False,
+                error_category="bad_request",
+            ) from exc
+        return {
+            "type": "image",
+            "source": {"type": "base64", "media_type": media_type, "data": data},
+        }
