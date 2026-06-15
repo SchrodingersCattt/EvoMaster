@@ -16,8 +16,8 @@ Use for DP-GEN `param.json` / `machine.json`, DeePMD training input setup, model
 Use the released tag:
 
 ```bash
-uv pip install git+https://github.com/SchrodingersCattt/dpgen-lsp.git@0.0.1
-uv tool install git+https://github.com/SchrodingersCattt/dpgen-lsp.git@0.0.1
+uv pip install git+https://github.com/SchrodingersCattt/dpgen-lsp.git@v0.0.1
+uv tool install git+https://github.com/SchrodingersCattt/dpgen-lsp.git@v0.0.1
 ```
 
 Useful inspection commands:
