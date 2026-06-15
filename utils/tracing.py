@@ -102,9 +102,7 @@ def configure_tracing(service_name: str) -> bool:
         exporter_kwargs["insecure"] = True
 
     provider = TracerProvider(resource=Resource.create(resource_attrs))
-    provider.add_span_processor(
-        BatchSpanProcessor(OTLPSpanExporter(**exporter_kwargs))
-    )
+    provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter(**exporter_kwargs)))
     trace.set_tracer_provider(provider)
     RequestsInstrumentor().instrument()
     _REQUESTS_INSTRUMENTED = True

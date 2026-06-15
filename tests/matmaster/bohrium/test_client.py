@@ -464,9 +464,7 @@ def test_add_job_emits_trace_span(monkeypatch: pytest.MonkeyPatch) -> None:
     )
 
     assert tracer.spans[0].name == "bohrium.job.add"
-    assert tracer.spans[0].attributes["bohrium.openapi.path"] == (
-        "/openapi/v2/job/add"
-    )
+    assert tracer.spans[0].attributes["bohrium.openapi.path"] == ("/openapi/v2/job/add")
     assert tracer.spans[0].attributes["bohrium.created_job_id"] == "create-job-id"
     assert tracer.spans[0].attributes["bohrium.job_id"] == "job-2"
 
