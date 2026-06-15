@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from matmaster.config.loader import load_llm_config
 from matmaster.config.llm import LLMConfig, LLMProfileConfig, ProviderConfig
+from matmaster.config.loader import load_llm_config
 from matmaster.providers.llm_factory import (
     _TRANSPORT_BUILDERS,
     build_provider,

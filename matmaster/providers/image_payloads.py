@@ -116,4 +116,3 @@ def inline_image_url_as_base64(url: str) -> tuple[str, str]:
 
     data = base64.b64encode(payload).decode("ascii")
     return media_type, data
-

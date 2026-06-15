@@ -104,4 +104,3 @@ def test_inline_image_url_rejects_unsupported_mime() -> None:
         client_cls.return_value.__enter__.return_value = client
         with pytest.raises(ImagePayloadError, match="format"):
             inline_image_url_as_base64("https://oss.example.com/chat/a.txt")
-
