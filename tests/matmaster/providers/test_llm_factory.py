@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from matmaster.config.llm import LLMConfig, LLMProfileConfig, ProviderConfig
+from matmaster.config.loader import load_llm_config
 from matmaster.providers.llm_factory import (
     _TRANSPORT_BUILDERS,
     build_provider,
@@ -20,6 +23,7 @@ from matmaster.providers.transports.chat_completions import (
     QwenChatCompletionsTransport,
 )
 from matmaster.providers.transports.responses import ResponsesTransport
+from matmaster.types.messages import ImageContentPart, UserMessage
 
 
 @pytest.fixture()
@@ -160,6 +164,41 @@ class TestDispatch:
             max_breakpoints=4,
             min_flexible_chars=1000,
         )
+
+    def test_repo_anthropic_bedrock_profile_inlines_url_images(self, monkeypatch):
+        import matmaster.providers.transports.anthropic_messages as transport_module
+
+        def fake_inline(url: str) -> tuple[str, str]:
+            assert url == "https://oss.example.com/chat/a.png"
+            return ("image/png", "aGVsbG8=")
+
+        monkeypatch.setattr(
+            transport_module,
+            "inline_image_url_as_base64",
+            fake_inline,
+        )
+        repo_root = Path(__file__).resolve().parents[3]
+        cfg = load_llm_config(repo_root / "config" / "llm_config.yaml")
+
+        provider = build_provider(
+            cfg,
+            model_override="global.anthropic.claude-opus-4-6-v1",
+        )
+        kwargs = provider.build_kwargs(
+            [
+                UserMessage(
+                    content="look",
+                    images=[ImageContentPart(url="https://oss.example.com/chat/a.png")],
+                )
+            ],
+            tools=None,
+        )
+
+        assert kwargs["messages"][0]["content"][1]["source"] == {
+            "type": "base64",
+            "media_type": "image/png",
+            "data": "aGVsbG8=",
+        }
 
     def test_responses_tag_hits_builder(self) -> None:
         assert "responses" in _TRANSPORT_BUILDERS

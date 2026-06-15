@@ -4,6 +4,7 @@ import pytest
 
 from matmaster.providers.transports.anthropic_messages import (
     AnthropicMessagesTransport,
+    BedrockAnthropicTransport,
     _tool_result_block,
 )
 from matmaster.types.errors import LLMError
@@ -73,6 +74,84 @@ def test_user_text_and_images_convert_to_anthropic_blocks() -> None:
             ],
         }
     ]
+
+
+def test_bedrock_user_url_image_is_inlined_as_base64(monkeypatch) -> None:
+    import matmaster.providers.transports.anthropic_messages as transport_module
+
+    def fake_inline(url: str) -> tuple[str, str]:
+        assert url == "https://oss.example.com/chat/a.png"
+        return ("image/png", "aGVsbG8=")
+
+    monkeypatch.setattr(
+        transport_module,
+        "inline_image_url_as_base64",
+        fake_inline,
+        raising=False,
+    )
+    msg = UserMessage(
+        content="look",
+        images=[ImageContentPart(url="https://oss.example.com/chat/a.png")],
+    )
+
+    wire = BedrockAnthropicTransport(model="m", api_key="k").convert_messages([msg])
+
+    assert wire[0]["content"][1]["source"] == {
+        "type": "base64",
+        "media_type": "image/png",
+        "data": "aGVsbG8=",
+    }
+
+
+def test_bedrock_data_uri_image_does_not_fetch(monkeypatch) -> None:
+    import matmaster.providers.transports.anthropic_messages as transport_module
+
+    def fail_inline(url: str) -> tuple[str, str]:
+        raise AssertionError(f"unexpected fetch for {url}")
+
+    monkeypatch.setattr(
+        transport_module,
+        "inline_image_url_as_base64",
+        fail_inline,
+        raising=False,
+    )
+    msg = UserMessage(
+        content="look",
+        images=[ImageContentPart(url="data:image/png;base64,aGVsbG8=")],
+    )
+
+    wire = BedrockAnthropicTransport(model="m", api_key="k").convert_messages([msg])
+
+    assert wire[0]["content"][1]["source"] == {
+        "type": "base64",
+        "media_type": "image/png",
+        "data": "aGVsbG8=",
+    }
+
+
+def test_bedrock_url_inline_failure_is_non_retryable_llm_error(monkeypatch) -> None:
+    import matmaster.providers.transports.anthropic_messages as transport_module
+    from matmaster.providers.image_payloads import ImagePayloadError
+
+    def fail_inline(url: str) -> tuple[str, str]:
+        raise ImagePayloadError("image size is unknown")
+
+    monkeypatch.setattr(
+        transport_module,
+        "inline_image_url_as_base64",
+        fail_inline,
+    )
+    msg = UserMessage(
+        content="look",
+        images=[ImageContentPart(url="https://oss.example.com/chat/a.png")],
+    )
+
+    with pytest.raises(LLMError) as exc_info:
+        BedrockAnthropicTransport(model="m", api_key="k").convert_messages([msg])
+
+    assert exc_info.value.retryable is False
+    assert exc_info.value.error_category == "bad_request"
+    assert "could not be inlined" in str(exc_info.value)
 
 
 def test_assistant_replays_matching_thinking_before_tool_use() -> None:
