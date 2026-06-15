@@ -507,6 +507,43 @@ def test_post_logs_copyable_curl_when_enabled(
     assert any("curl -X POST" in msg and "secret-ak" in msg for msg in messages)
 
 
+def test_post_injects_trace_context(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured_headers: dict[str, str] = {}
+
+    class FakeResponse:
+        ok = True
+        status_code = 200
+
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self) -> dict:
+            return {"code": 0, "data": {}}
+
+    def fake_inject(headers):
+        headers["traceparent"] = (
+            "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
+        )
+
+    def fake_requests_post(url, *, headers, json, timeout):
+        del url, json, timeout
+        captured_headers.update(headers)
+        return FakeResponse()
+
+    monkeypatch.setattr(client_module, "inject", fake_inject)
+    monkeypatch.setattr(client_module.requests, "post", fake_requests_post)
+
+    client_module._post(
+        "https://openapi.test.dp.tech",
+        "/openapi/v1/sandbox/job/add",
+        "secret-ak",
+        {"jobId": "job-1"},
+    )
+
+    assert captured_headers["accessKey"] == "secret-ak"
+    assert captured_headers["traceparent"].startswith("00-4bf92f")
+
+
 def test_post_does_not_log_curl_by_default(
     monkeypatch: pytest.MonkeyPatch,
     caplog: pytest.LogCaptureFixture,

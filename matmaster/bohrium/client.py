@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 import requests
+from opentelemetry.propagate import inject
 
 from utils.tracing import (
     get_tracer,
@@ -108,6 +109,7 @@ def _post(
 ) -> dict[str, Any]:
     url = f"{base_url}{path}"
     headers = {"accessKey": access_key, "Content-Type": "application/json"}
+    inject(headers)
     if log_curl:
         logger.info(
             "%s\n%s",
