@@ -13,12 +13,11 @@ Use for DP-GEN `param.json` / `machine.json`, DeePMD training input setup, model
 
 ## Installing the checker
 
-Use the released tag:
-
 ```bash
-uv pip install git+https://github.com/SchrodingersCattt/dpgen-lsp.git@v0.0.1
-uv tool install git+https://github.com/SchrodingersCattt/dpgen-lsp.git@v0.0.1
+pip install dpgen-lsp
 ```
+
+This installs both the `dpgen-lsp` LSP server and the `dpgen-lsp-tool` CLI.  The package also ships 13 curated templates (12 param + 1 machine) and full documentation.
 
 Useful inspection commands:
 
