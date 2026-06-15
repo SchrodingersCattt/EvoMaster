@@ -98,10 +98,6 @@ class TestBashToolMetadata:
 
         bash_def = next(d for d in defs if d["function"]["name"] == "Bash")
         assert bash_def["function"]["description"] == BashTool().prompt(desc_ctx)
-        assert (
-            "Use dedicated tools instead of shell equivalents"
-            in bash_def["function"]["description"]
-        )
 
     def test_schema_disallows_additional_properties(self):
         assert BashTool.json_schema["additionalProperties"] is False

@@ -4,7 +4,6 @@ import asyncio
 import json
 import logging
 import threading
-import time
 import uuid
 from collections.abc import AsyncGenerator, Callable
 from dataclasses import dataclass
@@ -16,6 +15,7 @@ from matmaster.context.sources.turn_input import TurnInput
 from src.dao.redis_dao import (
     STREAM_CHANNEL_PREFIX,
     get_redis_dao,
+    user_wakeup_channel,
 )
 from src.models.chat import ChatSendRequest, DeliverySpec
 from src.services.chat_history import ChatHistoryConverter
@@ -29,6 +29,11 @@ from src.services.session_directory_service import (
     normalize_remote_workspace_path,
 )
 from src.services.sessions_service import ChatSessionsService, get_sessions_service
+from src.services.stream_queue_forwarder import (
+    replay_history_and_follow_run_stream,
+    start_subscription_before_history_replay,
+    subscribe_enqueue_and_forward,
+)
 from src.services.stream_reply_queue import RedisReplyQueue
 from src.services.stream_sse_filter import (
     REPLAY_DISCARDED_EVENT_TYPES,
@@ -51,8 +56,8 @@ from src.utils.worker_id import get_worker_id
 logger = logging.getLogger(__name__)
 
 
-def _start_redis_stream_subscription(
-    session_id: str,
+def _start_redis_channel_subscription(
+    channel: str,
     loop: asyncio.AbstractEventLoop,
     *,
     thread_name: str,
@@ -60,7 +65,6 @@ def _start_redis_stream_subscription(
     redis_queue: asyncio.Queue = asyncio.Queue()
     shutdown_event = threading.Event()
     subscribe_ready = threading.Event()
-    channel = STREAM_CHANNEL_PREFIX + session_id
 
     def _redis_subscribe_loop() -> None:
         client = get_redis_dao().create_client()
@@ -102,6 +106,17 @@ def _start_redis_stream_subscription(
     return redis_queue, shutdown_event, subscribe_ready, sub_thread
 
 
+def _start_redis_stream_subscription(
+    session_id: str,
+    loop: asyncio.AbstractEventLoop,
+    *,
+    thread_name: str,
+) -> tuple[asyncio.Queue, threading.Event, threading.Event, threading.Thread]:
+    return _start_redis_channel_subscription(
+        STREAM_CHANNEL_PREFIX + session_id, loop, thread_name=thread_name
+    )
+
+
 @dataclass
 class RunHandle:
     """_prepare_run 的成功产物：已写好发起事件、已组好 job，待 _enqueue_run 入队。"""
@@ -128,6 +143,18 @@ class TriggerResult:
     invocation_id: str | None = None
     dedup_key: str | None = None
     reason: str | None = None
+
+
+@dataclass
+class TriggerStreamContext:
+    """内部 trigger 已写好发起事件、已组好 job，待订阅就绪后入队。"""
+
+    task_id: str
+    invocation_id: str
+    owner: str
+    job: dict
+    event: dict  # 已落库的 System/trigger 发起事件
+    dedup_key: str | None = None
 
 
 @dataclass
@@ -350,7 +377,37 @@ class ChatStreamService:
             return False
         return True
 
-    def trigger_run(
+    @staticmethod
+    def _session_wakeup_payload(session_id: str, reason: str) -> dict:
+        """session 唤醒事件 payload；snapshot 与 live publish 共用同一 schema。"""
+        return {
+            "source": "System",
+            "type": "session_wakeup",
+            "reason": reason,
+            "session_id": session_id.strip(),
+        }
+
+    def _publish_user_wakeup(self, user_id: str, session_id: str, reason: str) -> None:
+        """向用户级 wakeup channel 发布一条 session 唤醒信号。"""
+        payload = self._session_wakeup_payload(session_id, reason)
+        if not get_redis_dao().publish_user_wakeup(user_id, payload):
+            logger.warning(
+                "publish_user_wakeup failed user_id=%s session_id=%s reason=%s",
+                user_id,
+                session_id,
+                reason,
+            )
+
+    def _finalize_enqueue(self, ctx: TriggerStreamContext, session_id: str) -> bool:
+        """提交内部 trigger：入队成功后标记 dedup 并发布 wakeup；失败返回 False。"""
+        if not self._enqueue_run(session_id, ctx.job):
+            return False
+        if ctx.dedup_key:
+            get_redis_dao().mark_dedup_key_nx(ctx.dedup_key, ctx.task_id)
+        self._publish_user_wakeup(ctx.owner, session_id, "trigger_enqueued")
+        return True
+
+    def prepare_internal_trigger_run(
         self,
         session_id: str,
         prompt: str,
@@ -361,25 +418,27 @@ class ChatStreamService:
         mode: str | None = None,
         model: str | None = None,
         workspace: str | None = None,
-    ) -> TriggerResult:
-        """程序化触发一次 agent run。"""
+    ) -> TriggerResult | TriggerStreamContext:
+        """准备内部 trigger：校验 owner/dedup，写 System/trigger，组装 job，不入队。"""
         sid = session_id.strip()
         owner = self._sessions_service.get_session_user_id(sid)
         if not owner:
             logger.warning(
-                "trigger_run rejected: session not found or no owner session_id=%s",
+                "trigger prepare rejected: session not found or no owner session_id=%s",
                 sid,
             )
             return TriggerResult(status="error", reason="session_not_found_or_no_owner")
 
         if dedup_key and get_redis_dao().dedup_key_exists(dedup_key):
             logger.info(
-                "trigger_run deduped session_id=%s dedup_key=%s", sid, dedup_key
+                "trigger prepare deduped session_id=%s dedup_key=%s", sid, dedup_key
             )
             return TriggerResult(status="deduped", dedup_key=dedup_key)
 
         resolved_mode = self._resolve_mode(mode)
         model_val = (model or '').strip() or None
+        if model_val is None:
+            model_val = self._events_service.get_last_resolved_model_profile(sid)
         delivery_payload = delivery.model_dump() if delivery is not None else None
 
         def _system_event_writer(task_id: str, invocation_id: str) -> dict:
@@ -411,24 +470,59 @@ class ChatStreamService:
             delivery=delivery_payload,
         )
         if isinstance(handle, Busy):
-            logger.info("trigger_run busy session_id=%s reason=%s", sid, handle.reason)
+            logger.info(
+                "trigger prepare busy session_id=%s reason=%s", sid, handle.reason
+            )
             return TriggerResult(status="busy", reason=handle.reason)
 
-        if not self._enqueue_run(sid, handle.job):
-            return TriggerResult(status="error", reason="enqueue_failed")
+        return TriggerStreamContext(
+            task_id=handle.task_id,
+            invocation_id=handle.invocation_id,
+            owner=owner,
+            job=handle.job,
+            event=handle.event,
+            dedup_key=dedup_key,
+        )
 
-        if dedup_key:
-            get_redis_dao().mark_dedup_key_nx(dedup_key, handle.task_id)
+    def trigger_run(
+        self,
+        session_id: str,
+        prompt: str,
+        *,
+        origin: str,
+        dedup_key: str | None = None,
+        delivery: DeliverySpec | None = None,
+        mode: str | None = None,
+        model: str | None = None,
+        workspace: str | None = None,
+    ) -> TriggerResult:
+        """程序化触发一次 agent run。"""
+        sid = session_id.strip()
+        prep = self.prepare_internal_trigger_run(
+            sid,
+            prompt,
+            origin=origin,
+            dedup_key=dedup_key,
+            delivery=delivery,
+            mode=mode,
+            model=model,
+            workspace=workspace,
+        )
+        if isinstance(prep, TriggerResult):
+            return prep
+
+        if not self._finalize_enqueue(prep, sid):
+            return TriggerResult(status="error", reason="enqueue_failed")
         logger.info(
             "trigger_run enqueued session_id=%s task_id=%s origin=%s",
             sid,
-            handle.task_id,
+            prep.task_id,
             origin,
         )
         return TriggerResult(
             status="enqueued",
-            task_id=handle.task_id,
-            invocation_id=handle.invocation_id,
+            task_id=prep.task_id,
+            invocation_id=prep.invocation_id,
         )
 
     async def generate_subscribe_stream(
@@ -485,6 +579,8 @@ class ChatStreamService:
             owner_alive,
             get_worker_id(),
         )
+        early_stream_subscription = None
+
         if is_stale:
             # 先区分原因再设状态：reason=restart 或 deploy 时会话状态设为 failed，否则设为 idle
             reason, reason_meta = self._deploy_state_service.classify_restart_reason(
@@ -582,65 +678,80 @@ class ChatStreamService:
                 yield self.sse_format(payload)
                 return
         else:
-            yield self.sse_format(payload)
-        for batch in self._iter_history_replay_batches(sid):
-            yield batch
-
-        # 保持流打开直到 Worker 上的 run 结束，或「已入队未接手」结束；仅队列模式，run 不在 API 进程
-        def _run_still_active() -> bool:
-            if self._sessions_service.is_session_run_on_another_pod(sid):
-                return True
-            if REDIS_URL and get_redis_dao().is_session_run_queued(sid):
-                return True
-            return False
-
-        while _run_still_active():
-            if self._sessions_service.is_session_run_on_another_pod(sid):
-                # run 在别的 pod：有 Redis 时订阅 stream channel 收实时事件，否则轮询 + ping 保活
-                if REDIS_URL:
-                    loop = asyncio.get_event_loop()
-                    (
-                        redis_queue,
-                        shutdown_event,
-                        _subscribe_ready,
-                        sub_thread,
-                    ) = _start_redis_stream_subscription(
+            if REDIS_URL and (is_run_on_another_pod or is_run_queued):
+                early_stream_subscription = (
+                    await start_subscription_before_history_replay(
                         sid,
-                        loop,
+                        start_stream_subscription=_start_redis_stream_subscription,
                         thread_name=f"stream-sub-{sid[:8]}",
                     )
-                    try:
-                        while self._sessions_service.is_session_run_on_another_pod(sid):
-                            try:
-                                payload = await asyncio.wait_for(
-                                    redis_queue.get(), timeout=30.0
-                                )
-                            except TimeoutError:
-                                yield self.sse_format(self._ping_payload(sid))
-                                continue
-                            if payload.get('type') == 'stream_closed':
-                                yield self.sse_format(payload)
-                                break
-                            yield self.sse_format(payload)
-                        else:
-                            payload = self._sessions_service.get_session_status_payload(
-                                sid
-                            )
-                            yield self.sse_format(payload)
-                    finally:
-                        shutdown_event.set()
-                        sub_thread.join(timeout=2.0)
-                else:
-                    await asyncio.sleep(5.0)
-                    if not self._sessions_service.is_session_run_on_another_pod(sid):
-                        payload = self._sessions_service.get_session_status_payload(sid)
-                        yield self.sse_format(payload)
-                        break
-                    yield self.sse_format(self._ping_payload(sid))
-            else:
-                # 仅「已入队未接手」：ping 保活，等待 Worker 接手或 queued 超时
-                await asyncio.sleep(5.0)
-                yield self.sse_format(self._ping_payload(sid))
+                )
+            yield self.sse_format(payload)
+        async for chunk in replay_history_and_follow_run_stream(
+            self,
+            sid,
+            start_stream_subscription=_start_redis_stream_subscription,
+            initial_subscription=early_stream_subscription,
+            is_run_on_another_pod=lambda: self._sessions_service.is_session_run_on_another_pod(
+                sid
+            ),
+            is_run_queued=lambda: bool(
+                REDIS_URL and get_redis_dao().is_session_run_queued(sid)
+            ),
+            redis_enabled=bool(REDIS_URL),
+            thread_name=f"stream-sub-{sid[:8]}",
+        ):
+            yield chunk
+
+    async def generate_wakeup_stream(self, user_id: str) -> AsyncGenerator[str, None]:
+        """用户级 wakeup 流：订阅就绪后发送 snapshot，再转发 live wakeup。"""
+        uid = (user_id or "").strip()
+
+        def _snapshot_frames() -> list[str]:
+            return [
+                self.sse_format(
+                    self._session_wakeup_payload(sid, "session_waiting_snapshot")
+                )
+                for sid in self._sessions_service.list_waiting_or_active_session_ids(
+                    uid
+                )
+            ]
+
+        if not REDIS_URL:
+            for frame in _snapshot_frames():
+                yield frame
+            return
+
+        loop = asyncio.get_running_loop()
+        (
+            redis_queue,
+            shutdown_event,
+            subscribe_ready,
+            sub_thread,
+        ) = _start_redis_channel_subscription(
+            user_wakeup_channel(uid),
+            loop,
+            thread_name=f"wakeup-{uid[:8]}",
+        )
+        try:
+            if not await asyncio.to_thread(subscribe_ready.wait, 3.0):
+                logger.warning(
+                    "generate_wakeup_stream: redis subscribe not ready before "
+                    "snapshot user_id=%s",
+                    uid,
+                )
+            for frame in _snapshot_frames():
+                yield frame
+            while True:
+                try:
+                    payload = await asyncio.wait_for(redis_queue.get(), timeout=30.0)
+                except TimeoutError:
+                    yield ": keepalive\n\n"
+                    continue
+                yield self.sse_format(payload)
+        finally:
+            shutdown_event.set()
+            sub_thread.join(timeout=2.0)
 
     def prepare_send_message(
         self,
@@ -799,84 +910,47 @@ class ChatStreamService:
         发送消息流：先推送历史 + 用户消息 + 状态，再订阅 Redis channel 推送 Worker 事件。
         """
         sid = session_id.strip()
-        mode = ctx.mode
-        loop = asyncio.get_running_loop()
-        start_time_ms = int(time.time() * 1000)
         logger.info(
             'generate_send_stream: start session_id=%s task_id=%s mode=%s',
             sid,
             ctx.task_id,
-            mode,
+            ctx.mode,
         )
-
-        # 流开头推送当前会话状态（含 last_task_id、invocation_id 等），便于前端区分轮次
-        payload = self._sessions_service.get_session_status_payload(sid)
-        payload['stream_started_at'] = start_time_ms
-        payload['invocation_id'] = ctx.invocation_id
-        yield self.sse_format(payload)
-        for batch in self._iter_history_replay_batches(
-            sid, exclude_task_id=ctx.task_id
-        ):
-            yield batch
-        yield self.sse_format(ctx.user_msg)
-
-        (
-            redis_queue,
-            shutdown_event,
-            subscribe_ready,
-            sub_thread,
-        ) = _start_redis_stream_subscription(
+        async for chunk in subscribe_enqueue_and_forward(
+            self,
             sid,
-            loop,
+            initiating_event=ctx.user_msg,
+            task_id=ctx.task_id,
+            invocation_id=ctx.invocation_id,
             thread_name=f"send-stream-queue-{sid[:8]}",
-        )
+            enqueue=lambda: self._enqueue_run(sid, ctx.job),
+            start_stream_subscription=_start_redis_stream_subscription,
+        ):
+            yield chunk
 
-        try:
-            if not await asyncio.to_thread(subscribe_ready.wait, 3.0):
-                logger.warning(
-                    'generate_send_stream: redis subscribe not ready before enqueue session_id=%s task_id=%s',
-                    sid,
-                    ctx.task_id,
-                )
-            if not self._enqueue_run(sid, ctx.job):
-                yield self.sse_format(
-                    {
-                        'source': 'System',
-                        'type': 'error',
-                        'content': 'Queue unavailable.',
-                        'session_id': sid,
-                        'invocation_id': ctx.invocation_id,
-                    }
-                )
-                yield self.sse_format(
-                    {
-                        'source': 'System',
-                        'type': 'stream_closed',
-                        'content': '',
-                        'session_id': sid,
-                        'invocation_id': ctx.invocation_id,
-                    }
-                )
-                return
-            while True:
-                try:
-                    payload = await asyncio.wait_for(redis_queue.get(), timeout=30.0)
-                except TimeoutError:
-                    yield self.sse_format(self._ping_payload(sid))
-                    continue
-                elapsed_ms = int(time.time() * 1000) - start_time_ms
-                out = {
-                    **payload,
-                    'elapsed_ms': elapsed_ms,
-                    'stream_started_at': start_time_ms,
-                    'invocation_id': payload.get('invocation_id') or ctx.invocation_id,
-                }
-                yield self.sse_format(out)
-                if payload.get('type') == 'stream_closed':
-                    break
-        finally:
-            shutdown_event.set()
-            sub_thread.join(timeout=2.0)
+    async def generate_internal_trigger_stream(
+        self,
+        session_id: str,
+        ctx: TriggerStreamContext,
+    ) -> AsyncGenerator[str, None]:
+        """内部 HTTP trigger 流：订阅就绪后才入队，再转发 Worker 实时事件。"""
+        sid = session_id.strip()
+        logger.info(
+            'generate_internal_trigger_stream: start session_id=%s task_id=%s',
+            sid,
+            ctx.task_id,
+        )
+        async for chunk in subscribe_enqueue_and_forward(
+            self,
+            sid,
+            initiating_event=ctx.event,
+            task_id=ctx.task_id,
+            invocation_id=ctx.invocation_id,
+            thread_name=f"trigger-stream-{sid[:8]}",
+            enqueue=lambda: self._finalize_enqueue(ctx, sid),
+            start_stream_subscription=_start_redis_stream_subscription,
+        ):
+            yield chunk
 
 
 @lru_cache

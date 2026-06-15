@@ -282,7 +282,7 @@ async def test_malformed_agent_subagent_usage_aborts_run_via_error_path() -> Non
 
 
 @pytest.mark.asyncio
-async def test_run_stream_emits_usage_bearing_thought_complete() -> None:
+async def test_run_stream_thought_complete_is_plain_reasoning() -> None:
     from matmaster.core.agent import AgentKernel
 
     events: list[Any] = []
@@ -300,9 +300,10 @@ async def test_run_stream_emits_usage_bearing_thought_complete() -> None:
     assert len(completes) == 1
     assert completes[0].content == "thinking part 1 part 2"
     assert completes[0].reasoning_content == "thinking part 1 part 2"
-    assert completes[0].turn_index == 0
-    assert completes[0].turn_usage == {"prompt_tokens": 10, "completion_tokens": 5}
-    assert completes[0].total_usage == {"prompt_tokens": 10, "completion_tokens": 5}
+    assert completes[0].turn_index is None
+    assert completes[0].turn_usage == {}
+    assert completes[0].total_usage == {}
+    assert completes[0].usage_vendor is None
 
     segment_ends = [
         e
@@ -377,7 +378,7 @@ async def test_tool_call_events_carry_parent_turn_usage() -> None:
 
 
 @pytest.mark.asyncio
-async def test_reasoning_then_tool_call_thought_and_tool_call_share_turn() -> None:
+async def test_reasoning_then_tool_call_usage_lives_on_tool_call() -> None:
     from matmaster.core.agent import AgentKernel
     from matmaster.tools.tool_result import ToolResult
     from matmaster.types.messages import StreamChunk, ToolCallData
@@ -432,14 +433,15 @@ async def test_reasoning_then_tool_call_thought_and_tool_call_share_turn() -> No
     tool_call_events = [e for e in events if isinstance(e, ToolCallEvent)]
     assert len(thought_completes) == 1
     assert thought_completes[0].content == "plan the call"
-    assert thought_completes[0].turn_usage == {"prompt_tokens": 8}
+    assert thought_completes[0].turn_usage == {}
+    assert thought_completes[0].turn_index is None
     assert len(tool_call_events) == 1
-    assert tool_call_events[0].turn_index == thought_completes[0].turn_index
+    assert tool_call_events[0].turn_index == 0
     assert tool_call_events[0].turn_usage == {"prompt_tokens": 8}
 
 
 @pytest.mark.asyncio
-async def test_retry_discarded_attempt_does_not_emit_usage_thought_complete() -> None:
+async def test_retry_discarded_attempt_thought_complete_is_accepted_reasoning() -> None:
     from matmaster.core.agent import AgentKernel
     from matmaster.types.messages import LLMResponse, StreamChunk
 
@@ -489,7 +491,7 @@ async def test_retry_discarded_attempt_does_not_emit_usage_thought_complete() ->
         if isinstance(e, ThoughtEvent) and e.stream_state == "complete"
     ]
     assert [e.content for e in completes] == ["kept reasoning"]
-    assert completes[0].turn_usage == {"prompt_tokens": 10}
+    assert completes[0].turn_usage == {}
     for ev in events:
         if isinstance(ev, ThoughtEvent) and ev.stream_state != "complete":
             assert ev.turn_usage == {}
@@ -540,7 +542,7 @@ async def test_invalid_finish_reasoning_only_still_emits_thought_complete() -> N
         if isinstance(e, ThoughtEvent) and e.stream_state == "complete"
     ]
     assert [e.content for e in completes] == ["attempt 2"]
-    assert completes[0].turn_usage == {"prompt_tokens": 4}
+    assert completes[0].turn_usage == {}
     run_result = next(e for e in events if isinstance(e, RunResultEvent))
     assert run_result.status == "failed"
     assert run_result.reason == "invalid_finish"

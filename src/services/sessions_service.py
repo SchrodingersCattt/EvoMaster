@@ -390,6 +390,10 @@ class ChatSessionsService:
         uid = row.get("user_id")
         return str(uid) if uid is not None else None
 
+    def list_waiting_or_active_session_ids(self, user_id: str) -> list[str]:
+        """该用户名下仍在 waiting 或 active 的 session_id。"""
+        return self.table.list_session_ids_by_status(user_id, ["waiting", "active"])
+
     def set_session_bohrium(
         self,
         session_id: str,

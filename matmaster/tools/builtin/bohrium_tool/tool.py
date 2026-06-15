@@ -16,8 +16,10 @@ Design decisions:
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
+import time
 from pathlib import Path
 from typing import Any, ClassVar
 
@@ -45,9 +47,9 @@ from matmaster.bohrium.status import (
 from matmaster.bohrium.types import BohriumContext
 from matmaster.bohrium.upload import upload_input_archive
 from matmaster.tools.builtin.base import BuiltinTool
-from matmaster.tools.tool_result import ToolResult
+from matmaster.tools.tool_result import ToolResult, normalize_tool_result
 from matmaster.types.tool_desc_ctx import ToolDescriptionContext
-from matmaster.types.tool_spec import ResourceClaim
+from matmaster.types.tool_spec import ResourceClaim, ToolExecutionContext
 from matmaster.types.topology import ToolPlane
 
 from .errors import BohriumJobStateError
@@ -250,6 +252,12 @@ class BohriumTool(BuiltinTool):
     exposed_to_model: ClassVar[bool] = True
     max_result_chars: ClassVar[int] = 0
 
+    # In-turn query pacing. Minimum seconds between two real platform queries
+    # for the same running job within one agent run. Kept as class attributes
+    # so this stays a fixed runtime policy while tests can monkeypatch it.
+    _QUERY_MIN_INTERVAL_SECONDS: ClassVar[float] = 30.0
+    _QUERY_PACING_STATE_KEY: ClassVar[str] = "bohrium_query_pacing"
+
     def __init__(
         self,
         *,
@@ -291,12 +299,10 @@ class BohriumTool(BuiltinTool):
             'prepend "cd <path> &&" or any directory change. '
             'cmd MUST end with "> log 2>&1" (auto-appended if missing).\n'
             '- **query**: query a job\'s current status in a single call and '
-            'return immediately - no blocking, no internal waiting. After '
-            'submitting a job you do NOT need to repeatedly query and wait: '
-            'long-running monitoring happens automatically in the background, '
-            'and a job\'s completion will be surfaced in later context. Only '
-            'call query when you actively need to confirm one job\'s current '
-            'status, by single job_id. Does not download artifacts.\n'
+            'by single job_id. The first query for a job returns immediately; '
+            'repeated in-turn query calls for the same running job may be '
+            'paced by the tool. Only call query when you actively need to '
+            'confirm one job\'s current status.\n'
             '- **download**: download artifacts for a finished or failed job into result_dir. '
             'Use only after query reports Finished or Failed. Requires result_dir; '
             'retrieves logs and artifacts for analysis.\n'
@@ -306,6 +312,35 @@ class BohriumTool(BuiltinTool):
             '- **list_images**: list the user\'s own private Docker images (filtered by keyword).\n'
             '- **list_machines**: query available machine types (cpu / gpu).\n'
             '\n'
+            '### Handoff & exit\n'
+            '- After submit succeeds, sanity-check the job ONCE with query '
+            'before ending your turn: Failed → triage immediately (download '
+            'logs, fix and resubmit, or report); Running → started cleanly; '
+            'still queued (Pending/Scheduling) → safe to end as well, a later '
+            'failure will wake you. For a batch sharing one '
+            'image/machine/config, checking a few jobs is enough — once any '
+            'job reaches Running the shared config is validated; do NOT '
+            'verify every job.\n'
+            '- By default do NOT wait for completion: no sleep loops, no '
+            'poll-until-finished. Background monitoring takes over after '
+            'submit; when jobs reach terminal states (or the first failure '
+            'appears) you will be invoked again automatically with current '
+            'job state in context.\n'
+            '- Exception — quick jobs: if a job is expected to finish within '
+            'a few minutes, you MAY keep querying it in-turn. The Bohrium tool '
+            'automatically paces repeated query calls for the same running '
+            'job, so do NOT manage query cadence yourself with Bash sleep. If '
+            'you have other pending work, do that FIRST instead of firing a '
+            'query and waiting — once a paced query is issued, this turn '
+            'blocks until that tool call returns and you cannot do other work '
+            'meanwhile. Still wait at most ~5 minutes in total; after that '
+            'hand off to background monitoring and end your turn.\n'
+            '- A submit error means NO job was created: fix and resubmit, or '
+            'report it. Never end your turn implying a failed submit '
+            'succeeded.\n'
+            '- When ending your turn, summarize submitted jobs (job_id, '
+            'job_name) and tell the user results will be delivered '
+            'automatically.\n'
         )
 
     def _build_context(self, *, require_project: bool = False) -> BohriumContext:
@@ -332,6 +367,44 @@ class BohriumTool(BuiltinTool):
             get_bohrium_service_env(),
             mask_secret(ctx.credentials.access_key),
         )
+
+    async def execute_with_context(
+        self,
+        arguments: dict[str, Any],
+        exec_ctx: ToolExecutionContext | None,
+    ) -> str | ToolResult:
+        """Pace repeated query calls for the same running job within one run."""
+        if arguments.get("action") != "query":
+            return await super().execute_with_context(arguments, exec_ctx)
+
+        raw_job_id = arguments.get("job_id")
+        runner_state = exec_ctx.runner_state if exec_ctx is not None else None
+        if raw_job_id is None or runner_state is None:
+            return await super().execute_with_context(arguments, exec_ctx)
+
+        pacing = runner_state.get(self._QUERY_PACING_STATE_KEY)
+        if pacing is None:
+            pacing = {}
+            runner_state.set(self._QUERY_PACING_STATE_KEY, pacing)
+
+        normalized_job_id = str(raw_job_id).strip()
+        record = pacing.get(normalized_job_id)
+        if record is not None and record["running"]:
+            wait = self._QUERY_MIN_INTERVAL_SECONDS - (
+                time.monotonic() - record["last_checked_monotonic"]
+            )
+            if wait > 0:
+                await asyncio.sleep(wait)
+
+        result = await asyncio.to_thread(self._execute, arguments)
+
+        normalized = normalize_tool_result(result)
+        if normalized.status == "success":
+            pacing[normalized_job_id] = {
+                "last_checked_monotonic": time.monotonic(),
+                "running": bool(normalized.meta.get("bohrium_running")),
+            }
+        return result
 
     def _execute(self, arguments: dict[str, Any]) -> str | ToolResult:
         action = arguments.get("action", "")
@@ -521,6 +594,10 @@ class BohriumTool(BuiltinTool):
             return ToolResult(
                 status="success",
                 content=json.dumps(result_payload, ensure_ascii=False),
+                meta={
+                    "bohrium_running": code in RUNNING_CODES,
+                    "bohrium_status_code": int(code),
+                },
             )
 
         except Exception as exc:

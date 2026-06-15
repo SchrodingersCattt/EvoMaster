@@ -15,8 +15,8 @@ from matmaster.context.ports import (
     ContextAssemblyPorts,
     SessionEvent,
     SessionEventQuery,
-    SessionJobs,
     UserInstructions,
+    WorkspaceJobs,
 )
 from matmaster.context.sections import ContextSection, ContextView, SectionOrder
 from matmaster.context.session import SessionContextBuilder
@@ -47,9 +47,9 @@ class JobsPort:
     def __init__(self) -> None:
         self.queries = []
 
-    async def load_session_jobs(self, query):
+    async def load_workspace_jobs(self, query):
         self.queries.append(query)
-        return SessionJobs(active_jobs=({"id": "job-1"},))
+        return WorkspaceJobs(active_jobs=({"id": "job-1"},))
 
 
 def _session_builder(events, until_event_id, include_attachments):
@@ -76,7 +76,7 @@ async def test_assemble_turn_anchor_loads_events_and_jobs() -> None:
     events_port = EventsPort()
     jobs_port = JobsPort()
     assembler = ContextAssembler(
-        ContextAssemblyPorts(session_events=events_port, session_jobs=jobs_port),
+        ContextAssemblyPorts(session_events=events_port, workspace_jobs=jobs_port),
         _session_section_builder_for_tests=_session_builder,
     )
 
@@ -426,7 +426,7 @@ async def test_assembler_scopes_events_to_until_event_id_before_factory() -> Non
     assembler = ContextAssembler(
         ports=ContextAssemblyPorts(
             session_events=_UnscopedEventsPort(events),
-            session_jobs=None,
+            workspace_jobs=None,
         ),
         session_context_factory=factory,
     )

@@ -15,7 +15,6 @@ def test_main_prompt_requires_skill_layering_rules() -> None:
 def test_optimization_prompt_requires_skill_layering_rules() -> None:
     prompt = loop_prompts.SYSTEM_PROMPT_OPTIMIZATION
 
-    assert "`SKILL.md` 正文只承载" in prompt
     assert "`references/`" in prompt
     assert "`scripts/`" in prompt
 

@@ -11,7 +11,6 @@ from src.services.bohrium_completion_scheduler import (
     Reason,
     SchedulerConfig,
     decide,
-    render_prompt,
 )
 
 
@@ -28,6 +27,8 @@ def _unit(**over):
         failed_total=0,
         failed_handled=0,
         succeeded=1,
+        unknown_count=0,
+        oldest_pending_age_seconds=0,
         max_pending_terminal_id=10,
     )
     base.update(over)
@@ -104,47 +105,64 @@ def test_progress_count_bounded_by_segments_total_1000():
     assert progress_hits <= CFG.progress_segments
 
 
-# ---------- render_prompt ----------
-
-_SUFFIX = "本轮交付为 session 级"
-
-
-def test_render_final_prompt_has_counts_and_scope_suffix():
-    prompt = render_prompt(
-        Reason.FINAL,
-        {"total": 10, "active": 0, "succeeded": 8, "failed_total": 2},
+def test_decide_stalled_when_all_actives_unknown_and_pending_aged():
+    unit = _unit(
+        total=10,
+        active=7,
+        pending_terminal=3,
+        unknown_count=7,
+        oldest_pending_age_seconds=900,
     )
-    assert "成功 8/10" in prompt and "失败 2" in prompt
-    assert _SUFFIX in prompt
+    assert decide(unit, CFG) is Reason.STALLED
 
 
-def test_render_first_failure_prompt_carries_job_info_and_suffix():
-    prompt = render_prompt(
-        Reason.FIRST_FAILURE,
-        {"total": 10, "active": 7, "succeeded": 2, "failed_total": 1},
-        first_failed={"job_id": "j-9", "job_name": "dft-9", "status": "failed"},
+def test_decide_no_stalled_when_some_active_still_running():
+    unit = _unit(
+        total=10,
+        active=7,
+        pending_terminal=3,
+        unknown_count=6,
+        oldest_pending_age_seconds=3600,
     )
-    assert "j-9" in prompt and "dft-9" in prompt and "7 个作业仍在运行" in prompt
-    assert _SUFFIX in prompt
+    assert decide(unit, CFG) is None
 
 
-def test_render_first_failure_prompt_degrades_when_row_vanished():
-    # §4d 查不到（竞态被并发 run ack）：降级文案，照常触发
-    prompt = render_prompt(
-        Reason.FIRST_FAILURE,
-        {"total": 3, "active": 2, "succeeded": 0, "failed_total": 1},
-        first_failed=None,
+def test_decide_no_stalled_before_age_threshold():
+    unit = _unit(
+        total=10,
+        active=7,
+        pending_terminal=3,
+        unknown_count=7,
+        oldest_pending_age_seconds=899,
     )
-    assert "unknown" in prompt and _SUFFIX in prompt
+    assert decide(unit, CFG) is None
 
 
-def test_render_progress_prompt_has_terminal_ratio_and_suffix():
-    prompt = render_prompt(
-        Reason.PROGRESS,
-        {"total": 9, "active": 3, "succeeded": 6, "failed_total": 0},
+def test_decide_progress_preempts_stalled_at_threshold():
+    unit = _unit(
+        total=10,
+        active=6,
+        pending_terminal=4,
+        unknown_count=6,
+        oldest_pending_age_seconds=3600,
     )
-    assert "已终态 6/9" in prompt and "仍在运行 3" in prompt
-    assert _SUFFIX in prompt
+    assert decide(unit, CFG) is Reason.PROGRESS
+
+
+def test_decide_first_failure_preempts_stalled():
+    unit = _unit(
+        total=10,
+        active=7,
+        pending_terminal=3,
+        failed_total=1,
+        unknown_count=7,
+        oldest_pending_age_seconds=3600,
+    )
+    assert decide(unit, CFG) is Reason.FIRST_FAILURE
+
+
+def test_reason_priority_order_for_session_merge():
+    assert Reason.PROGRESS < Reason.STALLED < Reason.FIRST_FAILURE < Reason.FINAL
 
 
 # ---------- tick 编排（假对象注入） ----------
@@ -154,19 +172,13 @@ class _FakeJobsTable:
     """只实现 scheduler 用到的两个读方法；任何写方法被调用都会 AttributeError，
     这本身就是「enqueued 后不写任何持久状态」的守护。"""
 
-    def __init__(self, units=(), first_failed=None):
+    def __init__(self, units=()):
         self.units = list(units)
-        self.first_failed = first_failed
         self.scan_limits: list[int] = []
-        self.first_failed_calls: list[dict] = []
 
     def scan_delivery_units(self, *, limit):
         self.scan_limits.append(limit)
         return list(self.units)
-
-    def get_first_pending_failed(self, **kw):
-        self.first_failed_calls.append(kw)
-        return self.first_failed
 
 
 class _FakeSessions:
@@ -260,30 +272,72 @@ def test_tick_merges_session_units_single_trigger_with_primary_reason():
     assert summary["triggered"] == 1 and len(stream.calls) == 1
     assert len(redis.calls) == 1  # 同 session 两单元只占一次位
     # NX key 用 session 内 max_pending_terminal_id 高水位
-    assert redis.calls[0]["key"] == "bohrium_delivery:u1:o1:s1:12"
-    # primary = FINAL：文案 + notify
-    assert "全部 Bohrium 作业已结束" in stream.calls[0]["prompt"]
+    assert redis.calls[0]["key"] == "bohrium_delivery:u1:o1:s1:/share/p:12"
+    # primary = FINAL：notify
     assert stream.calls[0]["delivery"] == DeliverySpec(notify=True)
 
 
-def test_tick_first_failure_fetches_job_info_into_prompt():
+def test_tick_separates_workspaces_into_distinct_reservations():
+    units = [
+        _unit(
+            workspace="/share/a",
+            active=0,
+            pending_terminal=1,
+            succeeded=1,
+            total=1,
+            max_pending_terminal_id=5,
+        ),
+        _unit(
+            workspace="/share/b",
+            active=0,
+            pending_terminal=1,
+            succeeded=1,
+            total=1,
+            max_pending_terminal_id=9,
+        ),
+    ]
+    sched, _, _, redis, stream = _scheduler(units)
+
+    summary = sched.tick()
+
+    # 两个 workspace 各占一次位、各触发一次（fake sessions 恒 idle）
+    assert summary["triggered"] == 2
+    assert {c["workspace"] for c in stream.calls} == {"/share/a", "/share/b"}
+    assert sorted(c["key"] for c in redis.calls) == [
+        "bohrium_delivery:u1:o1:s1:/share/a:5",
+        "bohrium_delivery:u1:o1:s1:/share/b:9",
+    ]
+
+
+def test_tick_first_failure_triggers_reason_header():
     units = [_unit(total=3, active=2, pending_terminal=1, failed_total=1, succeeded=0)]
-    table = _FakeJobsTable(
-        units, first_failed={"job_id": "j-9", "job_name": "dft", "status": "failed"}
-    )
+    table = _FakeJobsTable(units)
     sched, _, _, _, stream = _scheduler(units, table=table)
 
     sched.tick()
 
-    assert table.first_failed_calls == [
-        {
-            "user_id": "u1",
-            "org_id": "o1",
-            "session_id": "s1",
-            "invocation_key": "inv-1",
-        }
+    assert stream.calls[0]["delivery"] == DeliverySpec(notify=False)
+    assert stream.calls[0]["prompt"] == (
+        "本会话出现失败的 Bohrium 作业，仍有作业在运行。"
+    )
+
+
+def test_tick_stalled_unit_triggers_without_notify():
+    units = [
+        _unit(
+            total=10,
+            active=7,
+            pending_terminal=3,
+            succeeded=3,
+            unknown_count=7,
+            oldest_pending_age_seconds=900,
+        )
     ]
-    assert "j-9" in stream.calls[0]["prompt"]
+    sched, _, _, _, stream = _scheduler(units)
+
+    summary = sched.tick()
+
+    assert summary["triggered"] == 1
     assert stream.calls[0]["delivery"] == DeliverySpec(notify=False)
 
 
@@ -298,12 +352,11 @@ def test_tick_null_invocation_sentinel_unit_flows_through():
             succeeded=0,
         )
     ]
-    table = _FakeJobsTable(units, first_failed=None)
+    table = _FakeJobsTable(units)
     sched, _, _, _, stream = _scheduler(units, table=table)
 
     sched.tick()
 
-    assert table.first_failed_calls[0]["invocation_key"] == ""
     assert len(stream.calls) == 1
 
 

@@ -5,8 +5,8 @@ from matmaster.context.ports import (
     ContextAssemblyPorts,
     SessionEvent,
     SessionEventQuery,
-    SessionJobs,
     UserInstructions,
+    WorkspaceJobs,
 )
 
 
@@ -66,8 +66,8 @@ def test_session_event_query_defaults_are_scope_safe() -> None:
     assert query.order == "asc"
 
 
-def test_session_jobs_empty_returns_no_active_jobs() -> None:
-    assert SessionJobs.empty().active_jobs == ()
+def test_workspace_jobs_empty_returns_no_active_jobs() -> None:
+    assert WorkspaceJobs.empty().active_jobs == ()
 
 
 def test_context_assembly_ports_optional_jobs_port_defaults_none() -> None:
@@ -77,7 +77,7 @@ def test_context_assembly_ports_optional_jobs_port_defaults_none() -> None:
 
     ports = ContextAssemblyPorts(session_events=EventsPort())
 
-    assert ports.session_jobs is None
+    assert ports.workspace_jobs is None
     assert not hasattr(ports, "extra")
     assert not hasattr(ports, "metadata")
     assert not hasattr(ports, "state")

@@ -19,6 +19,7 @@ def _run_one_round(
     run_result,
     confirm_exc=None,
     run_agent_exc=None,
+    origin=None,
 ):
     """注入全部外部依赖，跑一轮循环，返回 (有序调用名列表, run_agent 收到的 kwargs)。"""
     calls: list[str] = []
@@ -30,6 +31,7 @@ def _run_one_round(
         "user_prompt": "hi",
         # notify=False 跳过完成卡片/邮件分支，缩小注入面
         "delivery": {"notify": False},
+        "origin": origin,
     }
 
     fake_redis = MagicMock()
@@ -60,8 +62,9 @@ def _run_one_round(
     fake_ars.run_agent = fake_run_agent
     monkeypatch.setattr(agent_worker, "get_agent_run_service", lambda: fake_ars)
 
-    def fake_snapshot(session_id):
+    def fake_snapshot(session_id, *, workspace=None):
         calls.append("snapshot")
+        received["snapshot_workspace"] = workspace
         return snapshot_obj
 
     def fake_confirm(snap):
@@ -94,6 +97,8 @@ def test_success_path_orders_snapshot_run_confirm_release(monkeypatch):
 
     assert calls == ["acquire", "snapshot", "run_agent", "confirm", "release:True"]
     assert received["delivery_snapshot"] is snap
+    assert received["snapshot_workspace"] is None
+    assert received["job_context_mode"] == "workspace_observation"
 
 
 def test_failed_run_skips_confirm(monkeypatch):
@@ -125,3 +130,14 @@ def test_none_snapshot_runs_without_confirm(monkeypatch):
     calls, received = _run_one_round(monkeypatch, snapshot_obj=None, run_result=True)
     assert calls == ["acquire", "snapshot", "run_agent", "release:True"]
     assert received["delivery_snapshot"] is None
+    assert received["job_context_mode"] == "workspace_observation"
+
+
+def test_bohrium_completion_origin_uses_delivery_mode(monkeypatch):
+    snap = object()
+    calls, received = _run_one_round(
+        monkeypatch, snapshot_obj=snap, run_result=True, origin="bohrium_completion"
+    )
+    assert received["job_context_mode"] == "session_workspace_delivery"
+    assert received["delivery_snapshot"] is snap
+    assert calls == ["acquire", "snapshot", "run_agent", "confirm", "release:True"]

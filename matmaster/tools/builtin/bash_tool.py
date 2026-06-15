@@ -49,16 +49,11 @@ class BashTool(BuiltinTool):
             "timeout": {
                 "type": "integer",
                 "minimum": 1,
-                "maximum": 3600000,
+                "maximum": 600000,
                 "description": (
                     "Optional timeout in milliseconds. "
                     "Default: 120000ms (2 minutes). "
                     "Max 600000ms (10 min) for general commands. "
-                    "Exception: pure `sleep N` commands "
-                    "may set timeout up to 3600000ms (1 hour), for use as "
-                    "polling intervals between long-time HPC job status checks. "
-                    "Compound commands like `sleep 3600 && ...` are NOT "
-                    "eligible for the higher cap. "
                 ),
             },
             "description": {

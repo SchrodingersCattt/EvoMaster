@@ -5,15 +5,28 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections.abc import Callable
+from typing import Any
 
 from matmaster.bohrium.status import to_ledger_status
-from matmaster.context.ports import SessionJobs, SessionJobsQuery
+from matmaster.context.ports import (
+    WorkspaceJobs,
+    WorkspaceJobsExportError,
+    WorkspaceJobsPort,
+    WorkspaceJobsQuery,
+)
+from matmaster.context.workspace_jobs_compute import (
+    compute_inline_chars,
+    compute_summary,
+    select_priority_samples,
+)
 from src.dao.bohrium_jobs_table import BohriumJobsTable, get_bohrium_jobs_table
 from src.services.bohrium_delivery_ack import DeliverySnapshot
 from src.services.session_directory_service import (
     SessionDirectoryError,
     normalize_remote_workspace_path,
 )
+from src.services.workspace_jobs_export import WorkspaceJobsCsvExporter
+from src.utils.constant import env_int
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +69,7 @@ class _BohriumJobLedger:
         org_id: str,
         workspace: str,
         spawn_id: str | None = None,
+        observed_terminal: set[tuple[bool, str]] | None = None,
     ) -> None:
         self._table_ref = table_ref
         self._session_id = session_id
@@ -64,6 +78,7 @@ class _BohriumJobLedger:
         self._org_id = org_id
         self._workspace = workspace
         self._spawn_id = spawn_id
+        self._observed_terminal = observed_terminal
 
     def _require_identity(self) -> None:
         missing = [
@@ -122,6 +137,8 @@ class _BohriumJobLedger:
             is_terminal=decision.is_terminal,
             backoff_seconds=_FOREGROUND_POLL_BACKOFF_SECONDS,
         )
+        if decision.is_terminal and self._observed_terminal is not None:
+            self._observed_terminal.add((bool(sandbox), str(job_id)))
 
     def record_kill(self, *, job_id: str, sandbox: bool) -> None:
         self._require_identity()
@@ -133,61 +150,206 @@ class _BohriumJobLedger:
         )
 
 
-class _RunSessionJobsPort:
+class _SessionWorkspaceDeliveryJobsPort:
+    """delivery：只围绕本 session 的 snapshot.rows，只用 row 阈值。
+
+    未超阈值返回含完整 pending_terminal_jobs 的 WorkspaceJobs；超阈值仅选
+    action 样本并导出 pending CSV；导出失败时写 snapshot.export_failure。
+    """
+
+    def __init__(
+        self,
+        *,
+        workspace: str,
+        snapshot: DeliverySnapshot | None,
+        exporter: WorkspaceJobsCsvExporter,
+        row_limit: int,
+        action_sample_limit: int,
+    ) -> None:
+        self._workspace = workspace
+        self._snapshot = snapshot
+        self._exporter = exporter
+        self._row_limit = row_limit
+        self._action_sample_limit = action_sample_limit
+
+    async def load_workspace_jobs(self, query: WorkspaceJobsQuery) -> WorkspaceJobs:
+        pending: tuple[dict[str, Any], ...] = (
+            self._snapshot.rows if self._snapshot is not None else ()
+        )
+        summary = compute_summary((), pending, ())
+        if len(pending) <= self._row_limit:
+            return WorkspaceJobs(
+                workspace=self._workspace,
+                pending_terminal_jobs=pending,
+                summary=summary,
+                mode="session_workspace_delivery",
+            )
+        samples = select_priority_samples(
+            (),
+            pending,
+            (),
+            action_limit=self._action_sample_limit,
+            fill_limit=0,
+        )
+        export_input = WorkspaceJobs(
+            workspace=self._workspace,
+            pending_terminal_jobs=pending,
+        )
+        result = self._exporter.export(export_input, reason="row_limit")
+        if isinstance(result, WorkspaceJobsExportError):
+            self._record_export_failure(result)
+            return WorkspaceJobs(
+                workspace=self._workspace,
+                summary=summary,
+                priority_samples=samples,
+                export_error=result,
+                mode="session_workspace_delivery",
+            )
+        return WorkspaceJobs(
+            workspace=self._workspace,
+            summary=summary,
+            priority_samples=samples,
+            export=result,
+            mode="session_workspace_delivery",
+        )
+
+    def _record_export_failure(self, err: WorkspaceJobsExportError) -> None:
+        if self._snapshot is None:
+            return
+        self._snapshot.export_failure.update(
+            {
+                "reason": err.reason,
+                "rows": err.rows,
+                "target_path": err.target_path,
+            }
+        )
+
+
+class _WorkspaceObservationJobsPort:
+    """observation：跨 session 完整快照，row+char 双阈值。"""
+
     def __init__(
         self,
         *,
         table_ref: _BohriumJobsTableRef,
         user_id: str,
         org_id: str,
-        snapshot: DeliverySnapshot | None = None,
+        workspace: str,
+        exporter: WorkspaceJobsCsvExporter,
+        snapshot: DeliverySnapshot | None,
+        row_limit: int,
+        char_limit: int,
+        action_sample_limit: int,
+        priority_sample_limit: int,
+        max_rows: int,
     ) -> None:
         self._table_ref = table_ref
         self._user_id = user_id
         self._org_id = org_id
+        self._workspace = workspace
+        self._exporter = exporter
         self._snapshot = snapshot
+        self._row_limit = row_limit
+        self._char_limit = char_limit
+        self._action_sample_limit = action_sample_limit
+        self._priority_sample_limit = priority_sample_limit
+        self._max_rows = max_rows
 
-    async def load_session_jobs(self, query: SessionJobsQuery) -> SessionJobs:
-        if not (self._user_id and self._org_id):
-            return SessionJobs.empty()
+    async def load_workspace_jobs(self, query: WorkspaceJobsQuery) -> WorkspaceJobs:
         try:
             table = self._table_ref.get()
-            active_call = asyncio.to_thread(
-                table.query_session_active,
-                user_id=self._user_id,
-                org_id=self._org_id,
-                session_id=query.session_id,
+            active, pending, recent = await asyncio.gather(
+                asyncio.to_thread(
+                    table.query_workspace_active,
+                    user_id=self._user_id,
+                    org_id=self._org_id,
+                    workspace=self._workspace,
+                ),
+                asyncio.to_thread(
+                    table.query_workspace_pending_terminal,
+                    user_id=self._user_id,
+                    org_id=self._org_id,
+                    workspace=self._workspace,
+                    limit=self._max_rows,
+                ),
+                asyncio.to_thread(
+                    table.query_workspace_recent_terminal,
+                    user_id=self._user_id,
+                    org_id=self._org_id,
+                    workspace=self._workspace,
+                    limit=self._max_rows,
+                ),
             )
-            if self._snapshot is not None:
-                # 本轮交付边界固定：compaction 再调时返回同一 snapshot 的 pending
-                active = await active_call
-                pending = self._snapshot.rows
-                detail_limit: int | None = self._snapshot.detail_limit
-            else:
-                active, rows = await asyncio.gather(
-                    active_call,
-                    asyncio.to_thread(
-                        table.query_session_pending_terminal,
-                        user_id=self._user_id,
-                        org_id=self._org_id,
-                        session_id=query.session_id,
-                        limit=5,
-                    ),
-                )
-                pending = tuple(rows)
-                detail_limit = None
         except Exception:  # noqa: BLE001
             logger.warning(
-                "load_session_jobs failed session_id=%s",
-                query.session_id,
+                "load_workspace_jobs(observation) failed workspace=%s",
+                self._workspace,
                 exc_info=True,
             )
-            return SessionJobs.empty()
-        return SessionJobs(
-            active_jobs=tuple(active),
-            pending_terminal_jobs=tuple(pending),
-            detail_limit=detail_limit,
+            return WorkspaceJobs.empty()
+        active_t = tuple(active)
+        pending_t = tuple(pending)
+        recent_t = tuple(recent)
+        truncated = len(pending_t) >= self._max_rows or len(recent_t) >= self._max_rows
+        summary = compute_summary(active_t, pending_t, recent_t)
+        full = WorkspaceJobs(
+            workspace=self._workspace,
+            active_jobs=active_t,
+            pending_terminal_jobs=pending_t,
+            recent_terminal_jobs=recent_t,
+            summary=summary,
+            mode="workspace_observation",
+            snapshot_truncated=truncated,
         )
+        if (
+            summary.total <= self._row_limit
+            and compute_inline_chars(full) <= self._char_limit
+        ):
+            return full
+        samples = select_priority_samples(
+            active_t,
+            pending_t,
+            recent_t,
+            action_limit=self._action_sample_limit,
+            fill_limit=self._priority_sample_limit,
+        )
+        reason = "row_limit" if summary.total > self._row_limit else "char_limit"
+        result = self._exporter.export(full, reason=reason)
+        if isinstance(result, WorkspaceJobsExportError):
+            self._record_export_failure(result)
+            return WorkspaceJobs(
+                workspace=self._workspace,
+                summary=summary,
+                priority_samples=samples,
+                export_error=result,
+                mode="workspace_observation",
+                snapshot_truncated=truncated,
+            )
+        return WorkspaceJobs(
+            workspace=self._workspace,
+            summary=summary,
+            priority_samples=samples,
+            export=result,
+            omitted_count=summary.total - len(samples),
+            mode="workspace_observation",
+            snapshot_truncated=truncated,
+        )
+
+    def _record_export_failure(self, err: WorkspaceJobsExportError) -> None:
+        if self._snapshot is None:
+            return
+        self._snapshot.export_failure.update(
+            {
+                "reason": err.reason,
+                "rows": err.rows,
+                "target_path": err.target_path,
+            }
+        )
+
+
+class _EmptyWorkspaceJobsPort:
+    async def load_workspace_jobs(self, query: WorkspaceJobsQuery) -> WorkspaceJobs:
+        return WorkspaceJobs.empty()
 
 
 def build_bohrium_jobs_ports(
@@ -197,14 +359,21 @@ def build_bohrium_jobs_ports(
     user_id: str,
     org_id: str,
     workspace: str | None,
+    exporter: WorkspaceJobsCsvExporter,
+    job_context_mode: str = "session_workspace_delivery",
     spawn_id: str | None = None,
     delivery_snapshot: DeliverySnapshot | None = None,
     table: BohriumJobsTable | None = None,
     table_factory: Callable[[], BohriumJobsTable] = get_bohrium_jobs_table,
-) -> tuple[_BohriumJobLedger | None, _RunSessionJobsPort]:
+) -> tuple[_BohriumJobLedger | None, WorkspaceJobsPort]:
     """构造写 port 与读 port（共享同一个 DAO 实例）。"""
     table_ref = _BohriumJobsTableRef(table=table, table_factory=table_factory)
     normalized_workspace = _normalize_ledger_workspace(workspace)
+    row_limit = env_int("BOHRIUM_WORKSPACE_JOBS_INLINE_ROW_LIMIT", 50)
+    action_sample_limit = env_int("BOHRIUM_WORKSPACE_JOBS_ACTION_SAMPLE_LIMIT", 200)
+    char_limit = env_int("BOHRIUM_WORKSPACE_JOBS_INLINE_CHAR_LIMIT", 12000)
+    priority_sample_limit = env_int("BOHRIUM_WORKSPACE_JOBS_PRIORITY_SAMPLE_LIMIT", 20)
+    max_rows = env_int("BOHRIUM_WORKSPACE_JOBS_OBSERVATION_MAX_ROWS", 2000)
     ledger = (
         _BohriumJobLedger(
             table_ref=table_ref,
@@ -214,14 +383,39 @@ def build_bohrium_jobs_ports(
             org_id=org_id,
             workspace=normalized_workspace,
             spawn_id=spawn_id,
+            observed_terminal=(
+                delivery_snapshot.observed_terminal
+                if delivery_snapshot is not None
+                else None
+            ),
         )
         if normalized_workspace is not None
         else None
     )
-    jobs = _RunSessionJobsPort(
-        table_ref=table_ref,
-        user_id=user_id,
-        org_id=org_id,
-        snapshot=delivery_snapshot,
-    )
+    if normalized_workspace is None or not (user_id and org_id):
+        jobs: WorkspaceJobsPort = _EmptyWorkspaceJobsPort()
+    elif job_context_mode == "workspace_observation":
+        jobs = _WorkspaceObservationJobsPort(
+            table_ref=table_ref,
+            user_id=user_id,
+            org_id=org_id,
+            workspace=normalized_workspace,
+            exporter=exporter,
+            snapshot=delivery_snapshot,
+            row_limit=row_limit,
+            char_limit=char_limit,
+            action_sample_limit=action_sample_limit,
+            priority_sample_limit=priority_sample_limit,
+            max_rows=max_rows,
+        )
+    elif job_context_mode == "session_workspace_delivery":
+        jobs = _SessionWorkspaceDeliveryJobsPort(
+            workspace=normalized_workspace,
+            snapshot=delivery_snapshot,
+            exporter=exporter,
+            row_limit=row_limit,
+            action_sample_limit=action_sample_limit,
+        )
+    else:
+        jobs = _EmptyWorkspaceJobsPort()
     return ledger, jobs

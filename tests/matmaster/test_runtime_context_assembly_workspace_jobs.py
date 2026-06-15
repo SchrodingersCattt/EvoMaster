@@ -6,12 +6,12 @@ from types import SimpleNamespace
 import matmaster.core.runtime_context_assembly as rca
 
 
-def _make_ctx(session_jobs_port) -> SimpleNamespace:
+def _make_ctx(workspace_jobs_port) -> SimpleNamespace:
     return SimpleNamespace(
         request=SimpleNamespace(
             ports=SimpleNamespace(
                 compaction=SimpleNamespace(history=None),
-                session_jobs=session_jobs_port,
+                workspace_jobs=workspace_jobs_port,
             ),
             user_instructions=None,
         ),
@@ -38,7 +38,7 @@ def _patch_heavy(monkeypatch):
     return captured
 
 
-def test_uses_injected_session_jobs_port(monkeypatch) -> None:
+def test_uses_injected_workspace_jobs_port(monkeypatch) -> None:
     captured = _patch_heavy(monkeypatch)
     fake_port = object()
     rca.build_runtime_context_assembly(
@@ -49,7 +49,7 @@ def test_uses_injected_session_jobs_port(monkeypatch) -> None:
         spawn_id=None,
         logger=logging.getLogger("test"),
     )
-    assert captured["ports"].session_jobs is fake_port
+    assert captured["ports"].workspace_jobs is fake_port
 
 
 def test_falls_back_to_empty_port_when_none(monkeypatch) -> None:
@@ -62,5 +62,5 @@ def test_falls_back_to_empty_port_when_none(monkeypatch) -> None:
         spawn_id=None,
         logger=logging.getLogger("test"),
     )
-    port = captured["ports"].session_jobs
-    assert isinstance(port, rca._EmptySessionJobsPort)
+    port = captured["ports"].workspace_jobs
+    assert isinstance(port, rca._EmptyWorkspaceJobsPort)

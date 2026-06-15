@@ -99,7 +99,7 @@ def test_kernel_spec_does_not_expose_assembly_internals() -> None:
     spec = _kernel_spec()
     assert not hasattr(spec, "context_assembler")
     assert not hasattr(spec, "session_events_port")
-    assert not hasattr(spec, "session_jobs_port")
+    assert not hasattr(spec, "workspace_jobs_port")
     assert not hasattr(spec, "system_prompt_builder")
     assert not hasattr(spec, "user_instructions_port")
 
@@ -114,5 +114,5 @@ def test_kernel_resources_does_not_expose_assembly_internals() -> None:
     )
     assert not hasattr(resources, "context_assembler")
     assert not hasattr(resources, "session_events_port")
-    assert not hasattr(resources, "session_jobs_port")
+    assert not hasattr(resources, "workspace_jobs_port")
     assert not hasattr(resources, "user_instructions_port")

@@ -314,7 +314,9 @@ class TestStreamLlmItems:
             and isinstance(i.event, ThoughtEvent)
             and i.event.stream_state == "segment_end"
         ]
-        assert thought_completes == []
+        assert len(thought_completes) == 1
+        assert thought_completes[0].event.content == "thinking part 1 part 2"
+        assert thought_completes[0].event.reasoning_content == "thinking part 1 part 2"
         assert len(thought_segment_ends) >= 1
         assert "thinking part 1" in thought_segment_ends[0].event.content
 

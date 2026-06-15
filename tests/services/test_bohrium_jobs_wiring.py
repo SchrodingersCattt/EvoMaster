@@ -7,6 +7,18 @@ import pytest
 from src.services.bohrium_jobs_wiring import build_bohrium_jobs_ports
 
 
+def _exporter(session=None):
+    from src.services.workspace_jobs_export import WorkspaceJobsCsvExporter
+
+    return WorkspaceJobsCsvExporter(
+        session=session,
+        execution_workdir="/share/project",
+        session_id="s",
+        invocation_id="inv",
+        task_id="t",
+    )
+
+
 def test_record_submit_passes_identity_snapshot() -> None:
     table = MagicMock()
     ledger, _ = build_bohrium_jobs_ports(
@@ -16,6 +28,7 @@ def test_record_submit_passes_identity_snapshot() -> None:
         org_id="o1",
         spawn_id="sp-1",
         workspace="/share/project/../project",
+        exporter=_exporter(),
         table=table,
     )
     ledger.record_submit(
@@ -46,6 +59,7 @@ def test_record_submit_fails_when_identity_missing() -> None:
         user_id="",
         org_id="o1",
         workspace="/share/project",
+        exporter=_exporter(),
         table=table,
     )
     with pytest.raises(ValueError):
@@ -67,6 +81,7 @@ def test_record_submit_allows_null_invocation_id() -> None:
         user_id="u1",
         org_id="o1",
         workspace="/share/project",
+        exporter=_exporter(),
         table=table,
     )
     ledger.record_submit(
@@ -87,6 +102,7 @@ def test_ledger_write_port_is_none_without_workspace() -> None:
         user_id="u1",
         org_id="o1",
         workspace=None,
+        exporter=_exporter(),
         table=table,
     )
 
@@ -104,6 +120,7 @@ def test_ledger_workspace_must_be_share_path() -> None:
             user_id="u1",
             org_id="o1",
             workspace="/tmp/project",
+            exporter=_exporter(),
             table=table,
         )
 
@@ -116,6 +133,7 @@ def test_record_poll_fails_when_identity_missing() -> None:
         user_id="",
         org_id="o1",
         workspace="/share/project",
+        exporter=_exporter(),
         table=table,
     )
     with pytest.raises(ValueError):
@@ -131,6 +149,7 @@ def test_record_poll_normalizes_status_code() -> None:
         user_id="u",
         org_id="o",
         workspace="/share/project",
+        exporter=_exporter(),
         table=table,
     )
     ledger.record_poll(job_id="1", sandbox=False, status_code=2)
@@ -140,25 +159,156 @@ def test_record_poll_normalizes_status_code() -> None:
 
 
 @pytest.mark.asyncio
-async def test_session_jobs_port_loads_active_and_pending() -> None:
+async def test_observation_mode_reads_three_groups_cross_session() -> None:
+    from matmaster.context.ports import WorkspaceJobsQuery
+
     table = MagicMock()
-    table.query_session_active.return_value = [{"job_id": "a"}]
-    table.query_session_pending_terminal.return_value = [{"job_id": "t"}]
+    table.query_workspace_active.return_value = [
+        {"job_id": "a", "job_name": "na", "status": "running"}
+    ]
+    table.query_workspace_pending_terminal.return_value = [
+        {"job_id": "p", "job_name": "np", "status": "failed"}
+    ]
+    table.query_workspace_recent_terminal.return_value = [
+        {"job_id": "r", "job_name": "nr", "status": "finished"}
+    ]
+    _, jobs_port = build_bohrium_jobs_ports(
+        session_id="s",
+        invocation_id="inv",
+        user_id="u",
+        org_id="o",
+        workspace="/share/project",
+        exporter=_exporter(),
+        job_context_mode="workspace_observation",
+        table=table,
+    )
+
+    result = await jobs_port.load_workspace_jobs(WorkspaceJobsQuery(session_id="s"))
+
+    assert result.mode == "workspace_observation"
+    assert result.active_jobs == (
+        {"job_id": "a", "job_name": "na", "status": "running"},
+    )
+    assert result.pending_terminal_jobs == (
+        {"job_id": "p", "job_name": "np", "status": "failed"},
+    )
+    assert result.recent_terminal_jobs == (
+        {"job_id": "r", "job_name": "nr", "status": "finished"},
+    )
+    assert result.summary.total == 3
+    assert result.export is None
+    assert table.query_workspace_pending_terminal.call_args.kwargs["limit"] == 2000
+    assert table.query_workspace_recent_terminal.call_args.kwargs["limit"] == 2000
+
+
+@pytest.mark.asyncio
+async def test_observation_over_row_limit_exports_and_samples(monkeypatch) -> None:
+    from matmaster.context.ports import WorkspaceJobsQuery
+
+    monkeypatch.setenv("BOHRIUM_WORKSPACE_JOBS_INLINE_ROW_LIMIT", "2")
+    table = MagicMock()
+    table.query_workspace_active.return_value = []
+    table.query_workspace_pending_terminal.return_value = [
+        {"job_id": f"p{i}", "job_name": "n", "status": "failed"} for i in range(5)
+    ]
+    table.query_workspace_recent_terminal.return_value = []
+    _, jobs_port = build_bohrium_jobs_ports(
+        session_id="s",
+        invocation_id="inv",
+        user_id="u",
+        org_id="o",
+        workspace="/share/project",
+        exporter=_exporter(session=MagicMock()),
+        job_context_mode="workspace_observation",
+        table=table,
+    )
+    result = await jobs_port.load_workspace_jobs(WorkspaceJobsQuery(session_id="s"))
+
+    assert result.export is not None
+    assert result.export.row_count == 5
+    assert result.priority_samples
+    assert result.omitted_count == 5 - len(result.priority_samples)
+    assert result.pending_terminal_jobs == ()
+
+
+@pytest.mark.asyncio
+async def test_observation_export_failure_writes_snapshot_and_error(
+    monkeypatch,
+) -> None:
+    from matmaster.context.ports import WorkspaceJobsQuery
+
+    monkeypatch.setenv("BOHRIUM_WORKSPACE_JOBS_INLINE_ROW_LIMIT", "2")
+    table = MagicMock()
+    table.query_workspace_active.return_value = []
+    table.query_workspace_pending_terminal.return_value = [
+        {"job_id": f"p{i}", "job_name": "n", "status": "failed"} for i in range(5)
+    ]
+    table.query_workspace_recent_terminal.return_value = []
+    snap = _snapshot([{"id": 1, "job_id": "p0", "status": "failed"}])
+    _, jobs_port = build_bohrium_jobs_ports(
+        session_id="s",
+        invocation_id="inv",
+        user_id="u",
+        org_id="o",
+        workspace="/share/project",
+        exporter=_exporter(session=None),
+        job_context_mode="workspace_observation",
+        delivery_snapshot=snap,
+        table=table,
+    )
+    result = await jobs_port.load_workspace_jobs(WorkspaceJobsQuery(session_id="s"))
+
+    assert result.export_error is not None
+    assert result.export is None
+    assert snap.export_failure["reason"] == "session_missing"
+
+
+@pytest.mark.asyncio
+async def test_observation_truncation_flag_set_at_max_rows(monkeypatch) -> None:
+    from matmaster.context.ports import WorkspaceJobsQuery
+
+    monkeypatch.setenv("BOHRIUM_WORKSPACE_JOBS_OBSERVATION_MAX_ROWS", "3")
+    monkeypatch.setenv("BOHRIUM_WORKSPACE_JOBS_INLINE_ROW_LIMIT", "2")
+    table = MagicMock()
+    table.query_workspace_active.return_value = []
+    table.query_workspace_recent_terminal.return_value = []
+    table.query_workspace_pending_terminal.return_value = [
+        {"job_id": f"p{i}", "job_name": "n", "status": "failed"} for i in range(3)
+    ]
+    _, jobs_port = build_bohrium_jobs_ports(
+        session_id="s",
+        invocation_id="inv",
+        user_id="u",
+        org_id="o",
+        workspace="/share/project",
+        exporter=_exporter(session=MagicMock()),
+        job_context_mode="workspace_observation",
+        table=table,
+    )
+    result = await jobs_port.load_workspace_jobs(WorkspaceJobsQuery(session_id="s"))
+
+    assert result.snapshot_truncated is True
+
+
+@pytest.mark.asyncio
+async def test_observation_mode_empty_when_workspace_missing() -> None:
+    from matmaster.context.ports import WorkspaceJobs, WorkspaceJobsQuery
+
+    table = MagicMock()
     _, jobs_port = build_bohrium_jobs_ports(
         session_id="s",
         invocation_id="inv",
         user_id="u",
         org_id="o",
         workspace=None,
+        exporter=_exporter(),
+        job_context_mode="workspace_observation",
         table=table,
     )
-    from matmaster.context.ports import SessionJobsQuery
 
-    result = await jobs_port.load_session_jobs(SessionJobsQuery(session_id="s"))
-    assert result.active_jobs == ({"job_id": "a"},)
-    assert result.pending_terminal_jobs == ({"job_id": "t"},)
-    assert table.query_session_active.call_args.kwargs["user_id"] == "u"
-    assert table.query_session_active.call_args.kwargs["org_id"] == "o"
+    result = await jobs_port.load_workspace_jobs(WorkspaceJobsQuery(session_id="s"))
+    assert result == WorkspaceJobs.empty()
+    table.query_workspace_active.assert_not_called()
 
 
 def test_ports_do_not_construct_table_until_identity_allows_use() -> None:
@@ -169,6 +319,7 @@ def test_ports_do_not_construct_table_until_identity_allows_use() -> None:
         user_id="u",
         org_id="",
         workspace="/share/project",
+        exporter=_exporter(),
         table_factory=table_factory,
     )
 
@@ -221,58 +372,136 @@ def _snapshot(rows):
         user_id="u",
         org_id="o",
         session_id="s",
+        workspace="/share/project",
         rows=tuple(rows),
-        detail_limit=20,
     )
 
 
 @pytest.mark.asyncio
-async def test_jobs_port_serves_pending_from_snapshot_with_detail_limit() -> None:
+async def test_delivery_under_row_limit_returns_full_pending_no_active_query() -> None:
+    from matmaster.context.ports import WorkspaceJobsQuery
+
     table = MagicMock()
-    table.query_session_active.return_value = [{"job_id": "a"}]
-    snap_rows = [
-        {"id": 2, "job_id": "f1", "status": "failed"},
-        {"id": 1, "job_id": "t1", "status": "finished"},
-    ]
+    snap = _snapshot(
+        [
+            {"id": 1, "job_id": "t1", "job_name": "ok", "status": "finished"},
+            {"id": 2, "job_id": "f1", "job_name": "bad", "status": "failed"},
+        ]
+    )
     _, jobs_port = build_bohrium_jobs_ports(
         session_id="s",
         invocation_id="inv",
         user_id="u",
         org_id="o",
-        workspace=None,
+        workspace="/share/project",
+        exporter=_exporter(),
+        job_context_mode="session_workspace_delivery",
+        delivery_snapshot=snap,
         table=table,
-        delivery_snapshot=_snapshot(snap_rows),
     )
-    from matmaster.context.ports import SessionJobsQuery
 
-    result = await jobs_port.load_session_jobs(SessionJobsQuery(session_id="s"))
+    result = await jobs_port.load_workspace_jobs(WorkspaceJobsQuery(session_id="s"))
 
-    # pending 据 snapshot.rows（失败优先序原样），不再裸查 limit=5 定交付集合
-    assert result.pending_terminal_jobs == tuple(snap_rows)
-    assert result.detail_limit == 20
-    table.query_session_pending_terminal.assert_not_called()
-    # active 仍走实时查询（snapshot 只钉死 pending）
-    assert result.active_jobs == ({"job_id": "a"},)
-    table.query_session_active.assert_called_once()
+    assert result.mode == "session_workspace_delivery"
+    assert result.pending_terminal_jobs == snap.rows
+    assert result.active_jobs == ()
+    assert result.export is None
+    assert result.summary.pending_terminal == 2
+    table.query_session_active.assert_not_called()
 
 
 @pytest.mark.asyncio
-async def test_jobs_port_without_snapshot_keeps_legacy_read_path() -> None:
+async def test_delivery_over_row_limit_exports_pending_only(monkeypatch) -> None:
+    from matmaster.context.ports import WorkspaceJobsQuery
+
+    monkeypatch.setenv("BOHRIUM_WORKSPACE_JOBS_INLINE_ROW_LIMIT", "2")
     table = MagicMock()
-    table.query_session_active.return_value = []
-    table.query_session_pending_terminal.return_value = [{"job_id": "t"}]
+    rows = tuple(
+        {"id": i, "job_id": f"j{i}", "job_name": "n", "status": "finished"}
+        for i in range(3)
+    )
+    rows += ({"id": 99, "job_id": "f1", "job_name": "bad", "status": "failed"},)
     _, jobs_port = build_bohrium_jobs_ports(
         session_id="s",
         invocation_id="inv",
         user_id="u",
         org_id="o",
-        workspace=None,
+        workspace="/share/project",
+        exporter=_exporter(session=MagicMock()),
+        job_context_mode="session_workspace_delivery",
+        delivery_snapshot=_snapshot(rows),
         table=table,
     )
-    from matmaster.context.ports import SessionJobsQuery
+    result = await jobs_port.load_workspace_jobs(WorkspaceJobsQuery(session_id="s"))
 
-    result = await jobs_port.load_session_jobs(SessionJobsQuery(session_id="s"))
+    assert result.export is not None
+    assert result.export.reason == "row_limit"
+    assert result.export.row_count == len(rows)
+    assert result.pending_terminal_jobs == ()
+    assert result.priority_samples
+    assert any(s["job_id"] == "f1" for s in result.priority_samples)
 
-    assert result.pending_terminal_jobs == ({"job_id": "t"},)
-    assert result.detail_limit is None
-    assert table.query_session_pending_terminal.call_args.kwargs["limit"] == 5
+
+@pytest.mark.asyncio
+async def test_delivery_export_failure_writes_snapshot_export_failure(
+    monkeypatch,
+) -> None:
+    from matmaster.context.ports import WorkspaceJobsQuery
+
+    monkeypatch.setenv("BOHRIUM_WORKSPACE_JOBS_INLINE_ROW_LIMIT", "1")
+    table = MagicMock()
+    rows = tuple(
+        {"id": i, "job_id": f"j{i}", "job_name": "n", "status": "failed"}
+        for i in range(3)
+    )
+    snap = _snapshot(rows)
+    _, jobs_port = build_bohrium_jobs_ports(
+        session_id="s",
+        invocation_id="inv",
+        user_id="u",
+        org_id="o",
+        workspace="/share/project",
+        exporter=_exporter(session=None),
+        job_context_mode="session_workspace_delivery",
+        delivery_snapshot=snap,
+        table=table,
+    )
+    result = await jobs_port.load_workspace_jobs(WorkspaceJobsQuery(session_id="s"))
+
+    assert result.export_error is not None
+    assert result.export_error.reason == "session_missing"
+    assert snap.export_failure["reason"] == "session_missing"
+    assert snap.export_failure["target_path"]
+
+
+def test_record_poll_terminal_feeds_observed_set() -> None:
+    table = MagicMock()
+    snap = _snapshot([])
+    ledger, _ = build_bohrium_jobs_ports(
+        session_id="s",
+        invocation_id="inv",
+        user_id="u",
+        org_id="o",
+        workspace="/share/project",
+        exporter=_exporter(),
+        table=table,
+        delivery_snapshot=snap,
+    )
+    ledger.record_poll(job_id="J", sandbox=True, status_code=2)
+    ledger.record_poll(job_id="K", sandbox=False, status_code=1)
+    assert snap.observed_terminal == {(True, "J")}
+
+
+def test_record_poll_without_snapshot_skips_observation() -> None:
+    table = MagicMock()
+    ledger, _ = build_bohrium_jobs_ports(
+        session_id="s",
+        invocation_id="inv",
+        user_id="u",
+        org_id="o",
+        workspace="/share/project",
+        exporter=_exporter(),
+        table=table,
+    )
+    ledger.record_poll(job_id="J", sandbox=False, status_code=2)
+    table.apply_poll.assert_called_once()

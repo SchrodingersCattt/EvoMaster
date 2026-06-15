@@ -102,10 +102,7 @@ class TestBohriumMetadata:
         tool = BohriumTool(workdir=tmp_path)
         prompt = tool.prompt()
         assert prompt is not None
-        assert "single call" in prompt
-        assert "no blocking" in prompt
         assert "**download**" in prompt or "download artifacts" in prompt
-        assert "Does not download artifacts" in prompt
         assert "kill" in prompt
 
 
