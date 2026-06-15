@@ -78,6 +78,7 @@ def test_shutdown_tracing_flushes_provider(monkeypatch) -> None:
     provider = _FakeProvider()
     monkeypatch.setattr(tracing, "_TRACER_PROVIDER", provider)
     monkeypatch.setattr(tracing, "_INITIALIZED", True)
+    monkeypatch.setattr(tracing, "_REQUESTS_INSTRUMENTED", False)
 
     assert tracing.shutdown_tracing(timeout_millis=1234) is True
 
@@ -85,3 +86,16 @@ def test_shutdown_tracing_flushes_provider(monkeypatch) -> None:
     assert provider.shutdown_called is True
     assert tracing._TRACER_PROVIDER is None
     assert tracing._INITIALIZED is False
+
+
+def test_shutdown_tracing_uninstruments_requests(monkeypatch) -> None:
+    calls: list[str] = []
+
+    monkeypatch.setattr(tracing, "_TRACER_PROVIDER", None)
+    monkeypatch.setattr(tracing, "_REQUESTS_INSTRUMENTED", True)
+    monkeypatch.setattr(tracing, "_uninstrument_requests", lambda: calls.append("ok"))
+
+    assert tracing.shutdown_tracing(timeout_millis=1234) is False
+
+    assert calls == ["ok"]
+    assert tracing._REQUESTS_INSTRUMENTED is False

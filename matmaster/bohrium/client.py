@@ -8,7 +8,6 @@ from pathlib import Path
 from typing import Any
 
 import requests
-from opentelemetry.propagate import inject
 
 from utils.tracing import (
     get_tracer,
@@ -71,13 +70,8 @@ def _build_curl_command(
 
 def _post_headers(
     access_key: str,
-    *,
-    include_trace_context: bool = False,
 ) -> dict[str, str]:
-    headers = {"accessKey": access_key, "Content-Type": "application/json"}
-    if include_trace_context:
-        inject(headers)
-    return headers
+    return {"accessKey": access_key, "Content-Type": "application/json"}
 
 
 def _log_http_error(method: str, url: str, response: Any) -> None:
@@ -120,7 +114,7 @@ def _post(
     log_curl: bool = False,
 ) -> dict[str, Any]:
     url = f"{base_url}{path}"
-    headers = _post_headers(access_key, include_trace_context=True)
+    headers = _post_headers(access_key)
     if log_curl:
         logger.info(
             "%s\n%s",
@@ -176,10 +170,7 @@ def create_job(ctx: BohriumContext, *, job_name: str) -> dict[str, Any]:
             span,
             method="POST",
             url=f"{ctx.credentials.base_url}{path}",
-            headers=_post_headers(
-                ctx.credentials.access_key,
-                include_trace_context=True,
-            ),
+            headers=_post_headers(ctx.credentials.access_key),
             payload=payload,
         )
         try:
@@ -257,10 +248,7 @@ def add_job(
             span,
             method="POST",
             url=f"{ctx.credentials.base_url}{path}",
-            headers=_post_headers(
-                ctx.credentials.access_key,
-                include_trace_context=True,
-            ),
+            headers=_post_headers(ctx.credentials.access_key),
             payload=payload,
         )
         try:

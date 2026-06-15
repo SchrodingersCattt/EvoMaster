@@ -10,6 +10,7 @@ logger = logging.getLogger(__name__)
 
 _INITIALIZED = False
 _TRACER_PROVIDER: Any | None = None
+_REQUESTS_INSTRUMENTED = False
 
 
 def _env(name: str) -> str:
@@ -34,7 +35,7 @@ def _trace_headers() -> dict[str, str]:
 
 def configure_tracing(service_name: str) -> bool:
     """Configure OpenTelemetry tracing when TRACE_* env vars are present."""
-    global _INITIALIZED, _TRACER_PROVIDER
+    global _INITIALIZED, _REQUESTS_INSTRUMENTED, _TRACER_PROVIDER
 
     if _INITIALIZED:
         return True
@@ -72,6 +73,7 @@ def configure_tracing(service_name: str) -> bool:
         from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import (
             OTLPSpanExporter,
         )
+        from opentelemetry.instrumentation.requests import RequestsInstrumentor
         from opentelemetry.sdk.resources import Resource
         from opentelemetry.sdk.trace import TracerProvider
         from opentelemetry.sdk.trace.export import BatchSpanProcessor
@@ -104,6 +106,8 @@ def configure_tracing(service_name: str) -> bool:
         BatchSpanProcessor(OTLPSpanExporter(**exporter_kwargs))
     )
     trace.set_tracer_provider(provider)
+    RequestsInstrumentor().instrument()
+    _REQUESTS_INSTRUMENTED = True
     _TRACER_PROVIDER = provider
     _INITIALIZED = True
     logger.info(
@@ -118,10 +122,13 @@ def configure_tracing(service_name: str) -> bool:
 
 def shutdown_tracing(*, timeout_millis: int = 30000) -> bool:
     """Flush and shutdown the local tracer provider before process exit."""
-    global _INITIALIZED, _TRACER_PROVIDER
+    global _INITIALIZED, _REQUESTS_INSTRUMENTED, _TRACER_PROVIDER
 
     provider = _TRACER_PROVIDER
     if provider is None:
+        if _REQUESTS_INSTRUMENTED:
+            _uninstrument_requests()
+            _REQUESTS_INSTRUMENTED = False
         return False
     try:
         provider.force_flush(timeout_millis=timeout_millis)
@@ -132,6 +139,9 @@ def shutdown_tracing(*, timeout_millis: int = 30000) -> bool:
         logger.warning("OpenTelemetry tracing shutdown failed: %s", exc)
         return False
     finally:
+        if _REQUESTS_INSTRUMENTED:
+            _uninstrument_requests()
+            _REQUESTS_INSTRUMENTED = False
         _TRACER_PROVIDER = None
         _INITIALIZED = False
 
@@ -140,6 +150,15 @@ def get_tracer(name: str):
     from opentelemetry import trace
 
     return trace.get_tracer(name)
+
+
+def _uninstrument_requests() -> None:
+    try:
+        from opentelemetry.instrumentation.requests import RequestsInstrumentor
+
+        RequestsInstrumentor().uninstrument()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("OpenTelemetry requests uninstrument failed: %s", exc)
 
 
 def set_log_context_attributes(span) -> None:
