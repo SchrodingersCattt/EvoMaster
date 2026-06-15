@@ -19,7 +19,7 @@ from src.services.bohrium_poller import BohriumMonitor
 from src.utils.build_info import get_build_version
 from src.utils.logger import LoggingConfig, setup_logging
 from src.utils.worker_id import get_worker_id
-from utils.tracing import configure_tracing
+from utils.tracing import configure_tracing, shutdown_tracing
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -73,7 +73,10 @@ def main() -> None:
 
     signal.signal(signal.SIGTERM, _on_sigterm)
 
-    _run_monitor_loop()
+    try:
+        _run_monitor_loop()
+    finally:
+        shutdown_tracing()
 
 
 if __name__ == '__main__':

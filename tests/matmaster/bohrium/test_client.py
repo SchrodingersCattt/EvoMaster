@@ -19,6 +19,7 @@ from matmaster.bohrium.client import (
 from matmaster.bohrium.errors import BohriumAPIError
 from matmaster.bohrium.types import BohriumContext, BohriumCredentials
 from matmaster.bohrium.upload import UploadedArchive
+from src.utils.logger import LogContext
 
 
 def _make_ctx(*, sandbox: bool = True) -> BohriumContext:
@@ -422,12 +423,18 @@ def test_create_job_emits_trace_span(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(client_module, "_TRACER", tracer)
     monkeypatch.setattr("matmaster.bohrium.client._post", fake_post)
 
-    create_job(_make_ctx(sandbox=True), job_name="demo")
+    try:
+        LogContext.bind("session-1", "task-1")
+        create_job(_make_ctx(sandbox=True), job_name="demo")
+    finally:
+        LogContext.clear()
 
     assert tracer.spans[0].name == "bohrium.job.create"
     assert tracer.spans[0].attributes["bohrium.openapi.path"] == (
         "/openapi/v1/sandbox/job/create"
     )
+    assert tracer.spans[0].attributes["matmaster.session_id"] == "session-1"
+    assert tracer.spans[0].attributes["matmaster.task_id"] == "task-1"
     assert tracer.spans[0].attributes["bohrium.job_name"] == "demo"
     assert tracer.spans[0].attributes["bohrium.job_id"] == "create-job-id"
 

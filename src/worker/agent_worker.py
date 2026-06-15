@@ -37,7 +37,7 @@ from src.utils.feishu_notifier import (
 from src.utils.logger import LogContext, LoggingConfig, setup_logging
 from src.utils.support_notifier import send_session_complete_email_async
 from src.utils.worker_id import get_worker_id
-from utils.tracing import configure_tracing
+from utils.tracing import configure_tracing, shutdown_tracing
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -654,7 +654,10 @@ def main() -> None:
     logger.info(
         'Agent worker: starting BLPOP loop queue_key=%s', 'chat:agent_run_queue'
     )
-    _run_worker_loop()
+    try:
+        _run_worker_loop()
+    finally:
+        shutdown_tracing()
 
 
 if __name__ == '__main__':

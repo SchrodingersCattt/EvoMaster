@@ -9,7 +9,11 @@ from typing import Any
 
 import requests
 
-from utils.tracing import get_tracer, record_span_exception
+from utils.tracing import (
+    get_tracer,
+    record_span_exception,
+    set_log_context_attributes,
+)
 
 from .errors import BohriumAPIError
 from .status import FAILURE_CODES, status_name
@@ -150,6 +154,7 @@ def create_job(ctx: BohriumContext, *, job_name: str) -> dict[str, Any]:
         }
     )
     with _TRACER.start_as_current_span("bohrium.job.create") as span:
+        set_log_context_attributes(span)
         span.set_attribute("bohrium.sandbox", ctx.sandbox)
         span.set_attribute("bohrium.openapi.path", path)
         span.set_attribute("bohrium.project_id", ctx.credentials.project_id)
@@ -214,6 +219,7 @@ def add_job(
         }
         path = "/openapi/v2/job/add"
     with _TRACER.start_as_current_span("bohrium.job.add") as span:
+        set_log_context_attributes(span)
         span.set_attribute("bohrium.sandbox", ctx.sandbox)
         span.set_attribute("bohrium.openapi.path", path)
         span.set_attribute("bohrium.project_id", ctx.credentials.project_id)
