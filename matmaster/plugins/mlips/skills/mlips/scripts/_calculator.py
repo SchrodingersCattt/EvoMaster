@@ -64,7 +64,7 @@ KNOWN_MODELS: dict[str, dict] = {
         "default_head": "OMat24",
     },
     # ── MACE ──────────────────────────────────────────────────────────────
-    "MACE-MP-0": {"family": "MACE", "model_id": "medium"},
+    "MACE-MP-0": {"family": "MACE"},
     "MACE-MPA-0": {
         "family": "MACE",
         "url": "https://github.com/ACEsuit/mace-mp/releases/download/mace_mpa_0/mace-mpa-0-medium.model",
