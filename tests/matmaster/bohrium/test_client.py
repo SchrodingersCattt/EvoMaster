@@ -19,6 +19,7 @@ from matmaster.bohrium.client import (
 from matmaster.bohrium.errors import BohriumAPIError
 from matmaster.bohrium.types import BohriumContext, BohriumCredentials
 from matmaster.bohrium.upload import UploadedArchive
+from src.utils.logger import LogContext
 
 
 def _make_ctx(*, sandbox: bool = True) -> BohriumContext:
@@ -380,6 +381,131 @@ def test_add_job_sandbox(monkeypatch: pytest.MonkeyPatch) -> None:
     assert calls[0]["projectId"] == 42
 
 
+class _FakeSpan:
+    def __init__(self, name: str) -> None:
+        self.name = name
+        self.attributes: dict[str, object] = {}
+        self.exceptions: list[Exception] = []
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> None:
+        del exc_type, exc, tb
+
+    def set_attribute(self, key: str, value: object) -> None:
+        self.attributes[key] = value
+
+    def record_exception(self, exc: Exception) -> None:
+        self.exceptions.append(exc)
+
+    def set_status(self, status) -> None:
+        self.attributes["otel.status"] = status
+
+
+class _FakeTracer:
+    def __init__(self) -> None:
+        self.spans: list[_FakeSpan] = []
+
+    def start_as_current_span(self, name: str) -> _FakeSpan:
+        span = _FakeSpan(name)
+        self.spans.append(span)
+        return span
+
+
+def test_create_job_emits_trace_span(monkeypatch: pytest.MonkeyPatch) -> None:
+    tracer = _FakeTracer()
+
+    def fake_post(base_url, path, access_key, payload, *, timeout=30, log_curl=False):
+        del base_url, path, access_key, payload, timeout, log_curl
+        return {"code": 0, "data": {"jobId": "create-job-id"}}
+
+    monkeypatch.setattr(client_module, "_TRACER", tracer)
+    monkeypatch.setattr("matmaster.bohrium.client._post", fake_post)
+
+    try:
+        LogContext.bind("session-1", "task-1")
+        create_job(_make_ctx(sandbox=True), job_name="demo")
+    finally:
+        LogContext.clear()
+
+    assert tracer.spans[0].name == "bohrium.job.create"
+    assert tracer.spans[0].attributes["bohrium.openapi.path"] == (
+        "/openapi/v1/sandbox/job/create"
+    )
+    assert tracer.spans[0].attributes["matmaster.session_id"] == "session-1"
+    assert tracer.spans[0].attributes["matmaster.task_id"] == "task-1"
+    assert tracer.spans[0].attributes["bohrium.job_name"] == "demo"
+    assert tracer.spans[0].attributes["bohrium.job_id"] == "create-job-id"
+
+
+def test_add_job_emits_trace_span(monkeypatch: pytest.MonkeyPatch) -> None:
+    tracer = _FakeTracer()
+
+    def fake_post(base_url, path, access_key, payload, *, timeout=30, log_curl=False):
+        del base_url, path, access_key, payload, timeout, log_curl
+        return {"code": 0, "data": {"jobId": "job-2"}}
+
+    monkeypatch.setattr(client_module, "_TRACER", tracer)
+    monkeypatch.setattr("matmaster.bohrium.client._post", fake_post)
+
+    add_job(
+        _make_ctx(sandbox=False),
+        create_data={"jobId": "create-job-id"},
+        upload=UploadedArchive(
+            oss_key="store/input.zip",
+            download_url="https://store.example.com/input.zip?token=abc",
+        ),
+        image="demo:latest",
+        cmd="python run.py",
+        machine="c32_m128_cpu",
+        job_name="demo",
+        disk_size=50,
+    )
+
+    assert tracer.spans[0].name == "bohrium.job.add"
+    assert tracer.spans[0].attributes["bohrium.openapi.path"] == ("/openapi/v2/job/add")
+    assert tracer.spans[0].attributes["bohrium.created_job_id"] == "create-job-id"
+    assert tracer.spans[0].attributes["bohrium.job_id"] == "job-2"
+
+
+def test_add_job_can_capture_full_http_request(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    tracer = _FakeTracer()
+
+    def fake_post(base_url, path, access_key, payload, *, timeout=30, log_curl=False):
+        del base_url, path, access_key, payload, timeout, log_curl
+        return {"code": 0, "data": {"jobId": "job-2"}}
+
+    monkeypatch.setattr(client_module, "_TRACER", tracer)
+    monkeypatch.setattr("matmaster.bohrium.client._post", fake_post)
+
+    add_job(
+        _make_ctx(sandbox=True),
+        create_data={"jobId": "create-job-id"},
+        upload=UploadedArchive(
+            oss_key="store/input.zip",
+            download_url="https://store.example.com/input.zip?token=abc",
+        ),
+        image="demo:latest",
+        cmd="python run.py",
+        machine="c32_m128_cpu",
+        job_name="demo",
+        disk_size=50,
+    )
+
+    span_attrs = tracer.spans[0].attributes
+    assert span_attrs["http.request.method"] == "POST"
+    assert span_attrs["url.full"] == (
+        "https://openapi.test.dp.tech/openapi/v1/sandbox/job/add"
+    )
+    assert '"accessKey": "ak"' in span_attrs["bohrium.request.headers_json"]
+    assert '"ossPath": ["https://store.example.com/input.zip?token=abc"]' in (
+        span_attrs["bohrium.request.body_json"]
+    )
+
+
 class _FakeResponse:
     ok = True
     status_code = 200
@@ -414,6 +540,37 @@ def test_post_logs_copyable_curl_when_enabled(
     assert any(client_module.CURL_LOG_PREFIX in msg for msg in messages)
     # The curl line is meant to be copy-pasteable, so it carries the real key.
     assert any("curl -X POST" in msg and "secret-ak" in msg for msg in messages)
+
+
+def test_post_sends_bohrium_headers(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured_headers: dict[str, str] = {}
+
+    class FakeResponse:
+        ok = True
+        status_code = 200
+
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self) -> dict:
+            return {"code": 0, "data": {}}
+
+    def fake_requests_post(url, *, headers, json, timeout):
+        del url, json, timeout
+        captured_headers.update(headers)
+        return FakeResponse()
+
+    monkeypatch.setattr(client_module.requests, "post", fake_requests_post)
+
+    client_module._post(
+        "https://openapi.test.dp.tech",
+        "/openapi/v1/sandbox/job/add",
+        "secret-ak",
+        {"jobId": "job-1"},
+    )
+
+    assert captured_headers["accessKey"] == "secret-ak"
+    assert captured_headers["Content-Type"] == "application/json"
 
 
 def test_post_does_not_log_curl_by_default(

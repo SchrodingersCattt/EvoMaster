@@ -51,6 +51,7 @@ from matmaster.tools.tool_result import ToolResult, normalize_tool_result
 from matmaster.types.tool_desc_ctx import ToolDescriptionContext
 from matmaster.types.tool_spec import ResourceClaim, ToolExecutionContext
 from matmaster.types.topology import ToolPlane
+from utils.tracing import get_tracer, record_span_exception, set_log_context_attributes
 
 from .errors import BohriumJobStateError
 from .models import BohriumSubmittedJob
@@ -63,6 +64,7 @@ from .transfers import (
 )
 
 logger = logging.getLogger(__name__)
+_TRACER = get_tracer(__name__)
 
 
 def _created_job_ref(create_data: dict[str, Any]) -> str:
@@ -84,72 +86,89 @@ def submit_job_via_runtime(
     workdir: Path,
     session,
 ) -> BohriumSubmittedJob:
-    ctx = build_bohrium_context(session=session, require_project=True)
-    source = resolve_input_source(
-        raw_path=str(input_dir),
-        workdir=workdir,
-        session=session,
-    )
-
-    cmd_stripped = cmd.rstrip()
-    if not cmd_stripped.endswith("> log 2>&1"):
-        cmd = cmd_stripped + " > log 2>&1"
-
-    if source.kind == "remote_share_dir":
-        create_data = create_job(ctx, job_name=job_name)
+    with _TRACER.start_as_current_span("bohrium.job.submit") as span:
+        set_log_context_attributes(span)
+        span.set_attribute("bohrium.job_name", job_name)
+        span.set_attribute("bohrium.image", image)
+        span.set_attribute("bohrium.machine", machine)
+        span.set_attribute("bohrium.disk_size", disk_size)
         try:
-            upload = upload_input_source(
-                source,
-                create_data=create_data,
+            ctx = build_bohrium_context(session=session, require_project=True)
+            span.set_attribute("bohrium.sandbox", ctx.sandbox)
+            span.set_attribute("bohrium.project_id", ctx.credentials.project_id)
+            source = resolve_input_source(
+                raw_path=str(input_dir),
+                workdir=workdir,
                 session=session,
             )
-        except Exception as exc:
-            created_ref = _created_job_ref(create_data)
-            raise BohriumTransferError(
-                "Remote input upload failed after job/create; "
-                "compute job was not submitted; "
-                f"created_job_ref={created_ref}: {exc}"
-            ) from exc
-        add_data = add_job(
-            ctx,
-            create_data=create_data,
-            upload=upload,
-            image=image,
-            cmd=cmd,
-            machine=machine,
-            job_name=job_name,
-            disk_size=disk_size,
-        )
-    else:
-        with prepare_input_archive(source, session=session) as zip_path:
-            create_data = create_job(ctx, job_name=job_name)
-            upload = upload_input_archive(create_data=create_data, zip_path=zip_path)
-            add_data = add_job(
-                ctx,
-                create_data=create_data,
-                upload=upload,
-                image=image,
-                cmd=cmd,
-                machine=machine,
-                job_name=job_name,
-                disk_size=disk_size,
+            span.set_attribute("bohrium.input_source.kind", source.kind)
+
+            cmd_stripped = cmd.rstrip()
+            if not cmd_stripped.endswith("> log 2>&1"):
+                cmd = cmd_stripped + " > log 2>&1"
+
+            if source.kind == "remote_share_dir":
+                create_data = create_job(ctx, job_name=job_name)
+                try:
+                    upload = upload_input_source(
+                        source,
+                        create_data=create_data,
+                        session=session,
+                    )
+                except Exception as exc:
+                    created_ref = _created_job_ref(create_data)
+                    raise BohriumTransferError(
+                        "Remote input upload failed after job/create; "
+                        "compute job was not submitted; "
+                        f"created_job_ref={created_ref}: {exc}"
+                    ) from exc
+                add_data = add_job(
+                    ctx,
+                    create_data=create_data,
+                    upload=upload,
+                    image=image,
+                    cmd=cmd,
+                    machine=machine,
+                    job_name=job_name,
+                    disk_size=disk_size,
+                )
+            else:
+                with prepare_input_archive(source, session=session) as zip_path:
+                    create_data = create_job(ctx, job_name=job_name)
+                    upload = upload_input_archive(
+                        create_data=create_data, zip_path=zip_path
+                    )
+                    add_data = add_job(
+                        ctx,
+                        create_data=create_data,
+                        upload=upload,
+                        image=image,
+                        cmd=cmd,
+                        machine=machine,
+                        job_name=job_name,
+                        disk_size=disk_size,
+                    )
+
+            if ctx.sandbox:
+                raw_jid = add_data.get("jobId")
+                if raw_jid is None:
+                    raise BohriumError("Missing jobId in sandbox add response")
+                job_id = str(raw_jid).strip()
+                span.set_attribute("bohrium.job_id", job_id)
+                return BohriumSubmittedJob(
+                    job_id=job_id,
+                    raw_add_response=dict(add_data),
+                )
+
+            job_id = str(add_data["jobId"]).strip()
+            span.set_attribute("bohrium.job_id", job_id)
+            return BohriumSubmittedJob(
+                job_id=job_id,
+                raw_add_response=dict(add_data),
             )
-
-    if ctx.sandbox:
-        raw_jid = add_data.get("jobId")
-        if raw_jid is None:
-            raise BohriumError("Missing jobId in sandbox add response")
-        job_id = str(raw_jid).strip()
-        return BohriumSubmittedJob(
-            job_id=job_id,
-            raw_add_response=dict(add_data),
-        )
-
-    job_id = str(add_data["jobId"]).strip()
-    return BohriumSubmittedJob(
-        job_id=job_id,
-        raw_add_response=dict(add_data),
-    )
+        except Exception as exc:
+            record_span_exception(span, exc)
+            raise
 
 
 # ═══════════════════════════════════════════════════════════════════════════
