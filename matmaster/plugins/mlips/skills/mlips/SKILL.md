@@ -30,20 +30,20 @@ These are execution stop rules, not suggestions. User requests like "do not ask 
 
 | Model | Family | Image | Domain |
 |-------|--------|-------|--------|
-| **DPA4-Neo-OMat24** | DP | `registry.dp.tech/dptech/dpa-calculator:233df6e4` | General inorganic, OMat24, v20260528_rc |
-| **DPA4-Neo-OMat24-ZBL** | DP | `registry.dp.tech/dptech/dpa-calculator:233df6e4` | General inorganic, OMat24 + ZBL short-range repulsion, v20260528_rc |
-| **DPA3.1-3M** | DP | `registry.dp.tech/dptech/dpa-calculator:233df6e4` | General inorganic — **default**, 3M params |
-| **DPA3.2-5M** | DP | `registry.dp.tech/dptech/dpa-calculator:233df6e4` | General + charge/spin, supports `--charge`/`--spin` |
-| DPA2.4-7M | DP | `registry.dp.tech/dptech/dpa-calculator:233df6e4` | Legacy multi-head |
-| **MACE-MP-0** | MACE | `registry.dp.tech/dptech/matmaster:mlips-dev-0421` | General inorganic foundation. **Prefer over MACE-MPA-0** (MPA-0 GitHub download times out in Bohrium) |
-| SevenNet-0 / 7net-mf-ompa | SevenNet | `registry.dp.tech/dptech/matmaster:mlips-dev-0421` | Graph NN |
-| MatterSim-v1-5M | MatterSim | `registry.dp.tech/dptech/matmaster:mlips-dev-0421` | General inorganic, 5M params |
+| **DPA4-Neo-OMat24** | DP | `registry.dp.tech/dptech/dpa-calculator:dpa-mlip-bd246adc` | General inorganic, OMat24, v20260528_rc |
+| **DPA4-Neo-OMat24-ZBL** | DP | `registry.dp.tech/dptech/dpa-calculator:dpa-mlip-bd246adc` | General inorganic, OMat24 + ZBL short-range repulsion, v20260528_rc |
+| **DPA3.1-3M** | DP | `registry.dp.tech/dptech/dpa-calculator:dpa-mlip-bd246adc` | General inorganic — **default**, 3M params |
+| **DPA3.2-5M** | DP | `registry.dp.tech/dptech/dpa-calculator:dpa-mlip-bd246adc` | General + charge/spin, supports `--charge`/`--spin` |
+| DPA2.4-7M | DP | `registry.dp.tech/dptech/dpa-calculator:dpa-mlip-bd246adc` | Legacy multi-head |
+| **MACE-MP-0** | MACE | `registry.dp.tech/dptech/dpa-calculator:mace-mlip-bd246adc` | General inorganic foundation. **Prefer over MACE-MPA-0** (MPA-0 GitHub download times out in Bohrium) |
+| SevenNet-0 / 7net-mf-ompa | SevenNet | `registry.dp.tech/dptech/dpa-calculator:sevennet-mlip-bd246adc` | Graph NN |
+| MatterSim-v1-5M | MatterSim | `registry.dp.tech/dptech/dpa-calculator:mattersim-mlip-bd246adc` | General inorganic, 5M params |
 
 > **Image selection rule:** DPA tasks → DPA image (default). Only switch to multi-family image when user explicitly requests MACE, SevenNet, or MatterSim.
 
 **DPA image** ships deepmd-kit (v3.x), lammps, ASE 3.23, phonopy 2.34, pymatgen, torch 2.4+cu124.
 
-**Multi-family image** additionally ships mace-torch 0.3.12, sevenn 0.11.0, mattersim 1.1.2. Use its default `base` conda env.
+**Family images** ship the matching MLIP runtime: mace-torch 0.3.12 for MACE, sevenn 0.11.0 for SevenNet, and mattersim 1.1.2 for MatterSim. Use each image's default `base` conda env.
 
 ### DPA Heads
 
