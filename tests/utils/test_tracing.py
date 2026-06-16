@@ -123,24 +123,62 @@ def test_record_requests_trace_headers() -> None:
     }
 
 
-def test_normalize_traceparent_flags() -> None:
-    assert (
-        tracing._normalize_traceparent_flags(
+def test_record_httpx_trace_headers() -> None:
+    class _Request:
+        headers = {
+            "traceparent": "00-497947a314b9d49abc6ae44dd11ba707-spanid0000000000-01",
+            "tracestate": "vendor=value",
+        }
+
+    span = _FakeSpan()
+
+    tracing._record_httpx_trace_headers(span, _Request(), object())
+
+    assert span.attributes == {
+        "http.request.header.traceparent": (
+            "00-497947a314b9d49abc6ae44dd11ba707-spanid0000000000-01"
+        ),
+        "http.request.header.tracestate": "vendor=value",
+    }
+
+
+def test_inject_trace_context_normalizes_flags(monkeypatch) -> None:
+    from opentelemetry import propagate
+
+    def fake_inject(headers: dict[str, str]) -> None:
+        headers["traceparent"] = (
             "00-450d757e3b6de7aa092ddea1c7d12d65-9baa4e60d87d9a58-03"
         )
-        == "00-450d757e3b6de7aa092ddea1c7d12d65-9baa4e60d87d9a58-01"
+
+    monkeypatch.setattr(propagate, "inject", fake_inject)
+    headers = {"accessKey": "secret-ak"}
+
+    assert tracing.inject_trace_context(headers) is headers
+    assert headers["accessKey"] == "secret-ak"
+    assert headers["traceparent"] == (
+        "00-450d757e3b6de7aa092ddea1c7d12d65-9baa4e60d87d9a58-01"
     )
-    assert (
-        tracing._normalize_traceparent_flags(
-            "00-450d757e3b6de7aa092ddea1c7d12d65-9baa4e60d87d9a58-02"
-        )
-        == "00-450d757e3b6de7aa092ddea1c7d12d65-9baa4e60d87d9a58-00"
+
+
+def test_normalize_traceparent_flags() -> None:
+    normalized_sampled = tracing._normalize_traceparent_flags(
+        "00-450d757e3b6de7aa092ddea1c7d12d65-9baa4e60d87d9a58-03"
     )
-    assert (
-        tracing._normalize_traceparent_flags(
-            "00-450d757e3b6de7aa092ddea1c7d12d65-9baa4e60d87d9a58-01"
-        )
-        == "00-450d757e3b6de7aa092ddea1c7d12d65-9baa4e60d87d9a58-01"
+    normalized_unsampled = tracing._normalize_traceparent_flags(
+        "00-450d757e3b6de7aa092ddea1c7d12d65-9baa4e60d87d9a58-02"
+    )
+    already_normalized = tracing._normalize_traceparent_flags(
+        "00-450d757e3b6de7aa092ddea1c7d12d65-9baa4e60d87d9a58-01"
+    )
+
+    assert normalized_sampled == (
+        "00-450d757e3b6de7aa092ddea1c7d12d65-9baa4e60d87d9a58-01"
+    )
+    assert normalized_unsampled == (
+        "00-450d757e3b6de7aa092ddea1c7d12d65-9baa4e60d87d9a58-00"
+    )
+    assert already_normalized == (
+        "00-450d757e3b6de7aa092ddea1c7d12d65-9baa4e60d87d9a58-01"
     )
     assert tracing._normalize_traceparent_flags("not-a-traceparent") == (
         "not-a-traceparent"

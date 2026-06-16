@@ -39,6 +39,7 @@ dependencies = [
     "opentelemetry-sdk>=1.42.1",
     "opentelemetry-exporter-otlp-proto-grpc>=1.42.1",
     "opentelemetry-instrumentation-requests",
+    "opentelemetry-instrumentation-httpx>=0.63b1",
 ]
 
 [project.optional-dependencies]
