@@ -76,7 +76,7 @@ questions:
     criterion: Agent completes within turn budget.
     axis: efficiency
     verify: turn_budget
-- id: WO_mace_001_20260513
+- id: WO_mace_001_20260616
   capability: workflow_orchestration
   domain: agnostic
   intent: Test whether agent knows MACE-MP-0 can be used directly by name via mlips
@@ -106,7 +106,7 @@ questions:
   - key: must_image_mlips
     value:
       filename: opt_submit.json
-      pattern: mlips
+      pattern: mace-mlip|dpa-calculator:mace
       flags: i
   - key: turn_budget
     value:
@@ -125,8 +125,8 @@ questions:
     axis: correctness
     verify: text_file_regex
   - id: must_image_mlips
-    criterion: '[Platform] image references the multi-family mlips image (not the
-      DPA-only image).'
+    criterion: '[Platform] image references a MACE-capable MLIP runtime image (not
+      the DPA-only image).'
     axis: correctness
     verify: text_file_regex
   - id: no_download_attempt
