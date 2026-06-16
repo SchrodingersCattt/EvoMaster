@@ -631,6 +631,21 @@ class ChatSessionsService:
             return False
         return registry.is_worker_alive(owner)
 
+    def is_session_run_live(self, session_id: str) -> bool:
+        """该会话当前是否真有在途 run（只读，绝不改库）。
+
+        queued（已入队）/ 本 pod 在跑 / 别的存活 pod 在跑，任一为真即视为存活；
+        三者皆否说明上一轮 run 已随部署/重启消失，是残留 waiting/active，交由既有懒恢复处理：
+        active 残留打开时经 generate_subscribe_stream 的 is_stale 分支重置并发 run_interrupted；
+        waiting 残留在状态读取时由 reconcile_waiting_status 静默重置 idle（不发提示）。
+        """
+        sid = session_id.strip()
+        if REDIS_URL and get_redis_dao().is_session_run_queued(sid):
+            return True
+        if self.is_session_running_on_this_pod(sid):
+            return True
+        return self.is_session_run_on_another_pod(sid)
+
     def reset_session_status_to_idle_in_db(self, session_id: str) -> None:
         """
         仅将 DB 中该会话状态置为 idle，不碰内存。用于：部署/重启后，另一 pod 上的 run 已死，
