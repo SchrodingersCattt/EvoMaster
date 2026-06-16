@@ -54,7 +54,7 @@ class FailingSummaryProvider(ContentOnlyProvider):
 
 
 def _v1_compacted_user_message(summary: str = "summary") -> UserMessage:
-    return UserMessage(content=f"<compacted_history>\n{summary}\n</compacted_history>")
+    return UserMessage(content=f"<compacted-history>\n{summary}\n</compacted-history>")
 
 
 class _DurablePreflightCompactor:

@@ -36,7 +36,7 @@ def test_render_and_to_message_preserve_runtime_images() -> None:
         (
             _section(
                 "instructions",
-                "user_instructions",
+                "user-instructions",
                 "Use SI units.",
                 SectionOrder.USER_INSTRUCTIONS,
                 frozenset({ContextView.RUNTIME, ContextView.CHECKPOINT}),
@@ -45,7 +45,7 @@ def test_render_and_to_message_preserve_runtime_images() -> None:
         (
             _section(
                 "turn",
-                "current_instruction",
+                "current-instruction",
                 "Explain FeO.",
                 SectionOrder.TURN_INSTRUCTION,
                 frozenset({ContextView.RUNTIME}),
@@ -59,12 +59,12 @@ def test_render_and_to_message_preserve_runtime_images() -> None:
 
     assert isinstance(runtime, UserMessage)
     assert runtime.content == (
-        "<user_instructions>\nUse SI units.\n</user_instructions>\n\n"
-        "<current_instruction>\nExplain FeO.\n</current_instruction>"
+        "<user-instructions>\nUse SI units.\n</user-instructions>\n\n"
+        "<current-instruction>\nExplain FeO.\n</current-instruction>"
     )
     assert runtime.images == [ImageContentPart(url="https://example.com/feo.png")]
     assert checkpoint.content == (
-        "<user_instructions>\nUse SI units.\n</user_instructions>"
+        "<user-instructions>\nUse SI units.\n</user-instructions>"
     )
     assert checkpoint.images == []
 
@@ -74,7 +74,7 @@ def test_checkpoint_images_are_visible_in_both_views() -> None:
         (
             _section(
                 "instructions",
-                "user_instructions",
+                "user-instructions",
                 "Use SI units.",
                 SectionOrder.USER_INSTRUCTIONS,
                 frozenset({ContextView.RUNTIME, ContextView.CHECKPOINT}),

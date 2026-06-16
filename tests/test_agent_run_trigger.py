@@ -341,6 +341,7 @@ def test_trigger_run_enqueues_and_writes_system_event():
     }
     pushed = fake_redis.lpush_agent_run_job.call_args.args[0]
     assert pushed["origin"] == "hpc_job"
+    assert pushed["turn_input"]["instruction_tag"] == "system-reminder"
     fake_redis.mark_dedup_key_nx.assert_called_once()
     assert fake_redis.mark_dedup_key_nx.call_args.args[0] == "job:123:done"
 

@@ -198,6 +198,7 @@ def test_prepare_send_message_captures_turn_input_before_user_event():
         ctx = service.prepare_send_message("sess-1", req, user_id="user-1")
 
     assert ctx.job["turn_input"]["user_text"] == "analyze current"
+    assert ctx.job["turn_input"]["instruction_tag"] == "current-instruction"
     assert ctx.job["turn_input"]["files"] == ["https://oss.example.com/chat/new.cif"]
     assert ctx.job["turn_input"]["images"] == [
         "https://oss.example.com/chat/current.png"

@@ -500,7 +500,7 @@ class TestMatMasterRunAgentE2E:
         assert [m.content for m in llm_messages[1:]] == [
             "old question",
             "old answer",
-            "<current_instruction>\nnew question\n</current_instruction>",
+            "<current-instruction>\nnew question\n</current-instruction>",
         ]
 
     @patch("matmaster.config.loader.load_llm_config")

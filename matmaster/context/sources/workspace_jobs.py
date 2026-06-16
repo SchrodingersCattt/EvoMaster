@@ -238,8 +238,8 @@ class WorkspaceJobsSource:
             return ()
         return (
             ContextSection(
-                key="workspace_jobs",
-                tag="workspace_jobs",
+                key="workspace-jobs",
+                tag="workspace-jobs",
                 content="\n".join(self.lines),
                 order=SectionOrder.WORKSPACE_JOBS,
                 views=ALL_VIEWS,

@@ -33,8 +33,8 @@ def test_inline_renders_summary_and_columnar_details() -> None:
         summary=_summary(),
     )
     section = WorkspaceJobsSource.from_jobs(jobs).to_sections()[0]
-    assert section.key == "workspace_jobs"
-    assert section.tag == "workspace_jobs"
+    assert section.key == "workspace-jobs"
+    assert section.tag == "workspace-jobs"
     assert section.order == SectionOrder.WORKSPACE_JOBS
     assert section.views == frozenset({ContextView.RUNTIME, ContextView.CHECKPOINT})
     lines = section.content.splitlines()
