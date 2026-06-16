@@ -85,6 +85,11 @@ def test_create_node_emits_trace_span_without_access_key(
 
     monkeypatch.setattr(node_module, "_TRACER", tracer)
     monkeypatch.setattr(
+        node_module,
+        "inject_trace_context",
+        lambda headers: {**headers, "traceparent": "00-trace-span-01"},
+    )
+    monkeypatch.setattr(
         node_module.httpx,
         "Client",
         lambda timeout: _FakeClient(response, captured),
@@ -106,6 +111,7 @@ def test_create_node_emits_trace_span_without_access_key(
 
     assert result == {"node_id": 123, "ip": None, "password": None}
     assert captured["headers"]["accessKey"] == "secret-ak"
+    assert captured["headers"]["traceparent"] == "00-trace-span-01"
 
     span = tracer.spans[0]
     assert span.name == "bohrium.node.create"

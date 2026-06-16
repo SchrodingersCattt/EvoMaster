@@ -15,7 +15,12 @@ from typing import Any
 import httpx
 
 from src.utils.constant import BOHRIUM_DEFAULT_IMAGE_ID, BOHRIUM_OPENAPI_HOST
-from utils.tracing import get_tracer, record_span_exception, set_log_context_attributes
+from utils.tracing import (
+    get_tracer,
+    inject_trace_context,
+    record_span_exception,
+    set_log_context_attributes,
+)
 
 logger = logging.getLogger(__name__)
 _TRACER = get_tracer(__name__)
@@ -120,10 +125,12 @@ class BohriumNodeService:
                 with httpx.Client(timeout=60.0) as client:
                     r = client.post(
                         url,
-                        headers={
-                            'accessKey': access_key,
-                            'content-type': 'application/json',
-                        },
+                        headers=inject_trace_context(
+                            {
+                                'accessKey': access_key,
+                                'content-type': 'application/json',
+                            }
+                        ),
                         json=payload,
                     )
                     r.raise_for_status()

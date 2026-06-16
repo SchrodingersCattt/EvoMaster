@@ -11,6 +11,7 @@ logger = logging.getLogger(__name__)
 _INITIALIZED = False
 _TRACER_PROVIDER: Any | None = None
 _REQUESTS_INSTRUMENTED = False
+_HTTPX_INSTRUMENTED = False
 
 
 def _env(name: str) -> str:
@@ -35,7 +36,7 @@ def _trace_headers() -> dict[str, str]:
 
 def configure_tracing(service_name: str) -> bool:
     """Configure OpenTelemetry tracing when TRACE_* env vars are present."""
-    global _INITIALIZED, _REQUESTS_INSTRUMENTED, _TRACER_PROVIDER
+    global _HTTPX_INSTRUMENTED, _INITIALIZED, _REQUESTS_INSTRUMENTED, _TRACER_PROVIDER
 
     if _INITIALIZED:
         return True
@@ -73,6 +74,7 @@ def configure_tracing(service_name: str) -> bool:
         from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import (
             OTLPSpanExporter,
         )
+        from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
         from opentelemetry.instrumentation.requests import RequestsInstrumentor
         from opentelemetry.sdk.resources import Resource
         from opentelemetry.sdk.trace import TracerProvider
@@ -106,7 +108,9 @@ def configure_tracing(service_name: str) -> bool:
     trace.set_tracer_provider(provider)
     _configure_trace_context_propagation()
     RequestsInstrumentor().instrument(response_hook=_record_requests_trace_headers)
+    HTTPXClientInstrumentor().instrument(response_hook=_record_httpx_trace_headers)
     _REQUESTS_INSTRUMENTED = True
+    _HTTPX_INSTRUMENTED = True
     _TRACER_PROVIDER = provider
     _INITIALIZED = True
     logger.info(
@@ -121,13 +125,16 @@ def configure_tracing(service_name: str) -> bool:
 
 def shutdown_tracing(*, timeout_millis: int = 30000) -> bool:
     """Flush and shutdown the local tracer provider before process exit."""
-    global _INITIALIZED, _REQUESTS_INSTRUMENTED, _TRACER_PROVIDER
+    global _HTTPX_INSTRUMENTED, _INITIALIZED, _REQUESTS_INSTRUMENTED, _TRACER_PROVIDER
 
     provider = _TRACER_PROVIDER
     if provider is None:
         if _REQUESTS_INSTRUMENTED:
             _uninstrument_requests()
             _REQUESTS_INSTRUMENTED = False
+        if _HTTPX_INSTRUMENTED:
+            _uninstrument_httpx()
+            _HTTPX_INSTRUMENTED = False
         return False
     try:
         provider.force_flush(timeout_millis=timeout_millis)
@@ -141,6 +148,9 @@ def shutdown_tracing(*, timeout_millis: int = 30000) -> bool:
         if _REQUESTS_INSTRUMENTED:
             _uninstrument_requests()
             _REQUESTS_INSTRUMENTED = False
+        if _HTTPX_INSTRUMENTED:
+            _uninstrument_httpx()
+            _HTTPX_INSTRUMENTED = False
         _TRACER_PROVIDER = None
         _INITIALIZED = False
 
@@ -158,6 +168,15 @@ def _uninstrument_requests() -> None:
         RequestsInstrumentor().uninstrument()
     except Exception as exc:  # noqa: BLE001
         logger.warning("OpenTelemetry requests uninstrument failed: %s", exc)
+
+
+def _uninstrument_httpx() -> None:
+    try:
+        from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
+
+        HTTPXClientInstrumentor().uninstrument()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("OpenTelemetry httpx uninstrument failed: %s", exc)
 
 
 def _configure_trace_context_propagation() -> None:
@@ -251,6 +270,37 @@ def _record_requests_trace_headers(span, request, response) -> None:
             span.set_attribute("http.request.header.tracestate", tracestate)
     except Exception as exc:  # noqa: BLE001
         logger.debug("failed to record requests trace headers: %s", exc)
+
+
+def _record_httpx_trace_headers(span, request, response) -> None:
+    """Record propagated trace headers on httpx client spans for debugging."""
+
+    del response
+    try:
+        if hasattr(span, "is_recording") and not span.is_recording():
+            return
+        headers = getattr(request, "headers", {}) or {}
+        traceparent = headers.get("traceparent")
+        if traceparent:
+            span.set_attribute("http.request.header.traceparent", traceparent)
+        tracestate = headers.get("tracestate")
+        if tracestate:
+            span.set_attribute("http.request.header.tracestate", tracestate)
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("failed to record httpx trace headers: %s", exc)
+
+
+def inject_trace_context(headers: dict[str, str]) -> dict[str, str]:
+    """Inject W3C trace context into outbound HTTP headers."""
+
+    from opentelemetry.propagate import inject
+
+    inject(headers)
+    traceparent = headers.get("traceparent")
+    normalized = _normalize_traceparent_flags(traceparent)
+    if normalized and normalized != traceparent:
+        headers["traceparent"] = normalized
+    return headers
 
 
 def set_log_context_attributes(span) -> None:
