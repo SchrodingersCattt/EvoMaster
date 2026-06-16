@@ -53,11 +53,6 @@ def _install_fake_sdk_free_upload(monkeypatch, upload_calls: list) -> None:
     )
 
 
-# ---------------------------------------------------------------------------
-# TestBohriumMetadata
-# ---------------------------------------------------------------------------
-
-
 class TestBohriumMetadata:
     def test_name(self):
         assert BohriumTool.name == "Bohrium"
@@ -106,11 +101,6 @@ class TestBohriumMetadata:
         assert "kill" in prompt
 
 
-# ---------------------------------------------------------------------------
-# TestBohriumSandboxMode
-# ---------------------------------------------------------------------------
-
-
 class TestBohriumSandboxMode:
     def test_use_sandbox_defaults_true(self, monkeypatch):
         monkeypatch.delenv("BOHRIUM_USE_SANDBOX", raising=False)
@@ -119,11 +109,6 @@ class TestBohriumSandboxMode:
     def test_use_sandbox_disabled_with_zero(self, monkeypatch):
         monkeypatch.setenv("BOHRIUM_USE_SANDBOX", "0")
         assert use_sandbox() is False
-
-
-# ---------------------------------------------------------------------------
-# TestBohriumExecution
-# ---------------------------------------------------------------------------
 
 
 class TestBohriumExecution:
@@ -152,7 +137,7 @@ class TestBohriumExecution:
         def __init__(self) -> None:
             self.spans: list[TestBohriumExecution._FakeSpan] = []
 
-        def start_as_current_span(self, name: str) -> _FakeSpan:
+        def start_as_current_span(self, name: str) -> "TestBohriumExecution._FakeSpan":
             span = TestBohriumExecution._FakeSpan(name)
             self.spans.append(span)
             return span
@@ -783,9 +768,7 @@ class TestBohriumExecution:
         }
         assert not isinstance(submitted, tuple)
 
-    def test_submit_job_via_runtime_emits_submit_span(
-        self, tmp_path, monkeypatch
-    ):
+    def test_submit_job_via_runtime_emits_submit_span(self, tmp_path, monkeypatch):
         input_dir = tmp_path / "inputs"
         input_dir.mkdir()
         (input_dir / "input.inp").write_text("&CONTROL\n", encoding="utf-8")
