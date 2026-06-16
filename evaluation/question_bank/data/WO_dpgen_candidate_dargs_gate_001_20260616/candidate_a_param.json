@@ -1,0 +1,54 @@
+{
+  "_candidate": "candidate_a_fingerprint",
+  "type_map": [
+    "O",
+    "H"
+  ],
+  "mass_map": [
+    15.999,
+    1.008
+  ],
+  "init_data_sys": [
+    "/path/to/water/init/deepmd"
+  ],
+  "sys_configs": [
+    [
+      "/path/to/water/configs/*.vasp"
+    ]
+  ],
+  "numb_models": 4,
+  "default_training_param": {
+    "model": {},
+    "learning_rate": {},
+    "loss": {},
+    "training": {}
+  },
+  "model_devi_dt": 0.001,
+  "model_devi_skip": 0,
+  "model_devi_f_trust_lo": 0.05,
+  "model_devi_f_trust_hi": 0.15,
+  "fp_task_max": 50,
+  "fp_task_min": 5,
+  "fp_style": "vasp",
+  "fp_pp_path": "/path/to/vasp/potcar",
+  "fp_pp_files": [
+    "POTCAR.O",
+    "POTCAR.H"
+  ],
+  "fp_incar": "/path/to/vasp/INCAR",
+  "model_devi_jobs": [
+    {
+      "sys_idx": [
+        0
+      ],
+      "trj_freq": 10,
+      "ensemble": "nvt",
+      "nsteps": 2000,
+      "temps": [
+        300,
+        330,
+        360
+      ]
+    }
+  ]
+}

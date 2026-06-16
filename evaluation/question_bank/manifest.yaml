@@ -161,7 +161,7 @@ banks:
 - path: workflow_orchestration/wo_agnostic_dpgen.yaml
   capability: workflow_orchestration
   domain: agnostic
-  questions: 4
+  questions: 1
 - path: workflow_orchestration/wo_agnostic_gpumd_nep_clean.yaml
   capability: workflow_orchestration
   domain: agnostic
@@ -225,7 +225,7 @@ banks:
 - path: input_generation/ig_agnostic_dpgen.yaml
   capability: input_generation
   domain: agnostic
-  questions: 6
+  questions: 2
 - path: input_generation/ig_alloy.yaml
   capability: input_generation
   domain: alloy

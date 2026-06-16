@@ -102,9 +102,9 @@ COPY --from=eval-toolchain /usr/bin/claude /usr/bin/claude
 #     && rm -rf /var/lib/apt/lists/* \
 #     && aws --version
 
-# 评测 validators：numpy + pymatgen（struct_file_*，见 score_baseline_tasks / BinaryEvaluator）
+# 评测 validators：numpy + pymatgen（struct_file_*）+ dpgen（DP-GEN dargs schema）
 RUN --mount=type=cache,target=/root/.cache/uv \
-    . /app/.venv/bin/activate && uv pip install numpy "pymatgen>=2024.1"
+    . /app/.venv/bin/activate && uv pip install numpy "pymatgen>=2024.1" "dpgen==0.13.3"
 
 # claude --dangerously-skip-permissions 拒绝在 root 下运行，创建非 root 用户。
 # 不对 /app 整树 chown：.venv 与源码小文件极多，递归改属主在 overlay 上极慢（CI 可数十秒）。
