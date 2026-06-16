@@ -137,7 +137,7 @@ class TestBohriumExecution:
         def __init__(self) -> None:
             self.spans: list[TestBohriumExecution._FakeSpan] = []
 
-        def start_as_current_span(self, name: str) -> "TestBohriumExecution._FakeSpan":
+        def start_as_current_span(self, name: str) -> TestBohriumExecution._FakeSpan:
             span = TestBohriumExecution._FakeSpan(name)
             self.spans.append(span)
             return span
