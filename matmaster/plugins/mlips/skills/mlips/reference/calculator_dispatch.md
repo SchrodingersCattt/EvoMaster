@@ -6,7 +6,7 @@ This skill is **DPA-first**. The reason the same scripts work across four MLIP f
 
 ## Supported Families
 
-The `_calculator.py` module supports four MLIP families via a unified `build_calculator()` interface. DPA works on both images; non-DPA families require the multi-family image (`mlips:dev-0421`):
+The `_calculator.py` module supports four MLIP families via a unified `build_calculator()` interface. Each family has a dedicated runtime image:
 
 | Family | Package | Version (in image) | Calculator Class |
 |--------|---------|---------------------|-----------------|
@@ -17,7 +17,7 @@ The `_calculator.py` module supports four MLIP families via a unified `build_cal
 
 > †deepmd-kit reports `1.3.3.dev2445` via `git describe` (2445 commits after the ancient v1.3.3 tag). This **is** the v3.0.0+ PyTorch codebase — not a v1.x build.
 
-> DPA tasks should always use the DPA image (`dpa-calculator:233df6e4`). Switch to the multi-family image only when MACE/SevenNet/MatterSim is explicitly requested.
+> DPA tasks should always use the DPA image (`dpa-calculator:dpa-mlip-bd246adc`). Switch to the matching family image only when MACE/SevenNet/MatterSim is explicitly requested.
 
 ## How `build_calculator()` resolves models
 
@@ -70,11 +70,13 @@ model_name_or_path
 
 ## Docker images
 
-> **Default: DPA image.** Use the multi-family image only when MACE, SevenNet, or MatterSim is explicitly needed.
+> **Default: DPA image.** Use a non-DPA family image only when MACE, SevenNet, or MatterSim is explicitly needed.
 
 | Image | Families | When to use |
 |-------|----------|-------------|
-| `registry.dp.tech/dptech/dpa-calculator:233df6e4` | **DP only** | **Default for DPA ASE tasks** |
-| `registry.dp.tech/dptech/dp/native/prod-19853/mlips:dev-0421` | All four (DP, MACE, SevenNet, MatterSim) + lammps | Only when the user explicitly requests MACE/SevenNet/MatterSim. Use `base` env; ignore `fc`/`test` envs. |
+| `registry.dp.tech/dptech/dpa-calculator:dpa-mlip-bd246adc` | **DP only** | **Default for DPA ASE tasks** |
+| `registry.dp.tech/dptech/dpa-calculator:mace-mlip-bd246adc` | MACE | Only when the user explicitly requests MACE. Use `base` env. |
+| `registry.dp.tech/dptech/dpa-calculator:sevennet-mlip-bd246adc` | SevenNet | Only when the user explicitly requests SevenNet. Use `base` env. |
+| `registry.dp.tech/dptech/dpa-calculator:mattersim-mlip-bd246adc` | MatterSim | Only when the user explicitly requests MatterSim. Use `base` env. |
 
 > If a package is missing, prepend `pip install <pkg> &&` before the script in `cmd`.
