@@ -23,12 +23,11 @@ _ROLE_TO_MESSAGE_MODEL: dict[str, type[Message]] = {
     Role.TOOL.value: ToolMessage,
 }
 
-MARKERS_V0 = {"<previous_session_summary>"}
-MARKERS_V1 = {"<compacted_history>"}
+MARKERS_V0 = {"<previous-session-summary>"}
+MARKERS_V1 = {"<compacted-history>"}
 
 
 def _has_acceptable_marker(content: str) -> bool:
-    # COMPAT:v0-checkpoint-marker -- keep accepting legacy checkpoint markers.
     return any(marker in content for marker in MARKERS_V0 | MARKERS_V1)
 
 

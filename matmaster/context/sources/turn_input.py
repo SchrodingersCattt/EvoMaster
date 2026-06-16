@@ -9,6 +9,8 @@ from urllib.parse import urlparse
 from matmaster.context.sections import RUNTIME_ONLY_VIEWS, ContextSection, SectionOrder
 from matmaster.types.messages import ImageContentPart
 
+TurnInstructionTag = Literal["current-instruction", "system-reminder"]
+
 
 def _clean_tuple(values: Any) -> tuple[str, ...]:
     if values is None:
@@ -31,6 +33,7 @@ def _display_name(value: str) -> str:
 class TurnInstructionSource:
     user_text: str = ""
     deferred: bool = False
+    tag: TurnInstructionTag = "current-instruction"
 
     def to_sections(self) -> tuple[ContextSection, ...]:
         text = self.user_text.strip()
@@ -43,8 +46,8 @@ class TurnInstructionSource:
         )
         return (
             ContextSection(
-                key="current_instruction",
-                tag="current_instruction",
+                key=self.tag,
+                tag=self.tag,
                 content=text,
                 order=order,
                 views=RUNTIME_ONLY_VIEWS,
@@ -76,8 +79,8 @@ class TurnAttachmentsSource:
             return ()
         return (
             ContextSection(
-                key="turn_attachments",
-                tag="turn_attachments",
+                key="turn-attachments",
+                tag="turn-attachments",
                 content="\n".join(lines),
                 order=SectionOrder.TURN_ATTACHMENTS,
                 views=RUNTIME_ONLY_VIEWS,
@@ -110,9 +113,13 @@ class TurnInput:
         image_detail: Literal["low", "high", "auto"] | None = None,
         workspace_paths: Any = None,
         pre_turn_history_event_id: int | None = 0,
+        instruction_tag: TurnInstructionTag = "current-instruction",
     ) -> TurnInput:
         return cls(
-            instruction=TurnInstructionSource(user_text=(user_text or "").strip()),
+            instruction=TurnInstructionSource(
+                user_text=(user_text or "").strip(),
+                tag=instruction_tag,
+            ),
             attachments=TurnAttachmentsSource(
                 files=_clean_tuple(files),
                 images=_clean_tuple(images),
@@ -138,11 +145,13 @@ class TurnInput:
             image_detail=payload.get("image_detail"),
             workspace_paths=payload.get("workspace_paths"),
             pre_turn_history_event_id=boundary,
+            instruction_tag=payload.get("instruction_tag", "current-instruction"),
         )
 
     def to_payload(self) -> dict[str, Any]:
         return {
             "user_text": self.user_text,
+            "instruction_tag": self.instruction.tag,
             "files": list(self.files),
             "images": list(self.images),
             "image_detail": self.attachments.image_detail,
@@ -183,6 +192,7 @@ class TurnInput:
         return TurnInstructionSource(
             user_text=merged,
             deferred=self.instruction.deferred,
+            tag=self.instruction.tag,
         ).to_sections()
 
     def has_effective_input(self) -> bool:

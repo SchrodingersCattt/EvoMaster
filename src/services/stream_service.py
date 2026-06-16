@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from functools import lru_cache
 
 from matmaster.config.exp import DEFAULT_MODE, SUPPORTED_MODES
-from matmaster.context.sources.turn_input import TurnInput
+from matmaster.context.sources.turn_input import TurnInput, TurnInstructionTag
 from src.dao.redis_dao import (
     STREAM_CHANNEL_PREFIX,
     get_redis_dao,
@@ -280,6 +280,7 @@ class ChatStreamService:
         workspace: str | None = None,
         origin: str | None = None,
         delivery: dict | None = None,
+        instruction_tag: TurnInstructionTag = "current-instruction",
         pre_event_hook: Callable[[], None] | None = None,
     ) -> RunHandle | Busy:
         """共享内核：确保会话、占锁、快照边界、写发起事件并组装 job。
@@ -308,6 +309,7 @@ class ChatStreamService:
             images=images,
             workspace_paths=workspace_paths,
             pre_turn_history_event_id=pre_turn_history_event_id,
+            instruction_tag=instruction_tag,
         )
         event = event_writer(task_id, invocation_id)
         job = {
@@ -468,6 +470,7 @@ class ChatStreamService:
             workspace=workspace,
             origin=origin,
             delivery=delivery_payload,
+            instruction_tag="system-reminder",
         )
         if isinstance(handle, Busy):
             logger.info(

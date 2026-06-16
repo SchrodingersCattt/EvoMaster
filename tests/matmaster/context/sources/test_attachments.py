@@ -123,7 +123,7 @@ def test_source_to_sections_emits_runtime_plus_checkpoint() -> None:
     assert len(sections) == 1
     section = sections[0]
     assert isinstance(section, ContextSection)
-    assert section.key == "session_attachments"
+    assert section.key == "session-attachments"
     assert section.tag == "attachments"
     assert section.order == SectionOrder.SESSION_ATTACHMENTS
     assert ContextView.RUNTIME in section.views

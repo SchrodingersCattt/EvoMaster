@@ -9,7 +9,7 @@ from src.services.history_checkpoint_codec import serialize_base_messages
 
 
 def _compact_user_message(summary: str) -> UserMessage:
-    return UserMessage(content=f"<compacted_history>\n{summary}\n</compacted_history>")
+    return UserMessage(content=f"<compacted-history>\n{summary}\n</compacted-history>")
 
 
 def _compact_base_messages(summary: str) -> list[dict]:

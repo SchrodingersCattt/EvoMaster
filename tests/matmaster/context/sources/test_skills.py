@@ -36,8 +36,8 @@ def test_session_skills_source_from_skills_round_trips() -> None:
     assert len(sections) == 1
     section = sections[0]
     assert isinstance(section, ContextSection)
-    assert section.key == "session_skills"
-    assert section.tag == "loaded_skills"
+    assert section.key == "session-skills"
+    assert section.tag == "loaded-skills"
     assert section.order == SectionOrder.SESSION_SKILLS
     assert (
         ContextView.RUNTIME in section.views and ContextView.CHECKPOINT in section.views

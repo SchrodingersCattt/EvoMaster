@@ -35,8 +35,8 @@ class SessionSkillsSource:
             return ()
         return (
             ContextSection(
-                key="session_skills",
-                tag="loaded_skills",
+                key="session-skills",
+                tag="loaded-skills",
                 content=text,
                 order=SectionOrder.SESSION_SKILLS,
                 views=ALL_VIEWS,

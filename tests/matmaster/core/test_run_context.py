@@ -85,7 +85,7 @@ class TestExecutionEnvironment:
             "interaction_bridge",
             "runtime_ports",
             "turn_input",
-            "user_instructions",
+            "user-instructions",
             "active_skills",
         ):
             assert leaked not in fields

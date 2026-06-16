@@ -154,8 +154,8 @@ def _make_compactor(
             return ()
         return (
             ContextSection(
-                key="session_attachments",
-                tag="session_attachments",
+                key="session-attachments",
+                tag="session-attachments",
                 content=text,
                 order=SectionOrder.SESSION_ATTACHMENTS,
                 views=frozenset({ContextView.RUNTIME, ContextView.CHECKPOINT}),
@@ -344,9 +344,9 @@ class TestCompactorOutput:
         assert msgs[0].content == "You are helpful"
         assert isinstance(msgs[1], UserMessage)
         assert "[Compacted Context]" not in (msgs[1].content or "")
-        assert "<compacted_history>" in (msgs[1].content or "")
+        assert "<compacted-history>" in (msgs[1].content or "")
         assert "Summarized content." in msgs[1].content
-        assert "<session_attachments>" in (msgs[1].content or "")
+        assert "<session-attachments>" in (msgs[1].content or "")
         assert "Analyze this data" not in (msgs[1].content or "")
         assert len(msgs) == 2
 
@@ -370,9 +370,9 @@ class TestCompactorOutput:
         assert isinstance(msgs[0], SystemMessage)
         assert isinstance(msgs[1], UserMessage)
         assert "[Compacted Context]" not in (msgs[1].content or "")
-        assert "<compacted_history>" in (msgs[1].content or "")
+        assert "<compacted-history>" in (msgs[1].content or "")
         assert "Summarized content." in (msgs[1].content or "")
-        assert "<session_attachments>" in (msgs[1].content or "")
+        assert "<session-attachments>" in (msgs[1].content or "")
         assert "Analyze this data" not in (msgs[1].content or "")
 
     async def test_base_messages_contains_only_user_bundle(self) -> None:
@@ -386,14 +386,14 @@ class TestCompactorOutput:
 
         assert result.base_messages is not None
         assert [item["role"] for item in result.base_messages] == ["user"]
-        assert "<compacted_history>" in result.base_messages[0]["content"]
+        assert "<compacted-history>" in result.base_messages[0]["content"]
 
     async def test_second_compact_compresses_first_bundle_without_special_case(
         self,
     ) -> None:
         config = CompactionConfig(context_limit=1000)
         provider = MockSummaryProvider(summary="second summary")
-        first_bundle = "<compacted_history>\nfirst summary\n</compacted_history>"
+        first_bundle = "<compacted-history>\nfirst summary\n</compacted-history>"
         msgs = [
             SystemMessage(content="sys"),
             UserMessage(content=first_bundle),
@@ -532,7 +532,7 @@ class TestCompactorResultMetadata:
         result = await compactor.apply_summary(plan, msgs, "summary text")
 
         assert result.strategy == "summary"
-        assert "<compacted_history>" in (msgs[1].content or "")
+        assert "<compacted-history>" in (msgs[1].content or "")
 
 
 class TestPreflightCurrentInputSplit:
@@ -572,10 +572,10 @@ class TestPreflightCurrentInputSplit:
             UserMessage(
                 content=(
                     "Use only the new file\n\n"
-                    "<available_attachments>\n"
+                    "<available-attachments>\n"
                     "file_1 old.cif https://oss.example.com/chat/old.cif\n"
                     "file_2 new.cif https://oss.example.com/chat/new.cif\n"
-                    "</available_attachments>"
+                    "</available-attachments>"
                 ),
                 images=[ImageContentPart(url="https://oss.example.com/chat/new.png")],
             ),
@@ -589,11 +589,11 @@ class TestPreflightCurrentInputSplit:
         )
 
         runtime_content = msgs[1].content or ""
-        session_attachments = runtime_content.split("<session_attachments>", 1)[
+        session_attachments = runtime_content.split("<session-attachments>", 1)[
             1
-        ].split("</session_attachments>", 1)[0]
-        current_instruction = runtime_content.split("<current_instruction>", 1)[1]
-        assert "<current_instruction>" in runtime_content
+        ].split("</session-attachments>", 1)[0]
+        current_instruction = runtime_content.split("<current-instruction>", 1)[1]
+        assert "<current-instruction>" in runtime_content
         assert "old.cif" in session_attachments
         assert "new.cif" not in session_attachments
         assert "file_1 new.cif https://oss.example.com/chat/new.cif" in (
@@ -603,7 +603,7 @@ class TestPreflightCurrentInputSplit:
         assert msgs[1].images[0].url == "https://oss.example.com/chat/new.png"
         assert result.checkpoint_covered_until_event_id == 42
         assert result.base_messages is not None
-        assert "<current_instruction>" not in result.base_messages[0]["content"]
+        assert "<current-instruction>" not in result.base_messages[0]["content"]
         assert "new.cif" not in result.base_messages[0]["content"]
         assert result.base_messages[0].get("images") in (None, [])
 
@@ -714,7 +714,7 @@ class TestToolTruncationFallback:
 
         assert len(msgs) == 2
         assert isinstance(msgs[1], UserMessage)
-        assert "<compacted_history>" in (msgs[1].content or "")
+        assert "<compacted-history>" in (msgs[1].content or "")
         assert len(received) == 0
 
     async def test_compresses_when_no_compressible_turns(self) -> None:

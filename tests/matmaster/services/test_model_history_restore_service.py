@@ -239,9 +239,9 @@ def _v1_checkpoint(
                 [
                     UserMessage(
                         content=(
-                            "<compacted_history>\n"
+                            "<compacted-history>\n"
                             f"{summary}\n"
-                            "</compacted_history>"
+                            "</compacted-history>"
                         )
                     )
                 ]
@@ -719,7 +719,7 @@ def test_v1_restore_mixed_fixture_preserves_phase1_message_bytes() -> None:
     assert [message.model_dump(mode="json") for message in history] == [
         {
             "role": "user",
-            "content": "<compacted_history>\nbase\n</compacted_history>",
+            "content": "<compacted-history>\nbase\n</compacted-history>",
             "images": [],
         },
         {
