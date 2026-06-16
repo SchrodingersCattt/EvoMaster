@@ -20,6 +20,20 @@ def test_is_session_run_live_true_when_queued():
         assert svc.is_session_run_live("s1") is True
 
 
+def test_list_live_run_session_ids_filters_stale():
+    table = MagicMock()
+    table.list_session_ids_by_status.return_value = ["live", "stale"]
+    svc = _make_service(table)
+    with patch.object(
+        svc, "is_session_run_live", side_effect=lambda sid: sid == "live"
+    ):
+        result = svc.list_live_run_session_ids("user-1")
+    table.list_session_ids_by_status.assert_called_once_with(
+        "user-1", ["waiting", "active"]
+    )
+    assert result == ["live"]
+
+
 def test_is_session_run_live_false_when_stale():
     svc = _make_service()
     redis = MagicMock()
