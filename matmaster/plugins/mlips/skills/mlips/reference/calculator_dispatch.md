@@ -75,7 +75,7 @@ model_name_or_path
 | Image | Families | When to use |
 |-------|----------|-------------|
 | `registry.dp.tech/dptech/dpa-calculator:dpa-mlip-bd246adc` | **DP only** | **Default for DPA ASE tasks** |
-| `registry.dp.tech/dptech/dpa-calculator:mace-mlip-bd246adc` | MACE | Only when the user explicitly requests MACE. Use `base` env. |
+| `registry.dp.tech/dptech/dpa-calculator:mace-mlip-faba6692` | MACE | Only when the user explicitly requests MACE. Use `base` env. |
 | `registry.dp.tech/dptech/dpa-calculator:sevennet-mlip-bd246adc` | SevenNet | Only when the user explicitly requests SevenNet. Use `base` env. |
 | `registry.dp.tech/dptech/dpa-calculator:mattersim-mlip-bd246adc` | MatterSim | Only when the user explicitly requests MatterSim. Use `base` env. |
 

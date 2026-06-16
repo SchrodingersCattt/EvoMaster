@@ -35,7 +35,7 @@ These are execution stop rules, not suggestions. User requests like "do not ask 
 | **DPA3.1-3M** | DP | `registry.dp.tech/dptech/dpa-calculator:dpa-mlip-bd246adc` | General inorganic — **default**, 3M params |
 | **DPA3.2-5M** | DP | `registry.dp.tech/dptech/dpa-calculator:dpa-mlip-bd246adc` | General + charge/spin, supports `--charge`/`--spin` |
 | DPA2.4-7M | DP | `registry.dp.tech/dptech/dpa-calculator:dpa-mlip-bd246adc` | Legacy multi-head |
-| **MACE-MP-0** | MACE | `registry.dp.tech/dptech/dpa-calculator:mace-mlip-bd246adc` | General inorganic foundation. **Prefer over MACE-MPA-0** (MPA-0 GitHub download times out in Bohrium) |
+| **MACE-MP-0** | MACE | `registry.dp.tech/dptech/dpa-calculator:mace-mlip-faba6692` | General inorganic foundation. **Prefer over MACE-MPA-0** (MPA-0 GitHub download times out in Bohrium) |
 | SevenNet-0 / 7net-mf-ompa | SevenNet | `registry.dp.tech/dptech/dpa-calculator:sevennet-mlip-bd246adc` | Graph NN |
 | MatterSim-v1-5M | MatterSim | `registry.dp.tech/dptech/dpa-calculator:mattersim-mlip-bd246adc` | General inorganic, 5M params |
 
