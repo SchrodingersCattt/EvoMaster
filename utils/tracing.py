@@ -104,6 +104,7 @@ def configure_tracing(service_name: str) -> bool:
     provider = TracerProvider(resource=Resource.create(resource_attrs))
     provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter(**exporter_kwargs)))
     trace.set_tracer_provider(provider)
+    _configure_trace_context_propagation()
     RequestsInstrumentor().instrument(response_hook=_record_requests_trace_headers)
     _REQUESTS_INSTRUMENTED = True
     _TRACER_PROVIDER = provider
@@ -157,6 +158,81 @@ def _uninstrument_requests() -> None:
         RequestsInstrumentor().uninstrument()
     except Exception as exc:  # noqa: BLE001
         logger.warning("OpenTelemetry requests uninstrument failed: %s", exc)
+
+
+def _configure_trace_context_propagation() -> None:
+    """Use W3C trace context propagation with flags accepted by Go OTel."""
+
+    from opentelemetry.baggage.propagation import W3CBaggagePropagator
+    from opentelemetry.propagate import set_global_textmap
+    from opentelemetry.propagators.composite import CompositePropagator
+    from opentelemetry.trace.propagation.tracecontext import (
+        TraceContextTextMapPropagator,
+    )
+
+    set_global_textmap(
+        CompositePropagator(
+            [
+                _NormalizingTraceContextPropagator(TraceContextTextMapPropagator()),
+                W3CBaggagePropagator(),
+            ]
+        )
+    )
+
+
+class _NormalizingTraceContextPropagator:
+    """Normalize traceparent flags while delegating W3C trace context handling."""
+
+    def __init__(self, delegate) -> None:
+        self._delegate = delegate
+
+    def inject(self, carrier, context=None, setter=None) -> None:
+        if setter is None:
+            self._delegate.inject(carrier, context=context)
+        else:
+            self._delegate.inject(carrier, context=context, setter=setter)
+
+        traceparent = _carrier_get(carrier, "traceparent")
+        normalized = _normalize_traceparent_flags(traceparent)
+        if normalized and normalized != traceparent:
+            if setter is None:
+                carrier["traceparent"] = normalized
+            else:
+                setter.set(carrier, "traceparent", normalized)
+
+    def extract(self, carrier, context=None, getter=None):
+        if getter is None:
+            return self._delegate.extract(carrier, context=context)
+        return self._delegate.extract(carrier, context=context, getter=getter)
+
+    @property
+    def fields(self) -> set[str]:
+        return set(self._delegate.fields)
+
+
+def _carrier_get(carrier, key: str) -> str | None:
+    getter = getattr(carrier, "get", None)
+    if not callable(getter):
+        return None
+    value = getter(key)
+    if isinstance(value, list):
+        value = value[0] if value else None
+    return value if isinstance(value, str) else None
+
+
+def _normalize_traceparent_flags(traceparent: str | None) -> str | None:
+    if not traceparent:
+        return traceparent
+    parts = traceparent.split("-")
+    if len(parts) != 4 or len(parts[3]) != 2:
+        return traceparent
+    try:
+        flags = int(parts[3], 16)
+    except ValueError:
+        return traceparent
+    normalized_flags = flags & 0x01
+    parts[3] = f"{normalized_flags:02x}"
+    return "-".join(parts)
 
 
 def _record_requests_trace_headers(span, request, response) -> None:

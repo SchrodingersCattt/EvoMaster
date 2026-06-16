@@ -121,3 +121,53 @@ def test_record_requests_trace_headers() -> None:
         ),
         "http.request.header.tracestate": "vendor=value",
     }
+
+
+def test_normalize_traceparent_flags() -> None:
+    assert (
+        tracing._normalize_traceparent_flags(
+            "00-450d757e3b6de7aa092ddea1c7d12d65-9baa4e60d87d9a58-03"
+        )
+        == "00-450d757e3b6de7aa092ddea1c7d12d65-9baa4e60d87d9a58-01"
+    )
+    assert (
+        tracing._normalize_traceparent_flags(
+            "00-450d757e3b6de7aa092ddea1c7d12d65-9baa4e60d87d9a58-02"
+        )
+        == "00-450d757e3b6de7aa092ddea1c7d12d65-9baa4e60d87d9a58-00"
+    )
+    assert (
+        tracing._normalize_traceparent_flags(
+            "00-450d757e3b6de7aa092ddea1c7d12d65-9baa4e60d87d9a58-01"
+        )
+        == "00-450d757e3b6de7aa092ddea1c7d12d65-9baa4e60d87d9a58-01"
+    )
+    assert tracing._normalize_traceparent_flags("not-a-traceparent") == (
+        "not-a-traceparent"
+    )
+
+
+def test_normalizing_trace_context_propagator_injects_go_compatible_flags() -> None:
+    class _Delegate:
+        fields = {"traceparent"}
+
+        def inject(self, carrier, context=None, setter=None) -> None:
+            del context
+            traceparent = "00-450d757e3b6de7aa092ddea1c7d12d65-" "9baa4e60d87d9a58-03"
+            if setter is None:
+                carrier["traceparent"] = traceparent
+            else:
+                setter.set(carrier, "traceparent", traceparent)
+
+        def extract(self, carrier, context=None, getter=None):
+            del carrier, getter
+            return context
+
+    carrier: dict[str, str] = {}
+    propagator = tracing._NormalizingTraceContextPropagator(_Delegate())
+
+    propagator.inject(carrier)
+
+    assert carrier["traceparent"] == (
+        "00-450d757e3b6de7aa092ddea1c7d12d65-9baa4e60d87d9a58-01"
+    )
