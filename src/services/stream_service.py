@@ -712,9 +712,7 @@ class ChatStreamService:
                 self.sse_format(
                     self._session_wakeup_payload(sid, "session_waiting_snapshot")
                 )
-                for sid in self._sessions_service.list_waiting_or_active_session_ids(
-                    uid
-                )
+                for sid in self._sessions_service.list_live_run_session_ids(uid)
             ]
 
         if not REDIS_URL:

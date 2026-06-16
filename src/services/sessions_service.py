@@ -390,9 +390,14 @@ class ChatSessionsService:
         uid = row.get("user_id")
         return str(uid) if uid is not None else None
 
-    def list_waiting_or_active_session_ids(self, user_id: str) -> list[str]:
-        """该用户名下仍在 waiting 或 active 的 session_id。"""
-        return self.table.list_session_ids_by_status(user_id, ["waiting", "active"])
+    def list_live_run_session_ids(self, user_id: str) -> list[str]:
+        """该用户名下确实还有在途 run 的 session_id（用于 wakeup snapshot）。
+
+        先取 DB 中 waiting/active 的会话，再用 is_session_run_live 过滤掉
+        部署/重启后残留（run 已不存在）的，避免快照一连上就误报一堆旧会话。
+        """
+        raw = self.table.list_session_ids_by_status(user_id, ["waiting", "active"])
+        return [sid for sid in raw if self.is_session_run_live(sid)]
 
     def set_session_bohrium(
         self,
