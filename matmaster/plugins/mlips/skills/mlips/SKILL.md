@@ -41,6 +41,10 @@ These are execution stop rules, not suggestions. User requests like "do not ask 
 
 > **Image selection rule:** DPA tasks → DPA image (default). Only switch to multi-family image when user explicitly requests MACE, SevenNet, or MatterSim.
 
+Do not infer MLIP family from image tag strings. The built-in scripts dispatch via `_calculator.py` / `build_calculator(model_name)`; ad-hoc tests should pass `--family` explicitly or probe imports instead of matching substrings such as `"dpa" in image`.
+
+Pretrained models are mostly cached in the family images. If a new model must be downloaded, stage it outside the Bohrium compute job and upload or bundle it with the task instead of cold-downloading on the task node.
+
 **DPA image** ships deepmd-kit (v3.x), lammps, ASE 3.23, phonopy 2.34, pymatgen, torch 2.4+cu124.
 
 **Family images** ship the matching MLIP runtime: mace-torch 0.3.12 for MACE, sevenn 0.11.0 for SevenNet, and mattersim 1.1.2 for MatterSim. Use each image's default `base` conda env.

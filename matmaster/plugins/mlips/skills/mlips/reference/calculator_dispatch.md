@@ -34,6 +34,10 @@ model_name_or_path
         └─ other → family = DP (fallback)
 ```
 
+Do not infer MLIP family from image tag strings. The skill's built-in scripts use the explicit model mapping above; ad-hoc regression scripts should pass `--family` explicitly or probe imports/runtime availability instead of matching substrings such as `"dpa" in image`.
+
+Pretrained models are mostly cached in the family images. If a new model must be downloaded, stage it outside the Bohrium compute job and upload or bundle it with the task instead of cold-downloading on the task node.
+
 ## Family-specific notes
 
 ### DP (DPA)
