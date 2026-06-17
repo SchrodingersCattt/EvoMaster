@@ -83,9 +83,9 @@ handled recent terminal reference bucket 的 DB 读取与 snapshot 纳入层。
    不算 required_truncated。
 8. delivery 模式不使用 HANDLED_RECENT_LIMIT。
 9. delivery snapshot 的 ack 边界不受 prompt preview 限制影响。
-10. observation 模式下如果 required context 不完整或 CSV 导出失败，必须通过
-    DeliverySnapshot 上的可变阻断字段 gate ack，不得 ack 未被完整呈现的
-    delivery_snapshot.rows。
+10. observation 模式下如果 required context 不完整（required_truncated 或
+    observation 查询失败）或 CSV 导出失败，必须通过 DeliverySnapshot 上的可变
+    阻断字段 gate ack，不得 ack 未被完整呈现的 delivery_snapshot.rows。
 ```
 
 ## 4. 配置
@@ -315,7 +315,8 @@ class DeliverySnapshot:
 
 ```text
 写入方：
-  observation port / wiring 在 required_truncated=true 时写入。
+  observation port / wiring 在 required context 不完整时写入，
+  reason ∈ {"required_truncated", "query_failed"}。
 
 读取方：
   bohrium_delivery_ack.confirm() 在 ack snapshot.rows 前检查。
@@ -400,35 +401,55 @@ LIMIT HANDLED_RECENT_LIMIT + 1
 
 ### 8.1 读取
 
-读取 required context：
+observation port 持有本 run 的 `delivery_snapshot` 引用（与写 `export_failure`
+同一对象）。三类查询在一个 gather 内完成，任一抛错都视为 required context 不完整，
+写入 `delivery_snapshot.required_block` 后返回 empty（见 §13.2）：
 
 ```python
-active_raw = query_active(limit=required_fetch_limit + 1)
-unhandled_raw = query_unhandled_terminal(limit=required_fetch_limit + 1)
-
-active = active_raw[:required_fetch_limit]
-unhandled = unhandled_raw[:required_fetch_limit]
-
-required_truncated = (
-    len(active_raw) > required_fetch_limit
-    or len(unhandled_raw) > required_fetch_limit
-)
+try:
+    active_raw = query_active(limit=required_fetch_limit + 1)
+    unhandled_raw = query_unhandled_terminal(limit=required_fetch_limit + 1)
+    handled_recent_raw = query_handled_recent_terminal(
+        limit=handled_recent_limit + 1
+    )
+except Exception:
+    if delivery_snapshot is not None:
+        delivery_snapshot.required_block.update({"reason": "query_failed"})
+    return WorkspaceJobs.empty()
 ```
 
-读取 reference context：
+截断判定。required 用 per-bucket 子布尔，再 or 出 `required_truncated`：
 
 ```python
-handled_recent_raw = query_handled_recent_terminal(
-    limit=handled_recent_limit + 1
-)
-
+active = active_raw[:required_fetch_limit]
+unhandled = unhandled_raw[:required_fetch_limit]
 handled_recent = handled_recent_raw[:handled_recent_limit]
+
+active_truncated = len(active_raw) > required_fetch_limit
+unhandled_truncated = len(unhandled_raw) > required_fetch_limit
+required_truncated = active_truncated or unhandled_truncated
 handled_recent_has_more = len(handled_recent_raw) > handled_recent_limit
+```
+
+required context 命中 cap 时同样写 `delivery_snapshot.required_block`。此写入与下游
+inline / export 分支无关：异常配置下（REQUIRED_FETCH_LIMIT < PROMPT_PREVIEW_LIMIT）
+即使最终走 full_inline，也可能 `required_truncated=true`：
+
+```python
+if required_truncated and delivery_snapshot is not None:
+    delivery_snapshot.required_block.update(
+        {
+            "reason": "required_truncated",
+            "active_truncated": active_truncated,
+            "unhandled_terminal_truncated": unhandled_truncated,
+        }
+    )
 ```
 
 组成本轮 snapshot：
 
 ```python
+summary = compute_summary(active, unhandled, handled_recent)
 workspace_jobs = WorkspaceJobs(
     workspace=workspace,
     active_jobs=active,
@@ -666,7 +687,9 @@ return delivery_compact_instruction_text(
 )
 ```
 
-delivery preview 优先 failed / lost / stopped：
+delivery preview 优先 failed / lost / stopped。它全部来自单一 `snapshot.rows`，
+failed / succeeded 由 status 区分并渲染成两段表头（与 observation 多 bucket 混排
+不同），不需要 group 列，因此不打 group：
 
 ```python
 def select_delivery_preview_rows(
@@ -675,7 +698,7 @@ def select_delivery_preview_rows(
     limit: int,
 ):
     action_rows = [
-        {"group": "unhandled_terminal", **job}
+        job
         for job in rows
         if job["status"] in ACTION_STATUSES
     ]
@@ -739,36 +762,40 @@ if snap.rows and not snap.export_failure and not snap.required_block:
     mark_handled_by_ids(...)
 ```
 
-### 13.2 Required Context 截断
+### 13.2 Required Context 不完整
 
-如果 observation 的 `required_truncated=true`：
+observation 的 required context 在两种情况下不完整，都按同一路径 gate ack：
 
 ```text
-workspace required context 不完整。
-不得假装 CSV 覆盖了全部 required jobs。
+required_truncated：required 查询命中 REQUIRED_FETCH_LIMIT + 1，不能保证本
+  session 的 rows 都进入了 snapshot / CSV。
+query_failed：三类 observation 查询抛错，本轮 workspace_jobs section 与 CSV 都
+  没有呈现任何 required rows。
 ```
 
-ack 策略：
+两种情况共同的判断与策略：
 
 ```text
-observation 模式下，如果 required_truncated=true，observation port 必须写入
-delivery_snapshot.required_block，并跳过 delivery_snapshot.rows 的 ack。
+workspace required context 不完整，不得假装 CSV 覆盖了全部 required jobs。
+observation port 必须写入 delivery_snapshot.required_block，并跳过
+delivery_snapshot.rows 的 ack。
 ```
 
 理由：
 
 ```text
 delivery_snapshot.rows 是本 session 的 required unhandled terminal rows。
-当 workspace required bucket 命中 safety cap 时，不能保证本 session 的所有 rows
-都已经进入 observation snapshot 或 CSV。
+required context 不完整时，不能保证本 session 的所有 rows 都已经进入 observation
+snapshot 或 CSV（截断丢尾，查询失败则全部缺席）。
 跳过 ack 是安全降级；这些 rows 会在后续 run 中重新出现。
 ```
 
 `handled_recent_has_more=true` 不影响 ack。
 
-写入示例：
+写入示例（两种 reason）：
 
 ```python
+# required 命中 cap
 delivery_snapshot.required_block.update(
     {
         "reason": "required_truncated",
@@ -776,6 +803,9 @@ delivery_snapshot.required_block.update(
         "unhandled_terminal_truncated": unhandled_truncated,
     }
 )
+
+# 三类查询抛错
+delivery_snapshot.required_block.update({"reason": "query_failed"})
 ```
 
 `required_block` 与 `export_failure` 一样，是 frozen dataclass 上绑定的可变容器。
@@ -918,7 +948,8 @@ observation 模式下不得 ack `delivery_snapshot.rows`，避免盲 ack。
 src/services/bohrium_jobs_wiring.py
   读取新 budget。
   observation 改为 required/reference/preview 三层装配。
-  observation 命中 required_truncated 时写 delivery_snapshot.required_block。
+  observation required context 不完整（required_truncated 或查询失败）时写
+  delivery_snapshot.required_block。
   delivery 改用 PROMPT_PREVIEW_LIMIT，不再使用 ACTION_SAMPLE_LIMIT。
 
 src/dao/bohrium_jobs_table.py
@@ -934,12 +965,13 @@ matmaster/context/ports.py
 
 matmaster/context/workspace_jobs_compute.py
   summary、inline render、CSV rows、preview selection 改用新 bucket。
-  preview rows 在选择阶段写入 group。
+  observation preview rows 在选择阶段写入 group；新增
+  PREVIEW_COLUMNS = ("group", *SUMMARY_COLUMNS) 供 renderer 输出 preview 表头。
   删除 action_sample_limit / priority_sample_limit 预算。
 
 matmaster/context/sources/workspace_jobs.py
   renderer 输出新 bucket、新 summary、新 preview_policy。
-  compact 输出 preview_rows，不再输出 priority_samples。
+  compact 用 PREVIEW_COLUMNS（含 group 列）输出 preview_rows，不再输出 priority_samples。
 
 src/services/bohrium_delivery_ack.py
   保留 export_failure gating。
@@ -963,10 +995,13 @@ src/services/agent_run_service.py
 6. delivery compact preview 不突破 PROMPT_PREVIEW_LIMIT，只展示 action rows，
    CSV 包含完整 snapshot.rows。
 7. CSV 导出失败时跳过 delivery_snapshot.rows ack。
-8. observation required_truncated=true 时写 required_block，并跳过 delivery_snapshot.rows ack。
-9. required_block 在同一 run 内 sticky，不被后续正常 reassembly 清空。
-10. handled_recent_has_more=true 不影响 ack。
-11. 主代码中无旧 env fallback。
+8. observation required_truncated=true 时写 required_block(reason=required_truncated)，
+   并跳过 delivery_snapshot.rows ack。
+9. observation 查询失败时写 required_block(reason=query_failed)，并跳过
+   delivery_snapshot.rows ack。
+10. required_block 在同一 run 内 sticky，不被后续正常 reassembly 清空。
+11. handled_recent_has_more=true 不影响 ack。
+12. 主代码中无旧 env fallback。
 ```
 
 ## 17. 非目标
@@ -988,8 +1023,8 @@ src/services/agent_run_service.py
 3. prompt 中直接展示的 job 明细不超过 PROMPT_PREVIEW_LIMIT。
 4. 导出 CSV 时，CSV 包含本轮纳入 snapshot 的完整数据。
 5. handled recent 超限只产生 handled_recent_has_more。
-6. required context 超限产生 required_truncated，写 required_block，并阻断相关
-   snapshot.rows ack。
+6. required context 不完整（required_truncated 或查询失败）写 required_block，
+   并阻断相关 snapshot.rows ack。
 7. preview rows 携带 group，renderer 不从裸 job dict 反推来源。
 8. 删除 ACTION_SAMPLE_LIMIT 与 PRIORITY_SAMPLE_LIMIT 预算模型。
 9. 删除旧 env fallback。
