@@ -49,7 +49,7 @@ model_name_or_path
   Call `mace_mp(model=...)` with the matching built-in name (`small`, `medium`, `large`, or `default`)
 - No `--head` flag (ignored)
 - Default dtype: `float64` for accuracy
-- Custom MACE `.model` files: pass the local path. 
+- Custom MACE `.model` files: pass the local path.
 
 ### SevenNet
 
