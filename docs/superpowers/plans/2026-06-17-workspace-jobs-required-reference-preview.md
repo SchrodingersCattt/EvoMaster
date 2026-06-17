@@ -18,9 +18,11 @@ These are deliberate engineering calls made while turning the spec into code. Ob
 
 1. **The shared DTO field `pending_terminal_jobs` is renamed to `unhandled_terminal_jobs` and reused by BOTH modes.** Delivery's `snapshot.rows` are exactly "terminal but unhandled" jobs of this session, so they belong in `unhandled_terminal_jobs`. The spec's "delivery keeps `pending` naming" (§6) applies to the worker/DAO concepts (`delivery_snapshot.rows`, `list_pending_terminal_snapshot`, `scan_delivery_units` aggregate), NOT the shared context DTO. Those DAO/worker names stay `pending`.
 
-2. **The compact `prompt_preview {...}` block omits the redundant `preview_limit` key**, emitting `{"preview_rows": N, "omitted_rows": M}`. In compact mode `preview_rows` always equals the configured limit (snapshot > limit ⇒ selection fills to limit), so `preview_limit` carries no extra information and the renderer does not receive env values.
+2. **The compact `prompt_preview {...}` block includes `preview_limit` and is char-safe.** It is not redundant: observation can enter compact mode because of `char_limit` while `snapshot_rows <= PROMPT_PREVIEW_LIMIT`, so `preview_rows` may be smaller than the configured limit. Carry the configured limit on `WorkspaceJobs.preview_limit` whenever compact/export output is returned, and trim/truncate preview rows before rendering so compact preview cannot reinsert the same oversized values that forced CSV export.
 
-3. **Delivery keeps a row-only inline threshold (no char check).** Delivery inline text is two short columns (`job_id, job_name`); row count already bounds its size (prior design rationale). The spec §12's `compute_delivery_inline_chars` is not implemented — observation keeps its row+char double threshold.
+3. **Required query failure and reference query failure are different.** Active and unhandled-terminal query failures write `DeliverySnapshot.required_block` and render a visible `required_context_error`. Handled-recent query failure does not write `required_block`; it sets `handled_recent_unavailable=true` and omits reference history for this observation.
+
+4. **Delivery keeps a row-only inline threshold as an explicit deviation.** Delivery inline text is still bounded by `PROMPT_PREVIEW_LIMIT` rows, but `job_name` length is not independently capped here. This preserves the current delivery rendering path and avoids duplicating delivery text rendering inside wiring. Add an explicit regression test documenting this choice so it is not mistaken for an accidental omission.
 
 ## Scope: what is NOT renamed
 
@@ -30,8 +32,8 @@ These are deliberate engineering calls made while turning the spec into code. Ob
 
 | File | Responsibility | Change |
 |------|----------------|--------|
-| `matmaster/context/ports.py` | DTOs | Rename `WorkspaceJobs`/`WorkspaceJobsSummary` fields; add `required_truncated`/`handled_recent_has_more`; `priority_samples`→`preview_rows`; drop `snapshot_truncated` |
-| `matmaster/context/workspace_jobs_compute.py` | Pure compute/render helpers | Rename summary keys + group labels; add `PREVIEW_COLUMNS`; replace `select_priority_samples` with `select_observation_preview_rows` + `select_delivery_preview_rows`; flag lines in `render_inline_lines` |
+| `matmaster/context/ports.py` | DTOs | Rename `WorkspaceJobs`/`WorkspaceJobsSummary` fields; add `required_truncated`/`handled_recent_has_more`/`handled_recent_unavailable`/`required_error`/`preview_limit`; add `summary.unhandled_action`; `priority_samples`→`preview_rows`; drop `snapshot_truncated` |
+| `matmaster/context/workspace_jobs_compute.py` | Pure compute/render helpers | Rename summary keys + group labels; add `PREVIEW_COLUMNS`; replace `select_priority_samples` with `select_observation_preview_rows` + `select_delivery_preview_rows`; add preview char-safety helpers; flag/hint lines in `render_inline_lines` |
 | `matmaster/context/sources/workspace_jobs.py` | Section/turn-instruction renderer | New bucket labels + flag lines + preview block w/ group; delivery reads `unhandled_terminal_jobs` |
 | `src/dao/bohrium_jobs_table.py` | bohrium_jobs DAO | `query_workspace_active` gains `limit`; rename pending→`unhandled_terminal`; recent→`handled_recent_terminal` with `handled_at IS NOT NULL` |
 | `src/services/bohrium_jobs_wiring.py` | Port assembly | Read 3 new env vars; observation `limit+1` + `required_block`; delivery uses preview limit |
@@ -312,10 +314,13 @@ def test_workspace_jobs_new_fields_default() -> None:
     assert jobs.active_jobs == ()
     assert jobs.unhandled_terminal_jobs == ()
     assert jobs.handled_recent_terminal_jobs == ()
+    assert jobs.required_error is None
+    assert jobs.preview_limit is None
     assert jobs.preview_rows == ()
     assert jobs.omitted_count is None
     assert jobs.required_truncated is False
     assert jobs.handled_recent_has_more is False
+    assert jobs.handled_recent_unavailable is False
 
 
 def test_export_metadata_constructs() -> None:
@@ -340,6 +345,7 @@ def test_summary_and_error_construct() -> None:
         failed=1,
         stopped=0,
         lost=0,
+        unhandled_action=1,
     )
     err = WorkspaceJobsExportError(
         reason="write_failed", rows=3, target_path="/w/x.csv"
@@ -370,6 +376,7 @@ class WorkspaceJobsSummary:
     failed: int
     stopped: int
     lost: int
+    unhandled_action: int
 ```
 
 Replace the `WorkspaceJobs` class (lines 128-144) with:
@@ -385,10 +392,13 @@ class WorkspaceJobs:
     summary: WorkspaceJobsSummary | None = None
     export: WorkspaceJobsExport | None = None
     export_error: WorkspaceJobsExportError | None = None
+    required_error: Mapping[str, JsonValue] | None = None
+    preview_limit: int | None = None
     preview_rows: tuple[JsonObject, ...] = ()
     omitted_count: int | None = None
     required_truncated: bool = False
     handled_recent_has_more: bool = False
+    handled_recent_unavailable: bool = False
 
     @classmethod
     def empty(cls) -> WorkspaceJobs:
@@ -432,6 +442,7 @@ from matmaster.context.workspace_jobs_compute import (
     render_inline_lines,
     select_delivery_preview_rows,
     select_observation_preview_rows,
+    trim_preview_rows_to_char_limit,
 )
 
 
@@ -448,6 +459,7 @@ def test_compute_summary_counts_groups_and_statuses() -> None:
     assert (s.active, s.unhandled_terminal, s.handled_recent_terminal) == (2, 2, 1)
     assert s.by_status == {"running": 2, "failed": 1, "finished": 2}
     assert (s.failed, s.stopped, s.lost) == (1, 0, 0)
+    assert s.unhandled_action == 1
 
 
 def test_render_inline_lines_columnar_with_flags_and_chars_consistent() -> None:
@@ -458,6 +470,7 @@ def test_render_inline_lines_columnar_with_flags_and_chars_consistent() -> None:
         summary=compute_summary((_job("a1", "running"),), (), ()),
         required_truncated=False,
         handled_recent_has_more=True,
+        handled_recent_unavailable=True,
     )
     lines = render_inline_lines(jobs)
     assert lines[0] == "workspace /share/p"
@@ -465,9 +478,25 @@ def test_render_inline_lines_columnar_with_flags_and_chars_consistent() -> None:
     assert lines[2].startswith("summary {")
     assert "required_truncated false" in lines
     assert "handled_recent_has_more true" in lines
+    assert "handled_recent_hint " in "\n".join(lines)
+    assert "handled_recent_unavailable true" in lines
+    assert "handled_recent_unavailable_hint " in "\n".join(lines)
     assert "active job_id,job_name,status" in lines
     assert "a1,n-a1,running" in lines
     assert compute_inline_chars(jobs) == len("\n".join(lines))
+
+
+def test_render_inline_required_error_is_visible() -> None:
+    jobs = WorkspaceJobs(
+        workspace="/share/p",
+        mode="workspace_observation",
+        required_error={"reason": "query_failed"},
+    )
+
+    text = "\n".join(render_inline_lines(jobs))
+
+    assert "required_context_error " in text
+    assert '"reason": "query_failed"' in text
 
 
 def test_render_csv_block_header_then_escaped_values() -> None:
@@ -531,6 +560,28 @@ def test_preview_columns_prefixes_group() -> None:
     assert PREVIEW_COLUMNS == ("group", "job_id", "job_name", "status")
 
 
+def test_trim_preview_rows_to_char_limit_truncates_and_bounds_rendered_preview() -> None:
+    rows = (
+        {
+            "group": "unhandled_terminal",
+            "job_id": "p1",
+            "job_name": "n" * 20000,
+            "status": "failed",
+        },
+    )
+
+    trimmed = trim_preview_rows_to_char_limit(
+        rows,
+        columns=PREVIEW_COLUMNS,
+        char_limit=12000,
+    )
+
+    assert len(trimmed) == 1
+    assert str(trimmed[0]["job_name"]).endswith("...<truncated>")
+    rendered = "\n".join(render_csv_block("preview_rows", PREVIEW_COLUMNS, trimmed))
+    assert len(rendered) <= 12000
+
+
 def test_build_csv_text_fixed_header_bool_none_and_extras_dropped() -> None:
     rows = [
         {
@@ -556,7 +607,7 @@ def test_build_csv_text_fixed_header_bool_none_and_extras_dropped() -> None:
 - [ ] **Step 2: Run, expect failure**
 
 Run: `uv run pytest tests/matmaster/context/test_workspace_jobs_compute.py -q`
-Expected: FAIL on import (`cannot import name 'PREVIEW_COLUMNS' / 'select_observation_preview_rows'`).
+Expected: FAIL on import (`cannot import name 'PREVIEW_COLUMNS' / 'select_observation_preview_rows' / 'trim_preview_rows_to_char_limit'`).
 
 - [ ] **Step 3: Update `summary_to_dict` and `compute_summary`**
 
@@ -573,6 +624,7 @@ def summary_to_dict(s: WorkspaceJobsSummary) -> dict[str, JsonValue]:
         "failed": s.failed,
         "stopped": s.stopped,
         "lost": s.lost,
+        "unhandled_action": s.unhandled_action,
     }
 ```
 
@@ -589,6 +641,9 @@ def compute_summary(
         for job in group:
             status = str(job.get("status"))
             by_status[status] = by_status.get(status, 0) + 1
+    unhandled_action = sum(
+        1 for job in unhandled if str(job.get("status")) in _ACTION_STATUSES
+    )
     return WorkspaceJobsSummary(
         total=len(active) + len(unhandled) + len(handled_recent),
         active=len(active),
@@ -598,26 +653,73 @@ def compute_summary(
         failed=by_status.get("failed", 0),
         stopped=by_status.get("stopped", 0),
         lost=by_status.get("lost", 0),
+        unhandled_action=unhandled_action,
     )
 ```
 
 - [ ] **Step 4: Update `render_inline_lines` (labels + flag lines)**
+
+Add shared hint constants after `_ACTION_STATUSES`:
+
+```python
+REQUIRED_TRUNCATED_HINT = (
+    "Workspace required context hit the safety cap and may be incomplete; some "
+    "required jobs are absent from both this summary and the exported CSV."
+)
+HANDLED_RECENT_HINT = (
+    "handled_recent_terminal is reference-only history truncated to "
+    "HANDLED_RECENT_LIMIT; older handled jobs are intentionally omitted."
+)
+HANDLED_RECENT_UNAVAILABLE_HINT = (
+    "handled_recent_terminal reference history could not be loaded; required "
+    "active/unhandled context is still present if no required_context_error exists."
+)
+```
 
 Replace `render_inline_lines` (lines 90-105):
 
 ```python
 def render_inline_lines(jobs: WorkspaceJobs) -> tuple[str, ...]:
     lines: list[str] = []
+    has_workspace_job_content = bool(
+        jobs.mode
+        or jobs.summary is not None
+        or jobs.active_jobs
+        or jobs.unhandled_terminal_jobs
+        or jobs.handled_recent_terminal_jobs
+        or jobs.required_error is not None
+        or jobs.required_truncated
+        or jobs.handled_recent_has_more
+        or jobs.handled_recent_unavailable
+    )
+    if not has_workspace_job_content:
+        return ()
     if jobs.workspace:
         lines.append(f"workspace {jobs.workspace}")
     if jobs.mode:
         lines.append(f"mode {jobs.mode}")
     if jobs.summary is not None:
         lines.append(f"summary {render_job_json(summary_to_dict(jobs.summary))}")
+    if jobs.required_error is not None:
+        lines.append(
+            f"required_context_error {render_job_json(dict(jobs.required_error))}"
+        )
     lines.append(f"required_truncated {str(jobs.required_truncated).lower()}")
     lines.append(
         f"handled_recent_has_more {str(jobs.handled_recent_has_more).lower()}"
     )
+    lines.append(
+        f"handled_recent_unavailable "
+        f"{str(jobs.handled_recent_unavailable).lower()}"
+    )
+    if jobs.required_truncated:
+        lines.append(f'required_truncated_hint "{REQUIRED_TRUNCATED_HINT}"')
+    if jobs.handled_recent_has_more:
+        lines.append(f'handled_recent_hint "{HANDLED_RECENT_HINT}"')
+    if jobs.handled_recent_unavailable:
+        lines.append(
+            f'handled_recent_unavailable_hint "{HANDLED_RECENT_UNAVAILABLE_HINT}"'
+        )
     for label, group in (
         ("active", jobs.active_jobs),
         ("unhandled_terminal", jobs.unhandled_terminal_jobs),
@@ -636,7 +738,8 @@ Add after `SUMMARY_COLUMNS` (line 32):
 PREVIEW_COLUMNS: tuple[str, ...] = ("group", *SUMMARY_COLUMNS)
 ```
 
-Replace `select_priority_samples` (lines 117-137) with:
+Keep the existing helper signature `def _with_group(job, group)`. Replace
+`select_priority_samples` (lines 117-137) with:
 
 ```python
 def select_observation_preview_rows(
@@ -650,18 +753,18 @@ def select_observation_preview_rows(
     unhandled other -> handled recent。每行在选择阶段打上来源 group，renderer
     不得从裸 job 反推 bucket。"""
     unhandled_action = [
-        _with_group("unhandled_terminal", j)
+        _with_group(j, "unhandled_terminal")
         for j in unhandled_terminal
         if str(j.get("status")) in _ACTION_STATUSES
     ]
     unhandled_other = [
-        _with_group("unhandled_terminal", j)
+        _with_group(j, "unhandled_terminal")
         for j in unhandled_terminal
         if str(j.get("status")) not in _ACTION_STATUSES
     ]
-    active_rows = [_with_group("active", j) for j in active]
+    active_rows = [_with_group(j, "active") for j in active]
     handled_recent_rows = [
-        _with_group("handled_recent_terminal", j) for j in handled_recent_terminal
+        _with_group(j, "handled_recent_terminal") for j in handled_recent_terminal
     ]
     selected: list[JsonObject] = []
     for pool in (unhandled_action, active_rows, unhandled_other, handled_recent_rows):
@@ -680,6 +783,46 @@ def select_delivery_preview_rows(
     """delivery compact preview：只取 failed/lost/stopped，单 bucket 不打 group。"""
     action = [j for j in rows if str(j.get("status")) in _ACTION_STATUSES]
     return tuple(action[:limit])
+
+
+_PREVIEW_TRUNCATION_MARKER = "...<truncated>"
+_PREVIEW_FIELD_CHAR_LIMIT = 240
+
+
+def _truncate_preview_cell(value: JsonValue) -> JsonValue:
+    if not isinstance(value, str):
+        return value
+    if len(value) <= _PREVIEW_FIELD_CHAR_LIMIT:
+        return value
+    keep = max(0, _PREVIEW_FIELD_CHAR_LIMIT - len(_PREVIEW_TRUNCATION_MARKER))
+    return value[:keep] + _PREVIEW_TRUNCATION_MARKER
+
+
+def _truncate_preview_row(
+    row: JsonObject,
+    columns: tuple[str, ...],
+) -> dict[str, JsonValue]:
+    out = dict(row)
+    for column in columns:
+        out[column] = _truncate_preview_cell(out.get(column))
+    return out
+
+
+def trim_preview_rows_to_char_limit(
+    rows: tuple[JsonObject, ...],
+    *,
+    columns: tuple[str, ...],
+    char_limit: int,
+) -> tuple[JsonObject, ...]:
+    """Bound rendered compact preview. CSV remains the complete snapshot."""
+    selected: list[JsonObject] = []
+    for row in rows:
+        candidate = (*selected, _truncate_preview_row(row, columns))
+        rendered = "\n".join(render_csv_block("preview_rows", columns, candidate))
+        if len(rendered) > char_limit:
+            break
+        selected = list(candidate)
+    return tuple(selected)
 ```
 
 - [ ] **Step 6: Update `build_csv_rows` group labels**
@@ -789,6 +932,7 @@ def _summary() -> WorkspaceJobsSummary:
         failed=1,
         stopped=0,
         lost=0,
+        unhandled_action=1,
     )
 
 
@@ -806,6 +950,7 @@ def test_inline_renders_summary_flags_and_columnar_details() -> None:
     assert "mode workspace_observation" in content
     assert "required_truncated false" in content
     assert "handled_recent_has_more false" in content
+    assert "handled_recent_unavailable false" in content
     assert "active job_id,job_name,status" in content
     assert "a1,n1,running" in content
     assert "unhandled_terminal job_id,job_name,status" in content
@@ -832,6 +977,7 @@ def test_compact_renders_export_preview_with_group_and_omitted() -> None:
                 "status": "failed",
             },
         ),
+        preview_limit=50,
         omitted_count=93,
     )
     content = WorkspaceJobsSource.from_jobs(jobs).to_sections()[0].content
@@ -839,6 +985,7 @@ def test_compact_renders_export_preview_with_group_and_omitted() -> None:
     assert "read_hint " in content
     assert "action_hint " in content
     assert "prompt_preview {" in content
+    assert '"preview_limit": 50' in content
     assert '"omitted_rows": 93' in content
     assert "preview_rows group,job_id,job_name,status" in content
     assert "unhandled_terminal,p1,n2,failed" in content
@@ -864,6 +1011,37 @@ def test_compact_required_truncated_renders_hint() -> None:
     assert "required_truncated_hint" in content
 
 
+def test_compact_action_hint_uses_unhandled_action_only() -> None:
+    summary = WorkspaceJobsSummary(
+        total=1,
+        active=0,
+        unhandled_terminal=0,
+        handled_recent_terminal=1,
+        by_status={"failed": 1},
+        failed=1,
+        stopped=0,
+        lost=0,
+        unhandled_action=0,
+    )
+    jobs = WorkspaceJobs(
+        workspace="/share/p",
+        mode="workspace_observation",
+        summary=summary,
+        export=WorkspaceJobsExport(
+            path="/share/p/.matmaster/context/workspace_jobs/s-i.csv",
+            format="csv",
+            row_count=1,
+            columns=("group", "job_id"),
+            reason="row_limit",
+        ),
+        preview_limit=50,
+    )
+
+    content = WorkspaceJobsSource.from_jobs(jobs).to_sections()[0].content
+
+    assert "action_hint " not in content
+
+
 def test_error_renders_export_error_not_details() -> None:
     jobs = WorkspaceJobs(
         workspace="/share/p",
@@ -877,28 +1055,37 @@ def test_error_renders_export_error_not_details() -> None:
     assert "workspace_jobs_export_error {" in content
     assert "details_exported" not in content
     assert "do not assume omitted pending jobs were delivered" in content
+
+
+def test_empty_jobs_render_nothing() -> None:
+    assert WorkspaceJobsSource.from_jobs(WorkspaceJobs()).to_sections() == ()
 ```
 
-For the delivery tests in the same file: change every `pending_terminal_jobs=(` to `unhandled_terminal_jobs=(`, and every `priority_samples=(` to `preview_rows=(`. The delivery assertions on rendered text are unchanged (delivery output format is unchanged). Delete the old `test_inline_renders_summary_and_columnar_details`, `test_compact_renders_export_samples_omitted`, and `test_compact_truncated_renders_snapshot_hint` (replaced above).
+For the delivery tests in the same file: change every `pending_terminal_jobs=(` to `unhandled_terminal_jobs=(`, and every `priority_samples=(` to `preview_rows=(`. The delivery assertions on rendered text are unchanged (delivery output format is unchanged). Keep `test_empty_jobs_render_nothing`; delete the old `test_inline_renders_summary_and_columnar_details`, `test_compact_renders_export_samples_omitted`, and `test_compact_truncated_renders_snapshot_hint` (replaced above).
 
 - [ ] **Step 2: Run, expect failure**
 
 Run: `uv run pytest tests/matmaster/context/sources/test_workspace_jobs.py -q`
 Expected: FAIL (renderer still references `jobs.pending_terminal_jobs` / `jobs.priority_samples` / `jobs.snapshot_truncated`).
 
-- [ ] **Step 3: Update head lines + hint constants**
+- [ ] **Step 3: Update head lines + shared hint constants**
 
-In `matmaster/context/sources/workspace_jobs.py`, replace the `_SNAPSHOT_TRUNCATED_HINT` constant (lines 41-44) with:
+In `matmaster/context/sources/workspace_jobs.py`, delete the local
+`_SNAPSHOT_TRUNCATED_HINT` constant (lines 41-44). The new hint strings live in
+`workspace_jobs_compute.py` so inline char counting and renderer output use the
+same text.
+
+Add these names to the compute import block:
 
 ```python
-_REQUIRED_TRUNCATED_HINT = (
-    "Workspace required context hit the safety cap and may be incomplete; some "
-    "required jobs are absent from both this summary and the exported CSV."
-)
-_HANDLED_RECENT_HINT = (
-    "handled_recent_terminal is reference-only history truncated to "
-    "HANDLED_RECENT_LIMIT; older handled jobs are intentionally omitted."
-)
+HANDLED_RECENT_HINT,
+HANDLED_RECENT_UNAVAILABLE_HINT,
+REQUIRED_TRUNCATED_HINT,
+```
+
+Add local renderer policy constants near the other renderer constants:
+
+```python
 _PREVIEW_POLICY = "unhandled_action > active > unhandled_other > handled_recent"
 _CSV_CONTAINS = "active + unhandled_terminal + handled_recent_terminal_limited"
 ```
@@ -915,14 +1102,26 @@ Replace `_head_lines` (lines 130-141):
             lines.append(f"mode {jobs.mode}")
         if jobs.summary is not None:
             lines.append(f"summary {render_job_json(summary_to_dict(jobs.summary))}")
+        if jobs.required_error is not None:
+            lines.append(
+                f"required_context_error {render_job_json(dict(jobs.required_error))}"
+            )
         lines.append(f"required_truncated {str(jobs.required_truncated).lower()}")
         lines.append(
             f"handled_recent_has_more {str(jobs.handled_recent_has_more).lower()}"
         )
+        lines.append(
+            f"handled_recent_unavailable "
+            f"{str(jobs.handled_recent_unavailable).lower()}"
+        )
         if jobs.required_truncated:
-            lines.append(f'required_truncated_hint "{_REQUIRED_TRUNCATED_HINT}"')
+            lines.append(f'required_truncated_hint "{REQUIRED_TRUNCATED_HINT}"')
         if jobs.handled_recent_has_more:
-            lines.append(f'handled_recent_hint "{_HANDLED_RECENT_HINT}"')
+            lines.append(f'handled_recent_hint "{HANDLED_RECENT_HINT}"')
+        if jobs.handled_recent_unavailable:
+            lines.append(
+                f'handled_recent_unavailable_hint "{HANDLED_RECENT_UNAVAILABLE_HINT}"'
+            )
         return lines
 ```
 
@@ -950,14 +1149,13 @@ Replace `_compact_lines` (lines 143-183):
         )
         lines.append(f"csv_contains {_CSV_CONTAINS}")
         lines.append(f'read_hint "{_READ_HINT}"')
-        if jobs.summary is not None and (
-            jobs.summary.failed or jobs.summary.lost or jobs.summary.stopped
-        ):
+        if jobs.summary is not None and jobs.summary.unhandled_action:
             lines.append(f'action_hint "{_ACTION_HINT}"')
         lines.append(
             "prompt_preview "
             + render_job_json(
                 {
+                    "preview_limit": jobs.preview_limit,
                     "preview_rows": len(jobs.preview_rows),
                     "omitted_rows": jobs.omitted_count,
                 }
@@ -988,11 +1186,15 @@ In `_delivery_compact_text` (line 112) and `_delivery_export_failed_text` (line 
 
 - [ ] **Step 6: Fix imports**
 
-Update the compute import block (lines 8-14) to add `PREVIEW_COLUMNS` and drop nothing else:
+Update the compute import block (lines 8-14) to add `PREVIEW_COLUMNS` and the
+shared hint constants:
 
 ```python
 from matmaster.context.workspace_jobs_compute import (
+    HANDLED_RECENT_HINT,
+    HANDLED_RECENT_UNAVAILABLE_HINT,
     PREVIEW_COLUMNS,
+    REQUIRED_TRUNCATED_HINT,
     SUMMARY_COLUMNS,
     render_csv_block,
     render_inline_lines,
@@ -1105,13 +1307,140 @@ async def test_observation_over_preview_limit_exports_and_previews(monkeypatch) 
 
     assert result.export is not None
     assert result.export.row_count == 5
+    assert result.preview_limit == 2
     assert len(result.preview_rows) == 2
     assert all(r["group"] == "unhandled_terminal" for r in result.preview_rows)
     assert result.omitted_count == 3
     assert result.unhandled_terminal_jobs == ()
 ```
 
-(c) Replace `test_observation_truncation_flag_set_at_max_rows` (lines 266-290) with two tests — the `limit + 1` truncation flag AND the new query-failure path:
+(c) Add a char-limit compact regression test. This protects the invariant that
+`preview_limit` is not redundant: compact mode can be triggered even when
+`preview_rows < PROMPT_PREVIEW_LIMIT`.
+
+```python
+@pytest.mark.asyncio
+async def test_observation_char_limit_exports_even_when_under_preview_limit(
+    monkeypatch,
+) -> None:
+    from matmaster.context.ports import WorkspaceJobsQuery
+
+    monkeypatch.setenv("BOHRIUM_WORKSPACE_JOBS_PROMPT_PREVIEW_LIMIT", "50")
+    table = MagicMock()
+    table.query_workspace_active.return_value = []
+    table.query_workspace_unhandled_terminal.return_value = [
+        {"job_id": "p1", "job_name": "n" * 20000, "status": "failed"}
+    ]
+    table.query_workspace_handled_recent_terminal.return_value = []
+    _, jobs_port = build_bohrium_jobs_ports(
+        session_id="s",
+        invocation_id="inv",
+        user_id="u",
+        org_id="o",
+        workspace="/share/project",
+        exporter=_exporter(session=MagicMock()),
+        job_context_mode="workspace_observation",
+        table=table,
+    )
+
+    result = await jobs_port.load_workspace_jobs(WorkspaceJobsQuery(session_id="s"))
+
+    assert result.export is not None
+    assert result.export.reason == "char_limit"
+    assert result.preview_limit == 50
+    assert len(result.preview_rows) == 1
+    assert str(result.preview_rows[0]["job_name"]).endswith("...<truncated>")
+    assert result.omitted_count == 0
+    from matmaster.context.sources.workspace_jobs import WorkspaceJobsSource
+
+    content = WorkspaceJobsSource.from_jobs(result).to_sections()[0].content
+    assert len(content) <= 12000
+    assert "...<truncated>" in content
+```
+
+(d) Add a handled-recent cap test. This is the core `HANDLED_RECENT_LIMIT`
+semantic: reference rows are capped at snapshot inclusion time and must not set
+`required_block`.
+
+```python
+@pytest.mark.asyncio
+async def test_observation_handled_recent_limit_is_reference_only(
+    monkeypatch,
+) -> None:
+    from matmaster.context.ports import WorkspaceJobsQuery
+
+    monkeypatch.setenv("BOHRIUM_WORKSPACE_JOBS_HANDLED_RECENT_LIMIT", "2")
+    monkeypatch.setenv("BOHRIUM_WORKSPACE_JOBS_PROMPT_PREVIEW_LIMIT", "10")
+    table = MagicMock()
+    table.query_workspace_active.return_value = []
+    table.query_workspace_unhandled_terminal.return_value = []
+    table.query_workspace_handled_recent_terminal.return_value = [
+        {"job_id": "r0", "job_name": "n0", "status": "finished"},
+        {"job_id": "r1", "job_name": "n1", "status": "finished"},
+        {"job_id": "r2", "job_name": "n2", "status": "finished"},
+    ]
+    snap = _snapshot([{"id": 1, "job_id": "p0", "status": "failed"}])
+    _, jobs_port = build_bohrium_jobs_ports(
+        session_id="s",
+        invocation_id="inv",
+        user_id="u",
+        org_id="o",
+        workspace="/share/project",
+        exporter=_exporter(session=MagicMock()),
+        job_context_mode="workspace_observation",
+        delivery_snapshot=snap,
+        table=table,
+    )
+
+    result = await jobs_port.load_workspace_jobs(WorkspaceJobsQuery(session_id="s"))
+
+    assert [r["job_id"] for r in result.handled_recent_terminal_jobs] == ["r0", "r1"]
+    assert result.handled_recent_has_more is True
+    assert result.required_truncated is False
+    assert snap.required_block == {}
+    assert result.export is None
+```
+
+(e) Add a handled-recent query failure test. Reference query failure must not
+write `required_block` or block ack; it only marks reference history unavailable.
+
+```python
+@pytest.mark.asyncio
+async def test_observation_handled_recent_query_failure_is_reference_unavailable(
+    monkeypatch,
+) -> None:
+    from matmaster.context.ports import WorkspaceJobsQuery
+
+    table = MagicMock()
+    table.query_workspace_active.return_value = []
+    table.query_workspace_unhandled_terminal.return_value = [
+        {"job_id": "p1", "job_name": "n", "status": "failed"}
+    ]
+    table.query_workspace_handled_recent_terminal.side_effect = RuntimeError(
+        "reference query down"
+    )
+    snap = _snapshot([{"id": 1, "job_id": "p1", "status": "failed"}])
+    _, jobs_port = build_bohrium_jobs_ports(
+        session_id="s",
+        invocation_id="inv",
+        user_id="u",
+        org_id="o",
+        workspace="/share/project",
+        exporter=_exporter(session=MagicMock()),
+        job_context_mode="workspace_observation",
+        delivery_snapshot=snap,
+        table=table,
+    )
+
+    result = await jobs_port.load_workspace_jobs(WorkspaceJobsQuery(session_id="s"))
+
+    assert result.required_error is None
+    assert result.handled_recent_unavailable is True
+    assert result.handled_recent_terminal_jobs == ()
+    assert snap.required_block == {}
+```
+
+(f) Replace `test_observation_truncation_flag_set_at_max_rows` (lines 266-290) with two tests — the `limit + 1` truncation flag AND the new required-query-failure path:
 
 ```python
 @pytest.mark.asyncio
@@ -1148,10 +1477,10 @@ async def test_observation_required_truncated_writes_required_block(monkeypatch)
 
 
 @pytest.mark.asyncio
-async def test_observation_query_failure_writes_required_block_and_empty(
+async def test_observation_required_query_failure_writes_required_block_and_error(
     monkeypatch,
 ) -> None:
-    from matmaster.context.ports import WorkspaceJobs, WorkspaceJobsQuery
+    from matmaster.context.ports import WorkspaceJobsQuery
 
     table = MagicMock()
     table.query_workspace_active.side_effect = RuntimeError("db down")
@@ -1169,13 +1498,46 @@ async def test_observation_query_failure_writes_required_block_and_empty(
     )
     result = await jobs_port.load_workspace_jobs(WorkspaceJobsQuery(session_id="s"))
 
-    assert result == WorkspaceJobs.empty()
+    assert result.mode == "workspace_observation"
+    assert result.workspace == "/share/project"
+    assert result.required_error == {"reason": "query_failed"}
     assert snap.required_block["reason"] == "query_failed"
 ```
 
-(d) Update `test_observation_export_failure_writes_snapshot_and_error` (lines 234-263): rename the two mock return-value attributes to `query_workspace_unhandled_terminal` / `query_workspace_handled_recent_terminal`, set `monkeypatch.setenv("BOHRIUM_WORKSPACE_JOBS_PROMPT_PREVIEW_LIMIT", "2")` instead of the old `INLINE_ROW_LIMIT`, and keep the `snap.export_failure["reason"] == "session_missing"` assertion.
+(g) Update `test_observation_export_failure_writes_snapshot_and_error` (lines 234-263): rename the two mock return-value attributes to `query_workspace_unhandled_terminal` / `query_workspace_handled_recent_terminal`, set `monkeypatch.setenv("BOHRIUM_WORKSPACE_JOBS_PROMPT_PREVIEW_LIMIT", "2")` instead of the old `INLINE_ROW_LIMIT`, and keep the `snap.export_failure["reason"] == "session_missing"` assertion.
 
-(e) Update the delivery tests: in `test_delivery_under_row_limit_returns_full_pending_no_active_query` change `result.pending_terminal_jobs == snap.rows` to `result.unhandled_terminal_jobs == snap.rows` and `result.summary.pending_terminal == 2` to `result.summary.unhandled_terminal == 2`. In `test_delivery_over_row_limit_exports_pending_only` and `test_delivery_export_failure_writes_snapshot_export_failure`, set `monkeypatch.setenv("BOHRIUM_WORKSPACE_JOBS_PROMPT_PREVIEW_LIMIT", "2")` (resp. `"1"`) instead of `INLINE_ROW_LIMIT`, change `result.pending_terminal_jobs == ()` to `result.unhandled_terminal_jobs == ()`, and change `result.priority_samples` to `result.preview_rows`.
+(h) Update the delivery tests: in `test_delivery_under_row_limit_returns_full_pending_no_active_query` change `result.pending_terminal_jobs == snap.rows` to `result.unhandled_terminal_jobs == snap.rows` and `result.summary.pending_terminal == 2` to `result.summary.unhandled_terminal == 2`. In `test_delivery_over_row_limit_exports_pending_only` and `test_delivery_export_failure_writes_snapshot_export_failure`, set `monkeypatch.setenv("BOHRIUM_WORKSPACE_JOBS_PROMPT_PREVIEW_LIMIT", "2")` (resp. `"1"`) instead of `INLINE_ROW_LIMIT`, change `result.pending_terminal_jobs == ()` to `result.unhandled_terminal_jobs == ()`, and change `result.priority_samples` to `result.preview_rows`.
+
+(i) Add an explicit delivery row-only-threshold test documenting the accepted
+spec deviation from Implementation Decision 3:
+
+```python
+@pytest.mark.asyncio
+async def test_delivery_inline_threshold_is_row_only_even_for_long_names(
+    monkeypatch,
+) -> None:
+    from matmaster.context.ports import WorkspaceJobsQuery
+
+    monkeypatch.setenv("BOHRIUM_WORKSPACE_JOBS_PROMPT_PREVIEW_LIMIT", "2")
+    snap = _snapshot(
+        [{"id": 1, "job_id": "t1", "job_name": "n" * 20000, "status": "finished"}]
+    )
+    _, jobs_port = build_bohrium_jobs_ports(
+        session_id="s",
+        invocation_id="inv",
+        user_id="u",
+        org_id="o",
+        workspace="/share/project",
+        exporter=_exporter(session=None),
+        job_context_mode="session_workspace_delivery",
+        delivery_snapshot=snap,
+    )
+
+    result = await jobs_port.load_workspace_jobs(WorkspaceJobsQuery(session_id="s"))
+
+    assert result.export is None
+    assert result.unhandled_terminal_jobs == snap.rows
+```
 
 - [ ] **Step 2: Run, expect failure**
 
@@ -1281,6 +1643,7 @@ class _SessionWorkspaceDeliveryJobsPort:
             return WorkspaceJobs(
                 workspace=self._workspace,
                 summary=summary,
+                preview_limit=self._prompt_preview_limit,
                 preview_rows=preview_rows,
                 export_error=result,
                 mode="session_workspace_delivery",
@@ -1288,6 +1651,7 @@ class _SessionWorkspaceDeliveryJobsPort:
         return WorkspaceJobs(
             workspace=self._workspace,
             summary=summary,
+            preview_limit=self._prompt_preview_limit,
             preview_rows=preview_rows,
             export=result,
             mode="session_workspace_delivery",
@@ -1337,7 +1701,7 @@ class _WorkspaceObservationJobsPort:
     async def load_workspace_jobs(self, query: WorkspaceJobsQuery) -> WorkspaceJobs:
         try:
             table = self._table_ref.get()
-            active_raw, unhandled_raw, handled_recent_raw = await asyncio.gather(
+            active_raw, unhandled_raw = await asyncio.gather(
                 asyncio.to_thread(
                     table.query_workspace_active,
                     user_id=self._user_id,
@@ -1352,22 +1716,37 @@ class _WorkspaceObservationJobsPort:
                     workspace=self._workspace,
                     limit=self._required_fetch_limit + 1,
                 ),
-                asyncio.to_thread(
-                    table.query_workspace_handled_recent_terminal,
-                    user_id=self._user_id,
-                    org_id=self._org_id,
-                    workspace=self._workspace,
-                    limit=self._handled_recent_limit + 1,
-                ),
             )
         except Exception:  # noqa: BLE001
             logger.warning(
-                "load_workspace_jobs(observation) failed workspace=%s",
+                "load_workspace_jobs(observation required) failed workspace=%s",
                 self._workspace,
                 exc_info=True,
             )
             self._write_required_block(reason="query_failed")
-            return WorkspaceJobs.empty()
+            return WorkspaceJobs(
+                workspace=self._workspace,
+                mode="workspace_observation",
+                required_error={"reason": "query_failed"},
+            )
+
+        handled_recent_unavailable = False
+        try:
+            handled_recent_raw = await asyncio.to_thread(
+                table.query_workspace_handled_recent_terminal,
+                user_id=self._user_id,
+                org_id=self._org_id,
+                workspace=self._workspace,
+                limit=self._handled_recent_limit + 1,
+            )
+        except Exception:  # noqa: BLE001
+            logger.warning(
+                "load_workspace_jobs(observation handled_recent) failed workspace=%s",
+                self._workspace,
+                exc_info=True,
+            )
+            handled_recent_raw = []
+            handled_recent_unavailable = True
 
         active = tuple(active_raw[: self._required_fetch_limit])
         unhandled = tuple(unhandled_raw[: self._required_fetch_limit])
@@ -1395,6 +1774,7 @@ class _WorkspaceObservationJobsPort:
             mode="workspace_observation",
             required_truncated=required_truncated,
             handled_recent_has_more=handled_recent_has_more,
+            handled_recent_unavailable=handled_recent_unavailable,
         )
         snapshot_rows = active + unhandled + handled_recent
         if (
@@ -1409,6 +1789,11 @@ class _WorkspaceObservationJobsPort:
             handled_recent_terminal=handled_recent,
             limit=self._prompt_preview_limit,
         )
+        preview_rows = trim_preview_rows_to_char_limit(
+            preview_rows,
+            columns=PREVIEW_COLUMNS,
+            char_limit=self._char_limit,
+        )
         reason = (
             "row_limit"
             if len(snapshot_rows) > self._prompt_preview_limit
@@ -1420,21 +1805,25 @@ class _WorkspaceObservationJobsPort:
             return WorkspaceJobs(
                 workspace=self._workspace,
                 summary=summary,
+                preview_limit=self._prompt_preview_limit,
                 preview_rows=preview_rows,
                 export_error=result,
                 mode="workspace_observation",
                 required_truncated=required_truncated,
                 handled_recent_has_more=handled_recent_has_more,
+                handled_recent_unavailable=handled_recent_unavailable,
             )
         return WorkspaceJobs(
             workspace=self._workspace,
             summary=summary,
+            preview_limit=self._prompt_preview_limit,
             preview_rows=preview_rows,
             export=result,
             omitted_count=len(snapshot_rows) - len(preview_rows),
             mode="workspace_observation",
             required_truncated=required_truncated,
             handled_recent_has_more=handled_recent_has_more,
+            handled_recent_unavailable=handled_recent_unavailable,
         )
 
     def _write_required_block(self, *, reason: str, **extra: Any) -> None:
@@ -1455,10 +1844,12 @@ Replace the compute import (lines 17-21):
 
 ```python
 from matmaster.context.workspace_jobs_compute import (
+    PREVIEW_COLUMNS,
     compute_inline_chars,
     compute_summary,
     select_delivery_preview_rows,
     select_observation_preview_rows,
+    trim_preview_rows_to_char_limit,
 )
 ```
 
@@ -1531,8 +1922,8 @@ git commit -m "test: finish workspace-jobs bucket rename sweep"
 ## Self-Review (completed during planning)
 
 **Spec coverage** — every spec section maps to a task:
-- §1 background (`limit+1`, recent handled filter) → Task 1, Task 7. §2 semantics / three buckets → Task 3, Task 7. §3 invariants 1-5,7 → Task 7 (assembly) + Task 6 (render); inv 6 `required_truncated` → Task 7; inv 8-9 (delivery) → Task 7; inv 10 (required_block gate, both reasons) → Task 2 (confirm) + Task 7 (write). §4 three limits + derived char → Task 7. §5 old env removal → Task 7 + Task 8 guard. §6 DTO + `required_block` field → Task 3 + Task 2. §6.1 → Task 2. §7 DAO queries → Task 1. §8 observation flow incl. query_failed + branch-independent write → Task 7. §9 preview selection + group → Task 4. §10 renderer output → Task 6. §11 CSV groups → Task 4 (build_csv_rows) + Task 5 (exporter). §12 delivery preview → Task 4 + Task 7. §13 ack/failure → Task 2 + Task 7. §15 file list → all tasks; `agent_run_service.py` confirmed no-change. §16 verification items → Tasks 1-8 tests. §17 non-goals respected (no schema change, delivery aggregate untouched). §18 completion → Task 8 guards.
+- §1 background (`limit+1`, recent handled filter) → Task 1, Task 7. §2 semantics / three buckets → Task 3, Task 7. §3 invariants 1-5,7 → Task 7 (assembly) + Task 6 (render); inv 6 `required_truncated` → Task 7; inv 8-9 (delivery) → Task 7; inv 10 (required_block gate for required query failure/truncation and export failure) → Task 2 (confirm) + Task 7 (write). §4 three limits + derived char → Task 7, with compact preview char-safety in Task 4/7. §5 old env removal → Task 7 + Task 8 guard. §6 DTO + `required_block` field → Task 3 + Task 2, including `required_error`, `handled_recent_unavailable`, `preview_limit`, and `summary.unhandled_action`. §6.1 → Task 2. §7 DAO queries → Task 1. §8 observation flow incl. required query failure vs reference query failure → Task 7. §9 preview selection + group + char-safe trim → Task 4. §10 renderer output, inline/compact hints, visible `required_context_error` → Task 4 + Task 6. §11 CSV groups → Task 4 (build_csv_rows) + Task 5 (exporter). §12 delivery preview → Task 4 + Task 7. §13 ack/failure → Task 2 + Task 7. §15 file list → all tasks; `agent_run_service.py` confirmed no-change. §16 verification items → Tasks 1-8 tests. §17 non-goals respected (no schema change, delivery aggregate untouched). §18 completion → Task 8 guards.
 
 **Placeholder scan** — no TBD/TODO; every code step shows full code; the only "read first to match shape" note is Task 8 Step 2 (a 2-line field swap in an unread file), which states the exact target.
 
-**Type consistency** — method names consistent across tasks: `query_workspace_active/unhandled_terminal/handled_recent_terminal` (Task 1 ↔ Task 7), `select_observation_preview_rows`/`select_delivery_preview_rows`/`PREVIEW_COLUMNS` (Task 4 ↔ Task 6 ↔ Task 7), `required_block` (Task 2 ↔ Task 7), DTO fields `unhandled_terminal_jobs`/`handled_recent_terminal_jobs`/`preview_rows`/`required_truncated`/`handled_recent_has_more` (Task 3 ↔ all consumers).
+**Type consistency** — method names consistent across tasks: `query_workspace_active/unhandled_terminal/handled_recent_terminal` (Task 1 ↔ Task 7), `select_observation_preview_rows`/`select_delivery_preview_rows`/`trim_preview_rows_to_char_limit`/`PREVIEW_COLUMNS` (Task 4 ↔ Task 6 ↔ Task 7), `required_block` (Task 2 ↔ Task 7), DTO fields `unhandled_terminal_jobs`/`handled_recent_terminal_jobs`/`required_error`/`preview_limit`/`preview_rows`/`required_truncated`/`handled_recent_has_more`/`handled_recent_unavailable` (Task 3 ↔ all consumers), and `WorkspaceJobsSummary.unhandled_action` (Task 3 ↔ Task 4 ↔ Task 6).
