@@ -379,6 +379,94 @@ def test_sessions_service_delete_directory_honors_transaction_block():
     registry.delete_session_run_owner.assert_not_called()
 
 
+def test_get_session_titles_returns_owned_sessions():
+    mock_chat_svc = MagicMock()
+    mock_chat_svc.get_session_titles_by_ids.return_value = [
+        {
+            "id": "s1",
+            "project_id": 42,
+            "status": "idle",
+            "title": "结构分析",
+            "first_user_message": "hello",
+        },
+        {
+            "id": "s2",
+            "project_id": None,
+            "status": "idle",
+            "title": None,
+            "first_user_message": "另一条",
+        },
+    ]
+    app.dependency_overrides[get_sessions_service] = lambda: mock_chat_svc
+    try:
+        with _test_client_without_real_lifespan() as client:
+            response = client.post(
+                "/api/v1/chat/sessions/titles",
+                json={"session_ids": ["s1", "s2", "s1", " ", "missing"]},
+                headers={"X-User-Id": "test-user-1"},
+            )
+
+        assert response.status_code == 200, response.text
+        sessions = response.json()["data"]["sessions"]
+        assert {s["id"]: s["title"] for s in sessions} == {
+            "s1": "结构分析",
+            "s2": None,
+        }
+        assert all("history_length" not in s for s in sessions)
+        # 去重 + 去空白后透传给 service
+        mock_chat_svc.get_session_titles_by_ids.assert_called_once_with(
+            "test-user-1",
+            ["s1", "s2", "missing"],
+        )
+    finally:
+        app.dependency_overrides.pop(get_sessions_service, None)
+
+
+def test_get_session_titles_empty_ids_returns_empty():
+    mock_chat_svc = MagicMock()
+    mock_chat_svc.get_session_titles_by_ids.return_value = []
+    app.dependency_overrides[get_sessions_service] = lambda: mock_chat_svc
+    try:
+        with _test_client_without_real_lifespan() as client:
+            response = client.post(
+                "/api/v1/chat/sessions/titles",
+                json={"session_ids": []},
+                headers={"X-User-Id": "test-user-1"},
+            )
+        assert response.status_code == 200, response.text
+        assert response.json()["data"]["sessions"] == []
+    finally:
+        app.dependency_overrides.pop(get_sessions_service, None)
+
+
+def test_sessions_service_get_titles_delegates_to_table():
+    mock_table = MagicMock()
+    mock_table.get_session_titles_by_ids.return_value = [
+        {
+            "id": "s1",
+            "project_id": 42,
+            "status": "idle",
+            "title": "结构分析",
+            "first_user_message": "hello",
+        }
+    ]
+
+    from src.services.sessions_service import ChatSessionsService
+
+    service = ChatSessionsService(mock_table)
+    result = service.get_session_titles_by_ids("test-user-2", ["s1"])
+
+    assert result[0]["id"] == "s1"
+    mock_table.get_session_titles_by_ids.assert_called_once_with(
+        "test-user-2",
+        ["s1"],
+    )
+    # 空列表短路，不查表
+    mock_table.reset_mock()
+    assert service.get_session_titles_by_ids("test-user-2", []) == []
+    mock_table.get_session_titles_by_ids.assert_not_called()
+
+
 def test_sessions_service_denies_access_to_soft_deleted_session():
     mock_table = MagicMock()
     mock_table.get_session.return_value = {
