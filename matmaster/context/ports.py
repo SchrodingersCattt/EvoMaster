@@ -106,14 +106,15 @@ class WorkspaceJobsExport:
 
 @dataclass(frozen=True)
 class WorkspaceJobsSummary:
-    total: int  # == active + pending_terminal + recent_terminal == CSV row_count
+    total: int  # == active + unhandled_terminal + handled_recent_terminal == snapshot rows
     active: int
-    pending_terminal: int
-    recent_terminal: int
+    unhandled_terminal: int
+    handled_recent_terminal: int
     by_status: Mapping[str, int]
     failed: int
     stopped: int
     lost: int
+    unhandled_action: int
 
 
 @dataclass(frozen=True)
@@ -129,15 +130,19 @@ class WorkspaceJobsExportError:
 class WorkspaceJobs:
     workspace: str | None = None
     active_jobs: tuple[JsonObject, ...] = ()
-    pending_terminal_jobs: tuple[JsonObject, ...] = ()
-    recent_terminal_jobs: tuple[JsonObject, ...] = ()
+    unhandled_terminal_jobs: tuple[JsonObject, ...] = ()
+    handled_recent_terminal_jobs: tuple[JsonObject, ...] = ()
     mode: Literal["workspace_observation", "session_workspace_delivery"] | None = None
     summary: WorkspaceJobsSummary | None = None
     export: WorkspaceJobsExport | None = None
     export_error: WorkspaceJobsExportError | None = None
-    priority_samples: tuple[JsonObject, ...] = ()
+    required_error: Mapping[str, JsonValue] | None = None
+    preview_limit: int | None = None
+    preview_rows: tuple[JsonObject, ...] = ()
     omitted_count: int | None = None
-    snapshot_truncated: bool = False
+    required_truncated: bool = False
+    handled_recent_has_more: bool = False
+    handled_recent_unavailable: bool = False
 
     @classmethod
     def empty(cls) -> WorkspaceJobs:
