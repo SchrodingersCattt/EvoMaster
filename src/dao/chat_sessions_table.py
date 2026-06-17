@@ -48,6 +48,17 @@ def session_row_to_item(row: dict) -> dict:
     }
 
 
+def session_row_to_title_item(row: dict) -> dict:
+    """把会话表行映射为标题查询 DTO。"""
+    return {
+        "id": row["session_id"],
+        "project_id": row.get("project_id"),
+        "status": row.get("status", "idle"),
+        "title": _normalize_session_title_cell(row.get("session_title")),
+        "first_user_message": _parse_first_message_cell(row.get("first_message")),
+    }
+
+
 def _dir_key_expr(alias: str = "s") -> str:
     """SQL 表达式：与业务层 norm_dir 一致，空/NULL → __UNSET__。"""
     return f"COALESCE(NULLIF(TRIM({alias}.session_directory), ''), '__UNSET__')"
@@ -614,7 +625,7 @@ class ChatSessionsTable(BaseTable):
         """按 session_id 批量查询该用户自己的会话标题信息（含 first_message 供前端回退）。
 
         仅返回归属当前用户且未软删除的会话；不存在/非本人/已删除的 id 静默忽略。
-        history_length 在标题场景用不到，固定为 0，省去逐会话 COUNT 子查询。
+        标题接口不返回 history_length，避免把列表页统计字段暴露到窄查询场景。
         """
         ids = [s for s in (sid.strip() for sid in session_ids) if s]
         if not ids:
@@ -627,7 +638,6 @@ class ChatSessionsTable(BaseTable):
                            s.project_id,
                            s.status,
                            s.session_title,
-                           0 as history_length,
                            (SELECT e2.content
                             FROM evo_chat_events e2
                             WHERE e2.session_id = s.session_id
@@ -643,7 +653,7 @@ class ChatSessionsTable(BaseTable):
                 params: list[object] = [user_id, *ids]
                 cursor.execute(sql, tuple(params))
                 results = cursor.fetchall()
-                return [session_row_to_item(row) for row in results]
+                return [session_row_to_title_item(row) for row in results]
 
     def aggregate_session_directory_stats(
         self,

@@ -387,7 +387,6 @@ def test_get_session_titles_returns_owned_sessions():
             "project_id": 42,
             "status": "idle",
             "title": "结构分析",
-            "history_length": 0,
             "first_user_message": "hello",
         },
         {
@@ -395,7 +394,6 @@ def test_get_session_titles_returns_owned_sessions():
             "project_id": None,
             "status": "idle",
             "title": None,
-            "history_length": 0,
             "first_user_message": "另一条",
         },
     ]
@@ -414,6 +412,7 @@ def test_get_session_titles_returns_owned_sessions():
             "s1": "结构分析",
             "s2": None,
         }
+        assert all("history_length" not in s for s in sessions)
         # 去重 + 去空白后透传给 service
         mock_chat_svc.get_session_titles_by_ids.assert_called_once_with(
             "test-user-1",
@@ -448,7 +447,6 @@ def test_sessions_service_get_titles_delegates_to_table():
             "project_id": 42,
             "status": "idle",
             "title": "结构分析",
-            "history_length": 0,
             "first_user_message": "hello",
         }
     ]

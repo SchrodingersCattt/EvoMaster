@@ -431,10 +431,20 @@ class SessionTitlesQueryRequest(BaseModel):
         return out
 
 
+class SessionTitleItem(BaseModel):
+    """会话标题查询项；比 SessionItem 更窄，不包含列表页专属统计字段。"""
+
+    id: str
+    project_id: int | None = None
+    status: str = "idle"
+    title: str | None = None
+    first_user_message: str | None = None
+
+
 class SessionTitlesData(BaseModel):
     """POST /chat/sessions/titles 的 data 字段：仅返回归属当前用户的会话"""
 
-    sessions: list[SessionItem] = Field(
+    sessions: list[SessionTitleItem] = Field(
         default_factory=list,
         description="命中的会话项（含 title 与 first_user_message，供前端按既有规则派生显示标题）",
     )
@@ -455,7 +465,6 @@ class SessionTitlesApiResponse(BaseResponse[SessionTitlesData]):
                             "project_id": 42,
                             "status": "idle",
                             "title": "结构分析会话",
-                            "history_length": 6,
                             "first_user_message": "分析结构",
                         }
                     ],
