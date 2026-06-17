@@ -47,7 +47,7 @@ Pretrained models are mostly cached in the family images. If a new model must be
 
 **DPA image** ships deepmd-kit (v3.x), lammps, ASE 3.23, phonopy 2.34, pymatgen, torch 2.4+cu124.
 
-**Family images** are built from a shared `mlip-base` image and add the matching MLIP runtime: mace-torch 0.3.16 for MACE, sevenn 0.12.1 for SevenNet, and mattersim 1.2.5 for MatterSim. Use each image's default `base` conda env.
+**Family images** are built: mace-torch 0.3.16 for MACE, sevenn 0.12.1 for SevenNet, and mattersim 1.2.5 for MatterSim. Use each image's default `base` env.
 
 ### DPA Heads
 
