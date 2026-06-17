@@ -197,6 +197,20 @@ class ChatSessionsService:
         total = self.table.count_sessions_by_user(user_id, project_id=project_id)
         return sessions, total
 
+    def get_session_titles_by_ids(
+        self,
+        user_id: str,
+        session_ids: list[str],
+    ) -> list[dict]:
+        """按 sessionId 批量获取标题（仅当前用户自己的会话）。
+
+        返回列表项含 id / title / first_user_message 等，供前端按既有规则派生显示标题。
+        非本人 / 不存在 / 已删除的 id 静默忽略。
+        """
+        if not session_ids:
+            return []
+        return self.table.get_session_titles_by_ids(user_id, session_ids)
+
     def list_sessions_grouped_by_directory(
         self,
         user_id: str,

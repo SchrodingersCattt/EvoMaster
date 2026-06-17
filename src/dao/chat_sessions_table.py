@@ -606,6 +606,45 @@ class ChatSessionsTable(BaseTable):
                 results = cursor.fetchall()
                 return [session_row_to_item(row) for row in results]
 
+    def get_session_titles_by_ids(
+        self,
+        user_id: str,
+        session_ids: list[str],
+    ) -> list[dict]:
+        """按 session_id 批量查询该用户自己的会话标题信息（含 first_message 供前端回退）。
+
+        仅返回归属当前用户且未软删除的会话；不存在/非本人/已删除的 id 静默忽略。
+        history_length 在标题场景用不到，固定为 0，省去逐会话 COUNT 子查询。
+        """
+        ids = [s for s in (sid.strip() for sid in session_ids) if s]
+        if not ids:
+            return []
+        with self.get_connection() as conn:
+            with conn.cursor() as cursor:
+                placeholders = ", ".join(["%s"] * len(ids))
+                sql = f"""
+                    SELECT s.session_id,
+                           s.project_id,
+                           s.status,
+                           s.session_title,
+                           0 as history_length,
+                           (SELECT e2.content
+                            FROM evo_chat_events e2
+                            WHERE e2.session_id = s.session_id
+                              AND e2.source = 'User'
+                              AND e2.type = 'query'
+                            ORDER BY e2.created_at ASC
+                            LIMIT 1) as first_message
+                    FROM {self.table_name} s
+                    WHERE s.user_id = %s
+                      AND {_not_deleted_expr('s')}
+                      AND s.session_id IN ({placeholders})
+                """
+                params: list[object] = [user_id, *ids]
+                cursor.execute(sql, tuple(params))
+                results = cursor.fetchall()
+                return [session_row_to_item(row) for row in results]
+
     def aggregate_session_directory_stats(
         self,
         user_id: str,

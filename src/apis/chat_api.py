@@ -32,6 +32,9 @@ from src.models.chat import (
     SessionTitleApiResponse,
     SessionTitleData,
     SessionTitleSetRequest,
+    SessionTitlesApiResponse,
+    SessionTitlesData,
+    SessionTitlesQueryRequest,
     ShareSetRequest,
     ShareStatusApiResponse,
     ShareStatusData,
@@ -246,6 +249,29 @@ def list_sessions(
     return SessionListApiResponse(
         data=SessionListResponse.model_validate(raw),
     )
+
+
+@router.post(
+    "/titles",
+    response_model=SessionTitlesApiResponse,
+    summary="批量查询会话标题",
+    description="按 sessionId 批量获取当前登录用户自己的会话标题（含 first_user_message 供前端回退）。"
+    " 仅返回归属当前用户且未删除的会话，其余 id 静默忽略；单次最多 200 个。"
+    " 用于任务列表等场景按 sessionId 展示会话名称，避免逐条查询。",
+    operation_id="getChatSessionTitles",
+    responses={
+        400: COMMON_ERROR_RESPONSES[400],
+        401: COMMON_ERROR_RESPONSES[401],
+    },
+)
+def get_session_titles(
+    body: SessionTitlesQueryRequest = Body(...),
+    user_id: str = Depends(UserService.require_user_id),
+    chat_svc: ChatSessionsService = Depends(get_sessions_service),
+):
+    """按 sessionId 批量取标题（owner 范围，未命中静默忽略）。"""
+    items = chat_svc.get_session_titles_by_ids(user_id, body.session_ids)
+    return SessionTitlesApiResponse(data=SessionTitlesData(sessions=items))
 
 
 @router.get(

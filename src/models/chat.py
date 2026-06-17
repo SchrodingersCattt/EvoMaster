@@ -404,6 +404,67 @@ class SessionTitleSetRequest(BaseModel):
     )
 
 
+class SessionTitlesQueryRequest(BaseModel):
+    """POST /chat/sessions/titles 请求体：按 sessionId 批量查询标题"""
+
+    session_ids: list[str] = Field(
+        default_factory=list,
+        max_length=200,
+        description="待查询的会话 ID 列表，单次最多 200 个；超量请分批。",
+    )
+
+    @field_validator("session_ids", mode="before")
+    @classmethod
+    def normalize_ids(cls, v: object) -> list[str]:
+        if v is None:
+            return []
+        if not isinstance(v, list):
+            raise ValueError("session_ids must be a list")
+        # 去空白、去空串、去重（保序）
+        seen: set[str] = set()
+        out: list[str] = []
+        for item in v:
+            s = str(item).strip()
+            if s and s not in seen:
+                seen.add(s)
+                out.append(s)
+        return out
+
+
+class SessionTitlesData(BaseModel):
+    """POST /chat/sessions/titles 的 data 字段：仅返回归属当前用户的会话"""
+
+    sessions: list[SessionItem] = Field(
+        default_factory=list,
+        description="命中的会话项（含 title 与 first_user_message，供前端按既有规则派生显示标题）",
+    )
+
+
+class SessionTitlesApiResponse(BaseResponse[SessionTitlesData]):
+    """POST /chat/sessions/titles 规范响应"""
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "code": 0,
+                "msg": "success",
+                "data": {
+                    "sessions": [
+                        {
+                            "id": "session-001",
+                            "project_id": 42,
+                            "status": "idle",
+                            "title": "结构分析会话",
+                            "history_length": 6,
+                            "first_user_message": "分析结构",
+                        }
+                    ],
+                },
+            }
+        }
+    )
+
+
 # ---------- ag-ui 协议：客户端 -> 服务端 (REST Body) ----------
 
 
