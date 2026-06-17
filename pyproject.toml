@@ -33,6 +33,9 @@ dependencies = [
     "lxml",
     "markdownify>=0.14.1",
     "tiktoken>=0.7.0",
+    "transformers>=5.12.1",
+    "sentencepiece>=0.2.1",
+    "safetensors>=0.8.0",
 ]
 
 [project.optional-dependencies]
