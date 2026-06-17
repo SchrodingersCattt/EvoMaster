@@ -12,7 +12,7 @@ def _jobs() -> WorkspaceJobs:
     return WorkspaceJobs(
         workspace="/share/p",
         active_jobs=({"job_id": "a1", "status": "running"},),
-        pending_terminal_jobs=({"id": 1, "job_id": "p1", "status": "failed"},),
+        unhandled_terminal_jobs=({"id": 1, "job_id": "p1", "status": "failed"},),
     )
 
 
