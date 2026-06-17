@@ -79,9 +79,9 @@ The family images are built from a shared `mlip-base` image, then extended with 
 | Image | Families | When to use |
 |-------|----------|-------------|
 | `registry.dp.tech/dptech/dpa-calculator:dpa-mlip-bd246adc` | **DP only** | **Default for DPA ASE tasks** |
-| `registry.dp.tech/dptech/dpa-calculator:mace-mlip-db5a4d45` | MACE | Only when the user explicitly requests MACE. Use `base` env; includes mace-torch 0.3.16. |
-| `registry.dp.tech/dptech/dpa-calculator:sevennet-mlip-db5a4d45` | SevenNet | Only when the user explicitly requests SevenNet. Use `base` env; includes sevenn 0.12.1. |
-| `registry.dp.tech/dptech/dpa-calculator:mattersim-mlip-db5a4d45` | MatterSim | Only when the user explicitly requests MatterSim. Use `base` env; includes mattersim 1.2.5. |
+| `registry.dp.tech/dptech/dpa-calculator:mace-mlip-db5a4d45` | MACE | Only when the user explicitly requests MACE. Use `base` env. |
+| `registry.dp.tech/dptech/dpa-calculator:sevennet-mlip-db5a4d45` | SevenNet | Only when the user explicitly requests SevenNet. Use `base` env. |
+| `registry.dp.tech/dptech/dpa-calculator:mattersim-mlip-db5a4d45` | MatterSim | Only when the user explicitly requests MatterSim. Use `base` env. |
 
 > If a lightweight Python package is missing, prepend `pip install <pkg> &&` before the script in `cmd`; this fallback is for packages only, not pretrained model checkpoints.
 > For Non-DPA pretrained models, most are cached in the family images. If a new model must be downloaded, stage it outside the Bohrium compute job and upload or bundle it with the task. DO NOT cold-download on the task node.
