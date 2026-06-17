@@ -273,3 +273,38 @@ def test_confirm_acks_rows_when_export_failure_empty():
 
     table.mark_handled_by_ids.assert_called_once()
     assert affected == 1
+
+
+def test_confirm_skips_rows_when_required_block_set_but_acks_observed():
+    table = MagicMock()
+    table.mark_handled_by_job_keys.return_value = 1
+    snap = bohrium_delivery_ack.DeliverySnapshot(
+        user_id="u1",
+        org_id="o1",
+        session_id="s",
+        workspace="/share/project",
+        rows=(_row(11, "f1", status="failed"),),
+        required_block={"reason": "required_truncated"},
+    )
+    snap.observed_terminal.add((True, "J"))
+
+    affected = bohrium_delivery_ack.confirm(snap, jobs_table=table)
+
+    table.mark_handled_by_ids.assert_not_called()
+    table.mark_handled_by_job_keys.assert_called_once()
+    assert affected == 1
+
+
+def test_confirm_acks_rows_when_required_block_empty():
+    table = MagicMock()
+    table.mark_handled_by_ids.return_value = 1
+    snap = bohrium_delivery_ack.DeliverySnapshot(
+        user_id="u1",
+        org_id="o1",
+        session_id="s",
+        workspace="/share/project",
+        rows=(_row(11, "t1"),),
+    )
+
+    assert bohrium_delivery_ack.confirm(snap, jobs_table=table) == 1
+    table.mark_handled_by_ids.assert_called_once()
