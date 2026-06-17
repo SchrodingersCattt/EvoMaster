@@ -21,8 +21,9 @@ logger = logging.getLogger(__name__)
 class DeliverySnapshot:
     """一次 run 的交付边界快照 + run 内前台观察集（worker 内存对象，不落表）。
 
-    export_failure 由 read port 在 CSV 导出失败时写入（{reason, rows, target_path}），
-    confirm 据此 gate snapshot.rows 的 ack；写入在 run 内上下文装配、读取在 run 收尾，
+    export_failure 由 read port 在 CSV 导出失败时写入；required_block 由 observation
+    read port 在 required context 不完整（命中 cap 或查询失败）时写入。confirm 据二者
+    任一非空即 gate snapshot.rows 的 ack。写入在 run 内上下文装配、读取在 run 收尾，
     与 observed_terminal 同属 frozen 字段绑定的可变容器，无时间重叠。
     observed_terminal 元素为 (sandbox, job_id)；frozen 冻结字段绑定，不妨碍
     集合自身 add。写入发生在 run 内工具执行，confirm 读取在 run 结束后，
@@ -36,6 +37,7 @@ class DeliverySnapshot:
     rows: tuple[dict[str, Any], ...]
     observed_terminal: set[tuple[bool, str]] = field(default_factory=set)
     export_failure: dict[str, Any] = field(default_factory=dict)
+    required_block: dict[str, Any] = field(default_factory=dict)
 
 
 def snapshot(
@@ -115,7 +117,7 @@ def confirm(snap: DeliverySnapshot, *, jobs_table: Any | None = None) -> int:
 
         table = get_bohrium_jobs_table()
     affected = 0
-    if snap.rows and not snap.export_failure:
+    if snap.rows and not snap.export_failure and not snap.required_block:
         affected += table.mark_handled_by_ids(
             user_id=snap.user_id,
             org_id=snap.org_id,

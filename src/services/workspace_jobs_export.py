@@ -47,7 +47,9 @@ class WorkspaceJobsCsvExporter:
         self, jobs: WorkspaceJobs, *, reason: Literal["row_limit", "char_limit"]
     ) -> WorkspaceJobsExport | WorkspaceJobsExportError:
         rows = build_csv_rows(
-            jobs.active_jobs, jobs.pending_terminal_jobs, jobs.recent_terminal_jobs
+            jobs.active_jobs,
+            jobs.unhandled_terminal_jobs,
+            jobs.handled_recent_terminal_jobs,
         )
         row_count = len(rows)
         target = self._target_path()

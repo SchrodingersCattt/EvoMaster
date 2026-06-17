@@ -214,29 +214,14 @@ class BohriumJobsTable(BaseTable):
                 return [self._to_agent_job(r) for r in cur.fetchall()]
 
     def query_workspace_active(
-        self, *, user_id: str, org_id: str, workspace: str
+        self, *, user_id: str, org_id: str, workspace: str, limit: int
     ) -> list[dict[str, Any]]:
-        """workspace 观察视图：跨 session 的活跃作业。"""
+        """workspace 观察视图：跨 session 的活跃作业（required，带 fetch cap）。"""
         sql = f"""
             SELECT {self._AGENT_COLUMNS} FROM {self.table_name}
             WHERE user_id = %s AND org_id = %s AND workspace = %s
               AND status IN ({_SQL_ACTIVE})
-            ORDER BY submitted_at ASC
-        """
-        with self.get_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute(sql, (user_id, org_id, workspace))
-                return [self._to_agent_job(r) for r in cur.fetchall()]
-
-    def query_workspace_pending_terminal(
-        self, *, user_id: str, org_id: str, workspace: str, limit: int
-    ) -> list[dict[str, Any]]:
-        """workspace 观察视图：跨 session 的未交付终态作业（非 ack 范围）。"""
-        sql = f"""
-            SELECT {self._AGENT_COLUMNS} FROM {self.table_name}
-            WHERE user_id = %s AND org_id = %s AND workspace = %s
-              AND terminal_at IS NOT NULL AND handled_at IS NULL
-            ORDER BY terminal_at ASC, submitted_at ASC
+            ORDER BY submitted_at ASC, id ASC
             LIMIT %s
         """
         with self.get_connection() as conn:
@@ -244,14 +229,33 @@ class BohriumJobsTable(BaseTable):
                 cur.execute(sql, (user_id, org_id, workspace, int(limit)))
                 return [self._to_agent_job(r) for r in cur.fetchall()]
 
-    def query_workspace_recent_terminal(
+    def query_workspace_unhandled_terminal(
         self, *, user_id: str, org_id: str, workspace: str, limit: int
     ) -> list[dict[str, Any]]:
-        """workspace 观察视图：跨 session 的最近终态作业（不论 handled）。"""
+        """workspace 观察视图：跨 session 的未处理终态作业（required）。"""
         sql = f"""
             SELECT {self._AGENT_COLUMNS} FROM {self.table_name}
             WHERE user_id = %s AND org_id = %s AND workspace = %s
-              AND terminal_at IS NOT NULL
+              AND terminal_at IS NOT NULL AND handled_at IS NULL
+            ORDER BY terminal_at ASC, submitted_at ASC, id ASC
+            LIMIT %s
+        """
+        with self.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(sql, (user_id, org_id, workspace, int(limit)))
+                return [self._to_agent_job(r) for r in cur.fetchall()]
+
+    def query_workspace_handled_recent_terminal(
+        self, *, user_id: str, org_id: str, workspace: str, limit: int
+    ) -> list[dict[str, Any]]:
+        """workspace 观察视图：跨 session 的已处理最近终态作业（reference）。
+
+        必须排除未处理终态行，避免与 unhandled_terminal bucket 重叠。
+        """
+        sql = f"""
+            SELECT {self._AGENT_COLUMNS} FROM {self.table_name}
+            WHERE user_id = %s AND org_id = %s AND workspace = %s
+              AND terminal_at IS NOT NULL AND handled_at IS NOT NULL
             ORDER BY terminal_at DESC, id DESC
             LIMIT %s
         """

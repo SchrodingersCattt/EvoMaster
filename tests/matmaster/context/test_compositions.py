@@ -90,7 +90,7 @@ def test_anchor_delivery_turn_embeds_system_trigger_jobs_in_reminder_tag() -> No
             ),
             workspace_jobs=WorkspaceJobs(
                 mode="session_workspace_delivery",
-                pending_terminal_jobs=(
+                unhandled_terminal_jobs=(
                     _job("f1", "failed", "relax-fail"),
                     _job("t1", "finished", "relax-ok"),
                 ),
@@ -128,7 +128,7 @@ def test_anchor_observation_jobs_do_not_render_delivery_directive() -> None:
             ),
             workspace_jobs=WorkspaceJobs(
                 mode="workspace_observation",
-                pending_terminal_jobs=(_job("t1", "failed"),),
+                unhandled_terminal_jobs=(_job("t1", "failed"),),
             ),
         )
     )
