@@ -11,9 +11,9 @@ The `_calculator.py` module supports four MLIP families via a unified `build_cal
 | Family | Package | Version (in image) | Calculator Class |
 |--------|---------|---------------------|-----------------|
 | **DP** (DPA) | `deepmd-kit` | v3.x dev† | `deepmd.calculator.DP` |
-| **MACE** | `mace-torch` | 0.3.12 | `mace.calculators.mace_mp` |
-| **SevenNet** | `sevenn` | 0.11.0 | `sevenn.calculator.SevenNetCalculator` |
-| **MatterSim** | `mattersim` | 1.1.2 | `mattersim.forcefield.MatterSimCalculator` |
+| **MACE** | `mace-torch` | 0.3.16 | `mace.calculators.mace_mp` |
+| **SevenNet** | `sevenn` | 0.12.1 | `sevenn.calculator.SevenNetCalculator` |
+| **MatterSim** | `mattersim` | 1.2.5 | `mattersim.forcefield.MatterSimCalculator` |
 
 > †deepmd-kit reports `1.3.3.dev2445` via `git describe` (2445 commits after the ancient v1.3.3 tag). This **is** the v3.0.0+ PyTorch codebase — not a v1.x build.
 
@@ -34,6 +34,7 @@ model_name_or_path
         └─ other → family = DP (fallback)
 ```
 
+
 ## Family-specific notes
 
 ### DP (DPA)
@@ -44,21 +45,23 @@ model_name_or_path
 
 ### MACE
 
+- Cached models: `MACE-MP-0` (small / medium / large) and `MACE-MPA-0`.
+  Call `mace_mp(model=...)` with the matching built-in name (`small`, `medium`, `large`, or `default`)
 - No `--head` flag (ignored)
 - Default dtype: `float64` for accuracy
-- **Use `MACE-MP-0`** (calls `mace_mp()` auto-download, works in Bohrium). Avoid `MACE-MPA-0` — it downloads from GitHub releases which times out inside Bohrium containers.
-- Custom `.model` files: pass the local path
+- Custom MACE `.model` files: pass the local path.
 
 ### SevenNet
 
-- Named models (`SevenNet-0`, `7net-mf-ompa`) resolved by the `sevenn` package
+- Cached named models include `sevennet-0`, `sevennet-0_22may2024`, `sevennet-l3i5`, `sevennet-mf-0`, `sevennet-mf-ompa`, `sevennet-omat`, `sevennet-omni`, `sevennet-omni-i8`, and `sevennet-omni-i12`; use the matching package-recognized name for `--model`.
 - `7net-mf-ompa` automatically sets `modal="omat24"`
 - No head or fparam support
+- Local SevenNet checkpoint files commonly use `.pth`; the generic suffix fallback maps `.pth` to DP, so prefer package-recognized SevenNet model names unless `_calculator.py` has an explicit SevenNet model entry or you write a custom SevenNet script.
 
 ### MatterSim
 
-- Only one model currently: `MatterSim-v1-5M`
-- Auto-downloads `MatterSim-v1.0.0-5M.pth`
+- Cached models include `MatterSim-v1-1M` and `MatterSim-v1-5M`.
+- `MatterSim-v1-5M` loads `MatterSim-v1.0.0-5M.pth` by default in the built-in dispatcher.
 - No head or fparam support
 
 ## Adding a new MLIP family
@@ -70,13 +73,16 @@ model_name_or_path
 
 ## Docker images
 
-> **Default: DPA image.** Use a non-DPA family image only when MACE, SevenNet, or MatterSim is explicitly needed.
+The family images are built from a shared `mlip-base` image, then extended with the family-specific runtime and cached pretrained models.
+
+> **Default: DPA image.** Use a non-DPA family image only when MACE, SevenNet, or MatterSim is explicitly needed. Do not infer MLIP family from image tag strings.
 
 | Image | Families | When to use |
 |-------|----------|-------------|
 | `registry.dp.tech/dptech/dpa-calculator:dpa-mlip-bd246adc` | **DP only** | **Default for DPA ASE tasks** |
-| `registry.dp.tech/dptech/dpa-calculator:mace-mlip-bd246adc` | MACE | Only when the user explicitly requests MACE. Use `base` env. |
-| `registry.dp.tech/dptech/dpa-calculator:sevennet-mlip-bd246adc` | SevenNet | Only when the user explicitly requests SevenNet. Use `base` env. |
-| `registry.dp.tech/dptech/dpa-calculator:mattersim-mlip-bd246adc` | MatterSim | Only when the user explicitly requests MatterSim. Use `base` env. |
+| `registry.dp.tech/dptech/dpa-calculator:mace-mlip-db5a4d45` | MACE | Only when the user explicitly requests MACE. Use `base` env. |
+| `registry.dp.tech/dptech/dpa-calculator:sevennet-mlip-db5a4d45` | SevenNet | Only when the user explicitly requests SevenNet. Use `base` env. |
+| `registry.dp.tech/dptech/dpa-calculator:mattersim-mlip-db5a4d45` | MatterSim | Only when the user explicitly requests MatterSim. Use `base` env. |
 
-> If a package is missing, prepend `pip install <pkg> &&` before the script in `cmd`.
+> If a lightweight Python package is missing, prepend `pip install <pkg> &&` before the script in `cmd`; this fallback is for packages only, not pretrained model checkpoints.
+> For Non-DPA pretrained models, most are cached in the family images. If a new model must be downloaded, stage it outside the Bohrium compute job and upload or bundle it with the task. DO NOT cold-download on the task node.
