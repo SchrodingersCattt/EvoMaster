@@ -735,6 +735,8 @@ class Exp:
                 session=env.session,
                 workdir=env.workdir,
                 job_ledger=ctx.request.ports.bohrium_job_ledger,
+                session_id=ctx.environment.session_id,
+                invocation_id=ctx.request.invocation_id,
             ),
         ]
 

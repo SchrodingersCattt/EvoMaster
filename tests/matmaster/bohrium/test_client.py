@@ -376,9 +376,42 @@ def test_add_job_sandbox(monkeypatch: pytest.MonkeyPatch) -> None:
         machine="c32_m128_cpu",
         job_name="demo",
         disk_size=50,
+        session_id="sess-123",
+        round_id="inv-456",
     )
     assert calls[0]["ossPath"] == ["https://store.example.com/input.zip?token=abc"]
     assert calls[0]["projectId"] == 42
+    assert calls[0]["sourceCode"] == "matmaster"
+    assert calls[0]["sessionId"] == "sess-123"
+    assert calls[0]["roundId"] == "inv-456"
+
+
+def test_add_job_sandbox_omits_session_round_when_absent(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[dict] = []
+
+    def fake_post(base_url, path, access_key, payload, *, timeout=30, log_curl=False):
+        del base_url, path, access_key, timeout, log_curl
+        calls.append(payload)
+        return {"code": 0, "data": {"jobId": "job-2"}}
+
+    monkeypatch.setattr("matmaster.bohrium.client._post", fake_post)
+    add_job(
+        _make_ctx(sandbox=True),
+        create_data={"jobId": "create-job-id"},
+        upload=UploadedArchive(
+            oss_key="key",
+            download_url="https://store.example.com/input.zip?token=abc",
+        ),
+        image="demo:latest",
+        cmd="python run.py",
+        machine="c32_m128_cpu",
+        job_name="demo",
+        disk_size=50,
+    )
+    assert "sessionId" not in calls[0]
+    assert "roundId" not in calls[0]
 
 
 class _FakeSpan:
