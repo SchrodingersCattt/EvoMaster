@@ -106,7 +106,9 @@ class WorkspaceJobsExport:
 
 @dataclass(frozen=True)
 class WorkspaceJobsSummary:
-    total: int  # == active + unhandled_terminal + handled_recent_terminal == snapshot rows
+    total: (
+        int  # == active + unhandled_terminal + handled_recent_terminal == snapshot rows
+    )
     active: int
     unhandled_terminal: int
     handled_recent_terminal: int

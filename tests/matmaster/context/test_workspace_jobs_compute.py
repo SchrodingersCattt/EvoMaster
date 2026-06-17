@@ -128,7 +128,9 @@ def test_preview_columns_prefixes_group() -> None:
     assert PREVIEW_COLUMNS == ("group", "job_id", "job_name", "status")
 
 
-def test_trim_preview_rows_to_char_limit_truncates_and_bounds_rendered_preview() -> None:
+def test_trim_preview_rows_to_char_limit_truncates_and_bounds_rendered_preview() -> (
+    None
+):
     rows = (
         {
             "group": "unhandled_terminal",

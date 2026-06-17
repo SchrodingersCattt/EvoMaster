@@ -202,9 +202,7 @@ async def test_observation_mode_reads_three_groups_cross_session() -> None:
     # required buckets fetch REQUIRED_FETCH_LIMIT + 1 = 2001; reference HANDLED_RECENT_LIMIT + 1 = 21
     assert table.query_workspace_active.call_args.kwargs["limit"] == 2001
     assert table.query_workspace_unhandled_terminal.call_args.kwargs["limit"] == 2001
-    assert (
-        table.query_workspace_handled_recent_terminal.call_args.kwargs["limit"] == 21
-    )
+    assert table.query_workspace_handled_recent_terminal.call_args.kwargs["limit"] == 21
 
 
 @pytest.mark.asyncio
@@ -384,7 +382,9 @@ async def test_observation_handled_recent_query_failure_is_reference_unavailable
 
 
 @pytest.mark.asyncio
-async def test_observation_required_truncated_writes_required_block(monkeypatch) -> None:
+async def test_observation_required_truncated_writes_required_block(
+    monkeypatch,
+) -> None:
     from matmaster.context.ports import WorkspaceJobsQuery
 
     monkeypatch.setenv("BOHRIUM_WORKSPACE_JOBS_REQUIRED_FETCH_LIMIT", "2")

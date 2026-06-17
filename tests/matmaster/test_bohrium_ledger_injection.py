@@ -11,14 +11,14 @@ def test_bohrium_job_ledger_port_has_sync_record_methods() -> None:
     assert not hasattr(BohriumJobLedgerPort, "record_download")
 
 
-def test_workspace_jobs_has_pending_terminal_jobs_field() -> None:
+def test_workspace_jobs_has_unhandled_terminal_jobs_field() -> None:
     from matmaster.context.ports import WorkspaceJobs
 
     sj = WorkspaceJobs.empty()
     assert sj.active_jobs == ()
-    assert sj.pending_terminal_jobs == ()
+    assert sj.unhandled_terminal_jobs == ()
     hints = get_type_hints(WorkspaceJobs)
-    assert "pending_terminal_jobs" in hints
+    assert "unhandled_terminal_jobs" in hints
 
 
 def test_agent_run_ports_carry_bohrium_and_workspace_jobs_ports() -> None:

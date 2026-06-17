@@ -131,12 +131,9 @@ def render_inline_lines(jobs: WorkspaceJobs) -> tuple[str, ...]:
             f"required_context_error {render_job_json(dict(jobs.required_error))}"
         )
     lines.append(f"required_truncated {str(jobs.required_truncated).lower()}")
+    lines.append(f"handled_recent_has_more {str(jobs.handled_recent_has_more).lower()}")
     lines.append(
-        f"handled_recent_has_more {str(jobs.handled_recent_has_more).lower()}"
-    )
-    lines.append(
-        f"handled_recent_unavailable "
-        f"{str(jobs.handled_recent_unavailable).lower()}"
+        f"handled_recent_unavailable " f"{str(jobs.handled_recent_unavailable).lower()}"
     )
     if jobs.required_truncated:
         lines.append(f'required_truncated_hint "{REQUIRED_TRUNCATED_HINT}"')
