@@ -45,9 +45,10 @@ model_name_or_path
 
 ### MACE
 
+- Cached models: `MACE-MP-0` (small / medium / large) and `MACE-MPA-0`.
+  Call `mace_mp(model=...)` with the matching built-in name (`small`, `medium`, `large`, or `default`)
 - No `--head` flag (ignored)
 - Default dtype: `float64` for accuracy
-- **Use `MACE-MP-0`** (calls `mace_mp()` auto-download, works in Bohrium). Avoid `MACE-MPA-0` — it downloads from GitHub releases which times out inside Bohrium containers.
 - Custom MACE `.model` files: pass the local path. 
 
 ### SevenNet
