@@ -109,6 +109,19 @@ def submit_job_via_runtime(
             if not cmd_stripped.endswith("> log 2>&1"):
                 cmd = cmd_stripped + " > log 2>&1"
 
+            # Shared add_job kwargs for both input-source branches; keep the
+            # per-branch calls limited to what actually differs (create_data /
+            # upload) so new submit fields only need to be added once.
+            add_kwargs: dict[str, Any] = dict(
+                image=image,
+                cmd=cmd,
+                machine=machine,
+                job_name=job_name,
+                disk_size=disk_size,
+                session_id=session_id,
+                round_id=invocation_id,
+            )
+
             if source.kind == "remote_share_dir":
                 create_data = create_job(ctx, job_name=job_name)
                 try:
@@ -128,13 +141,7 @@ def submit_job_via_runtime(
                     ctx,
                     create_data=create_data,
                     upload=upload,
-                    image=image,
-                    cmd=cmd,
-                    machine=machine,
-                    job_name=job_name,
-                    disk_size=disk_size,
-                    session_id=session_id,
-                    round_id=invocation_id,
+                    **add_kwargs,
                 )
             else:
                 with prepare_input_archive(source, session=session) as zip_path:
@@ -146,13 +153,7 @@ def submit_job_via_runtime(
                         ctx,
                         create_data=create_data,
                         upload=upload,
-                        image=image,
-                        cmd=cmd,
-                        machine=machine,
-                        job_name=job_name,
-                        disk_size=disk_size,
-                        session_id=session_id,
-                        round_id=invocation_id,
+                        **add_kwargs,
                     )
 
             if ctx.sandbox:
