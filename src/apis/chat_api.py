@@ -11,61 +11,41 @@ from matmaster.config.loader import load_llm_config
 from src.apis.sse_compression import gzip_sse_stream, should_gzip_sse
 from src.base.base_res import BaseResponse
 from src.dao.redis_dao import get_redis_dao
-from src.models.chat import (
-    ChatAskQuestionReplyRequest,
-    ChatSendRequest,
-    ErrorApiResponse,
-    RunStatusApiResponse,
-    RunStatusData,
-    SessionDirectoryApiResponse,
-    SessionDirectoryData,
-    SessionDirectoryDeleteApiResponse,
-    SessionDirectoryDeleteData,
-    SessionDirectoryDeleteQuery,
-    SessionDirectorySetRequest,
-    SessionListApiResponse,
-    SessionListMoreApiResponse,
-    SessionListMoreQuery,
-    SessionListMoreResponse,
-    SessionListQuery,
-    SessionListResponse,
-    SessionTitleApiResponse,
-    SessionTitleData,
-    SessionTitleSetRequest,
-    SessionTitlesApiResponse,
-    SessionTitlesData,
-    SessionTitlesQueryRequest,
-    ShareSetRequest,
-    ShareStatusApiResponse,
-    ShareStatusData,
-)
+from src.models.chat import (ChatAskQuestionReplyRequest, ChatSendRequest,
+                             ErrorApiResponse, RunStatusApiResponse,
+                             RunStatusData, SessionDirectoryApiResponse,
+                             SessionDirectoryData,
+                             SessionDirectoryDeleteApiResponse,
+                             SessionDirectoryDeleteData,
+                             SessionDirectoryDeleteQuery,
+                             SessionDirectorySetRequest,
+                             SessionListApiResponse,
+                             SessionListMoreApiResponse, SessionListMoreQuery,
+                             SessionListMoreResponse, SessionListQuery,
+                             SessionListResponse, SessionTitleApiResponse,
+                             SessionTitleData, SessionTitlesApiResponse,
+                             SessionTitlesData, SessionTitleSetRequest,
+                             SessionTitlesQueryRequest, ShareSetRequest,
+                             ShareStatusApiResponse, ShareStatusData)
 from src.services.agent_run_service import _get_agent_default_llm
 from src.services.events_service import ChatEventsService, get_events_service
-from src.services.image_input_service import ImageInputError, get_image_input_service
+from src.services.image_input_service import (ImageInputError,
+                                              get_image_input_service)
 from src.services.quota_service import check_quota_status
 from src.services.session_directory_service import (
-    SessionDirectoryError,
-    normalize_session_directory_for_storage,
-)
-from src.services.sessions_service import (
-    DELETE_BLOCKED_STATUSES,
-    ChatSessionsService,
-    get_sessions_service,
-)
-from src.services.stream_service import (
-    ChatStreamService,
-    TriggerStreamContext,
-    get_stream_service,
-)
+    SessionDirectoryError, normalize_session_directory_for_storage)
+from src.services.sessions_service import (DELETE_BLOCKED_STATUSES,
+                                           ChatSessionsService,
+                                           get_sessions_service)
+from src.services.stream_service import (ChatStreamService,
+                                         TriggerStreamContext,
+                                         get_stream_service)
 from src.services.user_service import UserService
 from src.services.worker_registry_service import get_worker_registry_service
 from src.utils.constant import INTERNAL_TRIGGER_TOKEN, REDIS_URL
-from src.utils.exceptions import (
-    BaseErrorResponse,
-    ConflictErrorResponse,
-    ForbiddenErrorResponse,
-    NotFoundErrorResponse,
-)
+from src.utils.exceptions import (BaseErrorResponse, ConflictErrorResponse,
+                                  ForbiddenErrorResponse,
+                                  NotFoundErrorResponse)
 
 COMMON_ERROR_RESPONSES = {
     400: {"model": ErrorApiResponse, "description": "请求参数不合法"},
