@@ -215,6 +215,7 @@ def add_job(
             "jobId": str(create_data["jobId"]).strip(),
             "ossPath": [upload.download_url],
             "projectId": ctx.credentials.project_id,
+            "sourceCode": "matmaster",
         }
         path = "/openapi/v1/sandbox/job/add"
     else:

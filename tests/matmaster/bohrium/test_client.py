@@ -379,6 +379,7 @@ def test_add_job_sandbox(monkeypatch: pytest.MonkeyPatch) -> None:
     )
     assert calls[0]["ossPath"] == ["https://store.example.com/input.zip?token=abc"]
     assert calls[0]["projectId"] == 42
+    assert calls[0]["sourceCode"] == "matmaster"
 
 
 class _FakeSpan:
