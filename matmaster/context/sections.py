@@ -48,6 +48,8 @@ class ContextSection:
             raise ValueError("ContextSection.key must be non-empty")
         if not self.tag:
             raise ValueError("ContextSection.tag must be non-empty")
+        if "_" in self.tag:
+            raise ValueError("ContextSection.tag must use hyphen separators")
 
 
 def single_section_or_empty(
