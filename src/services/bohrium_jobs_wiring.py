@@ -10,12 +10,14 @@ from typing import Any
 from matmaster.bohrium.status import to_ledger_status
 from matmaster.context.ports import (
     WorkspaceJobs,
+    WorkspaceJobsExport,
     WorkspaceJobsExportError,
     WorkspaceJobsPort,
     WorkspaceJobsQuery,
 )
 from matmaster.context.workspace_jobs_compute import (
     PREVIEW_COLUMNS,
+    PREVIEW_FIELD_CHAR_LIMIT,
     compute_inline_chars,
     compute_summary,
     select_delivery_preview_rows,
@@ -193,35 +195,27 @@ class _SessionWorkspaceDeliveryJobsPort:
             unhandled_terminal_jobs=pending,
         )
         result = self._exporter.export(export_input, reason="row_limit")
+        export: WorkspaceJobsExport | None
+        export_error: WorkspaceJobsExportError | None
         if isinstance(result, WorkspaceJobsExportError):
             self._record_export_failure(result)
-            return WorkspaceJobs(
-                workspace=self._workspace,
-                summary=summary,
-                preview_limit=self._prompt_preview_limit,
-                preview_rows=preview_rows,
-                export_error=result,
-                mode="session_workspace_delivery",
-            )
+            export, export_error = None, result
+        else:
+            export, export_error = result, None
         return WorkspaceJobs(
             workspace=self._workspace,
             summary=summary,
             preview_limit=self._prompt_preview_limit,
             preview_rows=preview_rows,
-            export=result,
+            export=export,
+            export_error=export_error,
             mode="session_workspace_delivery",
         )
 
     def _record_export_failure(self, err: WorkspaceJobsExportError) -> None:
         if self._snapshot is None:
             return
-        self._snapshot.export_failure.update(
-            {
-                "reason": err.reason,
-                "rows": err.rows,
-                "target_path": err.target_path,
-            }
-        )
+        self._snapshot.export_failure.update(err.as_meta())
 
 
 class _WorkspaceObservationJobsPort:
@@ -255,52 +249,48 @@ class _WorkspaceObservationJobsPort:
     async def load_workspace_jobs(self, query: WorkspaceJobsQuery) -> WorkspaceJobs:
         try:
             table = self._table_ref.get()
-            active_raw, unhandled_raw = await asyncio.gather(
-                asyncio.to_thread(
-                    table.query_workspace_active,
-                    user_id=self._user_id,
-                    org_id=self._org_id,
-                    workspace=self._workspace,
-                    limit=self._required_fetch_limit + 1,
-                ),
-                asyncio.to_thread(
-                    table.query_workspace_unhandled_terminal,
-                    user_id=self._user_id,
-                    org_id=self._org_id,
-                    workspace=self._workspace,
-                    limit=self._required_fetch_limit + 1,
-                ),
-            )
-        except Exception:  # noqa: BLE001
-            logger.warning(
-                "load_workspace_jobs(observation required) failed workspace=%s",
-                self._workspace,
-                exc_info=True,
-            )
-            self._write_required_block(reason="query_failed")
-            return WorkspaceJobs(
+        except Exception as exc:  # noqa: BLE001
+            return self._required_unavailable(exc)
+        active_res, unhandled_res, handled_res = await asyncio.gather(
+            asyncio.to_thread(
+                table.query_workspace_active,
+                user_id=self._user_id,
+                org_id=self._org_id,
                 workspace=self._workspace,
-                mode="workspace_observation",
-                required_error={"reason": "query_failed"},
-            )
-
-        handled_recent_unavailable = False
-        try:
-            handled_recent_raw = await asyncio.to_thread(
+                limit=self._required_fetch_limit + 1,
+            ),
+            asyncio.to_thread(
+                table.query_workspace_unhandled_terminal,
+                user_id=self._user_id,
+                org_id=self._org_id,
+                workspace=self._workspace,
+                limit=self._required_fetch_limit + 1,
+            ),
+            asyncio.to_thread(
                 table.query_workspace_handled_recent_terminal,
                 user_id=self._user_id,
                 org_id=self._org_id,
                 workspace=self._workspace,
                 limit=self._handled_recent_limit + 1,
-            )
-        except Exception:  # noqa: BLE001
+            ),
+            return_exceptions=True,
+        )
+        if isinstance(active_res, BaseException):
+            return self._required_unavailable(active_res)
+        if isinstance(unhandled_res, BaseException):
+            return self._required_unavailable(unhandled_res)
+        active_raw, unhandled_raw = active_res, unhandled_res
+        if isinstance(handled_res, BaseException):
             logger.warning(
                 "load_workspace_jobs(observation handled_recent) failed workspace=%s",
                 self._workspace,
-                exc_info=True,
+                exc_info=handled_res,
             )
-            handled_recent_raw = []
+            handled_recent_raw: list[dict[str, Any]] = []
             handled_recent_unavailable = True
+        else:
+            handled_recent_raw = handled_res
+            handled_recent_unavailable = False
 
         active = tuple(active_raw[: self._required_fetch_limit])
         unhandled = tuple(unhandled_raw[: self._required_fetch_limit])
@@ -328,9 +318,9 @@ class _WorkspaceObservationJobsPort:
             handled_recent_has_more=handled_recent_has_more,
             handled_recent_unavailable=handled_recent_unavailable,
         )
-        snapshot_rows = active + unhandled + handled_recent
+        snapshot_total = len(active) + len(unhandled) + len(handled_recent)
         if (
-            len(snapshot_rows) <= self._prompt_preview_limit
+            snapshot_total <= self._prompt_preview_limit
             and compute_inline_chars(full) <= self._char_limit
         ):
             return full
@@ -346,35 +336,45 @@ class _WorkspaceObservationJobsPort:
             char_limit=self._char_limit,
         )
         reason = (
-            "row_limit"
-            if len(snapshot_rows) > self._prompt_preview_limit
-            else "char_limit"
+            "row_limit" if snapshot_total > self._prompt_preview_limit else "char_limit"
         )
         result = self._exporter.export(full, reason=reason)
+        export: WorkspaceJobsExport | None
+        export_error: WorkspaceJobsExportError | None
         if isinstance(result, WorkspaceJobsExportError):
             self._record_export_failure(result)
-            return WorkspaceJobs(
-                workspace=self._workspace,
-                summary=summary,
-                preview_limit=self._prompt_preview_limit,
-                preview_rows=preview_rows,
-                export_error=result,
-                mode="workspace_observation",
-                required_truncated=required_truncated,
-                handled_recent_has_more=handled_recent_has_more,
-                handled_recent_unavailable=handled_recent_unavailable,
+            export, export_error, omitted = None, result, None
+        else:
+            export, export_error, omitted = (
+                result,
+                None,
+                snapshot_total - len(preview_rows),
             )
         return WorkspaceJobs(
             workspace=self._workspace,
             summary=summary,
             preview_limit=self._prompt_preview_limit,
             preview_rows=preview_rows,
-            export=result,
-            omitted_count=len(snapshot_rows) - len(preview_rows),
+            export=export,
+            export_error=export_error,
+            omitted_count=omitted,
             mode="workspace_observation",
             required_truncated=required_truncated,
             handled_recent_has_more=handled_recent_has_more,
             handled_recent_unavailable=handled_recent_unavailable,
+        )
+
+    def _required_unavailable(self, exc: BaseException) -> WorkspaceJobs:
+        logger.warning(
+            "load_workspace_jobs(observation required) failed workspace=%s",
+            self._workspace,
+            exc_info=exc,
+        )
+        self._write_required_block(reason="query_failed")
+        return WorkspaceJobs(
+            workspace=self._workspace,
+            mode="workspace_observation",
+            required_error={"reason": "query_failed"},
         )
 
     def _write_required_block(self, *, reason: str, **extra: Any) -> None:
@@ -384,13 +384,7 @@ class _WorkspaceObservationJobsPort:
     def _record_export_failure(self, err: WorkspaceJobsExportError) -> None:
         if self._snapshot is None:
             return
-        self._snapshot.export_failure.update(
-            {
-                "reason": err.reason,
-                "rows": err.rows,
-                "target_path": err.target_path,
-            }
-        )
+        self._snapshot.export_failure.update(err.as_meta())
 
 
 class _EmptyWorkspaceJobsPort:
@@ -418,7 +412,7 @@ def build_bohrium_jobs_ports(
     required_fetch_limit = env_int("BOHRIUM_WORKSPACE_JOBS_REQUIRED_FETCH_LIMIT", 2000)
     handled_recent_limit = env_int("BOHRIUM_WORKSPACE_JOBS_HANDLED_RECENT_LIMIT", 20)
     prompt_preview_limit = env_int("BOHRIUM_WORKSPACE_JOBS_PROMPT_PREVIEW_LIMIT", 50)
-    char_limit = min(prompt_preview_limit * 240, 24000)
+    char_limit = min(prompt_preview_limit * PREVIEW_FIELD_CHAR_LIMIT, 24000)
     ledger = (
         _BohriumJobLedger(
             table_ref=table_ref,

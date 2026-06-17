@@ -6,14 +6,11 @@ from matmaster.bohrium.status import LEDGER_FAILURE_STATUSES
 from matmaster.context.ports import WorkspaceJobs
 from matmaster.context.sections import ALL_VIEWS, ContextSection, SectionOrder
 from matmaster.context.workspace_jobs_compute import (
-    HANDLED_RECENT_HINT,
-    HANDLED_RECENT_UNAVAILABLE_HINT,
     PREVIEW_COLUMNS,
-    REQUIRED_TRUNCATED_HINT,
     render_csv_block,
+    render_head_lines,
     render_inline_lines,
     render_job_json,
-    summary_to_dict,
 )
 
 _DELIVERY_FAILED_HEADER = "以下作业失败："
@@ -128,40 +125,9 @@ class WorkspaceJobsSource:
         )
         return "\n".join(lines)
 
-    @staticmethod
-    def _head_lines(jobs: WorkspaceJobs) -> list[str]:
-        lines: list[str] = []
-        if jobs.workspace:
-            lines.append(f"workspace {jobs.workspace}")
-        if jobs.mode:
-            lines.append(f"mode {jobs.mode}")
-        if jobs.summary is not None:
-            lines.append(f"summary {render_job_json(summary_to_dict(jobs.summary))}")
-        if jobs.required_error is not None:
-            lines.append(
-                f"required_context_error {render_job_json(dict(jobs.required_error))}"
-            )
-        lines.append(f"required_truncated {str(jobs.required_truncated).lower()}")
-        lines.append(
-            f"handled_recent_has_more {str(jobs.handled_recent_has_more).lower()}"
-        )
-        lines.append(
-            f"handled_recent_unavailable "
-            f"{str(jobs.handled_recent_unavailable).lower()}"
-        )
-        if jobs.required_truncated:
-            lines.append(f'required_truncated_hint "{REQUIRED_TRUNCATED_HINT}"')
-        if jobs.handled_recent_has_more:
-            lines.append(f'handled_recent_hint "{HANDLED_RECENT_HINT}"')
-        if jobs.handled_recent_unavailable:
-            lines.append(
-                f'handled_recent_unavailable_hint "{HANDLED_RECENT_UNAVAILABLE_HINT}"'
-            )
-        return lines
-
     @classmethod
     def _compact_lines(cls, jobs: WorkspaceJobs) -> tuple[str, ...]:
-        lines = cls._head_lines(jobs)
+        lines = render_head_lines(jobs)
         export = jobs.export
         assert export is not None
         lines.append(
@@ -199,19 +165,10 @@ class WorkspaceJobsSource:
 
     @classmethod
     def _error_lines(cls, jobs: WorkspaceJobs) -> tuple[str, ...]:
-        lines = cls._head_lines(jobs)
+        lines = render_head_lines(jobs)
         err = jobs.export_error
         assert err is not None
-        lines.append(
-            "workspace_jobs_export_error "
-            + render_job_json(
-                {
-                    "reason": err.reason,
-                    "rows": err.rows,
-                    "target_path": err.target_path,
-                }
-            )
-        )
+        lines.append("workspace_jobs_export_error " + render_job_json(err.as_meta()))
         lines.append(f'action_hint "{_EXPORT_ERROR_HINT}"')
         if jobs.preview_rows:
             lines.extend(

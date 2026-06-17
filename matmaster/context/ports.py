@@ -127,6 +127,14 @@ class WorkspaceJobsExportError:
     rows: int
     target_path: str
 
+    def as_meta(self) -> dict[str, JsonValue]:
+        """Single projection used for snapshot.export_failure and the rendered line."""
+        return {
+            "reason": self.reason,
+            "rows": self.rows,
+            "target_path": self.target_path,
+        }
+
 
 @dataclass(frozen=True)
 class WorkspaceJobs:

@@ -105,21 +105,11 @@ def render_csv_block(
     return (f"{label} {','.join(columns)}", *buf.getvalue().splitlines())
 
 
-def render_inline_lines(jobs: WorkspaceJobs) -> tuple[str, ...]:
+def render_head_lines(jobs: WorkspaceJobs) -> list[str]:
+    """workspace/mode/summary + required/handled flags + hints。inline 与
+    compact/error 三态共用的唯一头部块，新增 flag 只在此处改一次。
+    """
     lines: list[str] = []
-    has_workspace_job_content = bool(
-        jobs.mode
-        or jobs.summary is not None
-        or jobs.active_jobs
-        or jobs.unhandled_terminal_jobs
-        or jobs.handled_recent_terminal_jobs
-        or jobs.required_error is not None
-        or jobs.required_truncated
-        or jobs.handled_recent_has_more
-        or jobs.handled_recent_unavailable
-    )
-    if not has_workspace_job_content:
-        return ()
     if jobs.workspace:
         lines.append(f"workspace {jobs.workspace}")
     if jobs.mode:
@@ -133,7 +123,7 @@ def render_inline_lines(jobs: WorkspaceJobs) -> tuple[str, ...]:
     lines.append(f"required_truncated {str(jobs.required_truncated).lower()}")
     lines.append(f"handled_recent_has_more {str(jobs.handled_recent_has_more).lower()}")
     lines.append(
-        f"handled_recent_unavailable " f"{str(jobs.handled_recent_unavailable).lower()}"
+        f"handled_recent_unavailable {str(jobs.handled_recent_unavailable).lower()}"
     )
     if jobs.required_truncated:
         lines.append(f'required_truncated_hint "{REQUIRED_TRUNCATED_HINT}"')
@@ -143,6 +133,24 @@ def render_inline_lines(jobs: WorkspaceJobs) -> tuple[str, ...]:
         lines.append(
             f'handled_recent_unavailable_hint "{HANDLED_RECENT_UNAVAILABLE_HINT}"'
         )
+    return lines
+
+
+def render_inline_lines(jobs: WorkspaceJobs) -> tuple[str, ...]:
+    has_workspace_job_content = bool(
+        jobs.mode
+        or jobs.summary is not None
+        or jobs.active_jobs
+        or jobs.unhandled_terminal_jobs
+        or jobs.handled_recent_terminal_jobs
+        or jobs.required_error is not None
+        or jobs.required_truncated
+        or jobs.handled_recent_has_more
+        or jobs.handled_recent_unavailable
+    )
+    if not has_workspace_job_content:
+        return ()
+    lines = render_head_lines(jobs)
     for label, group in (
         ("active", jobs.active_jobs),
         ("unhandled_terminal", jobs.unhandled_terminal_jobs),
@@ -207,15 +215,15 @@ def select_delivery_preview_rows(
 
 
 _PREVIEW_TRUNCATION_MARKER = "...<truncated>"
-_PREVIEW_FIELD_CHAR_LIMIT = 240
+PREVIEW_FIELD_CHAR_LIMIT = 240
 
 
 def _truncate_preview_cell(value: JsonValue) -> JsonValue:
     if not isinstance(value, str):
         return value
-    if len(value) <= _PREVIEW_FIELD_CHAR_LIMIT:
+    if len(value) <= PREVIEW_FIELD_CHAR_LIMIT:
         return value
-    keep = max(0, _PREVIEW_FIELD_CHAR_LIMIT - len(_PREVIEW_TRUNCATION_MARKER))
+    keep = max(0, PREVIEW_FIELD_CHAR_LIMIT - len(_PREVIEW_TRUNCATION_MARKER))
     return value[:keep] + _PREVIEW_TRUNCATION_MARKER
 
 
@@ -235,14 +243,20 @@ def trim_preview_rows_to_char_limit(
     columns: tuple[str, ...],
     char_limit: int,
 ) -> tuple[JsonObject, ...]:
-    """Bound rendered compact preview. CSV remains the complete snapshot."""
+    """Bound rendered compact preview. CSV remains the complete snapshot.
+
+    Render each row once and accumulate the joined length (header + one line per
+    row, newline-separated) instead of re-rendering the whole block per row.
+    """
+    truncated = [_truncate_preview_row(row, columns) for row in rows]
+    header, *row_lines = render_csv_block("preview_rows", columns, truncated)
     selected: list[JsonObject] = []
-    for row in rows:
-        candidate = (*selected, _truncate_preview_row(row, columns))
-        rendered = "\n".join(render_csv_block("preview_rows", columns, candidate))
-        if len(rendered) > char_limit:
+    rendered_len = len(header)
+    for row, line in zip(truncated, row_lines):
+        rendered_len += 1 + len(line)
+        if rendered_len > char_limit:
             break
-        selected = list(candidate)
+        selected.append(row)
     return tuple(selected)
 
 
