@@ -34,9 +34,6 @@ model_name_or_path
         └─ other → family = DP (fallback)
 ```
 
-Do not infer MLIP family from image tag strings. The skill's built-in scripts use the explicit model mapping above; ad-hoc regression scripts should pass `--family` explicitly or probe imports/runtime availability instead of matching substrings such as `"dpa" in image`.
-
-Pretrained models are mostly cached in the family images. If a new model must be downloaded, stage it outside the Bohrium compute job and upload or bundle it with the task instead of cold-downloading on the task node.
 
 ## Family-specific notes
 
@@ -74,7 +71,7 @@ Pretrained models are mostly cached in the family images. If a new model must be
 
 ## Docker images
 
-> **Default: DPA image.** Use a non-DPA family image only when MACE, SevenNet, or MatterSim is explicitly needed.
+> **Default: DPA image.** Use a non-DPA family image only when MACE, SevenNet, or MatterSim is explicitly needed. Do not infer MLIP family from image tag strings.
 
 | Image | Families | When to use |
 |-------|----------|-------------|
@@ -84,3 +81,4 @@ Pretrained models are mostly cached in the family images. If a new model must be
 | `registry.dp.tech/dptech/dpa-calculator:mattersim-mlip-db5a4d45` | MatterSim | Only when the user explicitly requests MatterSim. Use `base` env. |
 
 > If a package is missing, prepend `pip install <pkg> &&` before the script in `cmd`.
+> For Non-DPA pretrained models, most are cached in the family images. If a new model must be downloaded, stage it outside the Bohrium compute job and upload or bundle it with the task. DO NOT cold-download on the task node.
