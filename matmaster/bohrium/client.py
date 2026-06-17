@@ -205,6 +205,8 @@ def add_job(
     machine: str,
     job_name: str,
     disk_size: int,
+    session_id: str | None = None,
+    round_id: str | None = None,
 ) -> dict[str, Any]:
     if ctx.sandbox:
         payload = {
@@ -217,6 +219,12 @@ def add_job(
             "projectId": ctx.credentials.project_id,
             "sourceCode": "matmaster",
         }
+        # sandbox job/add accepts sessionId/roundId for source attribution.
+        # session_id == MatMaster session; round_id == agent run invocation_id.
+        if session_id:
+            payload["sessionId"] = session_id
+        if round_id:
+            payload["roundId"] = round_id
         path = "/openapi/v1/sandbox/job/add"
     else:
         payload = {

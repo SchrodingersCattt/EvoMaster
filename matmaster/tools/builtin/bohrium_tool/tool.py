@@ -85,6 +85,8 @@ def submit_job_via_runtime(
     disk_size: int,
     workdir: Path,
     session,
+    session_id: str | None = None,
+    invocation_id: str | None = None,
 ) -> BohriumSubmittedJob:
     with _TRACER.start_as_current_span("bohrium.job.submit") as span:
         set_log_context_attributes(span)
@@ -131,6 +133,8 @@ def submit_job_via_runtime(
                     machine=machine,
                     job_name=job_name,
                     disk_size=disk_size,
+                    session_id=session_id,
+                    round_id=invocation_id,
                 )
             else:
                 with prepare_input_archive(source, session=session) as zip_path:
@@ -147,6 +151,8 @@ def submit_job_via_runtime(
                         machine=machine,
                         job_name=job_name,
                         disk_size=disk_size,
+                        session_id=session_id,
+                        round_id=invocation_id,
                     )
 
             if ctx.sandbox:
@@ -284,6 +290,8 @@ class BohriumTool(BuiltinTool):
         workdir: Any | None = None,
         path_access_roots: Any = (),
         job_ledger: Any | None = None,
+        session_id: str | None = None,
+        invocation_id: str | None = None,
     ) -> None:
         super().__init__(
             session=session,
@@ -291,6 +299,8 @@ class BohriumTool(BuiltinTool):
             path_access_roots=path_access_roots,
         )
         self._job_ledger = job_ledger
+        self._session_id = session_id
+        self._invocation_id = invocation_id
 
     # prompt() keeps workflow + cross-skill rules only. Per-software image/machine/cmd
     # belong in matmaster/skills/<name>/SKILL.md — do not paste full default tables here
@@ -495,6 +505,8 @@ class BohriumTool(BuiltinTool):
                 disk_size=disk_size,
                 workdir=self._workdir or Path("."),
                 session=self._session,
+                session_id=self._session_id,
+                invocation_id=self._invocation_id,
             )
             self._safe_ledger(
                 "record_submit",
