@@ -48,7 +48,7 @@ model_name_or_path
 - No `--head` flag (ignored)
 - Default dtype: `float64` for accuracy
 - **Use `MACE-MP-0`** (calls `mace_mp()` auto-download, works in Bohrium). Avoid `MACE-MPA-0` — it downloads from GitHub releases which times out inside Bohrium containers.
-- Custom MACE `.model` files: pass the local path. Do not assume other families use `.model`; DPA uses `.pt` / `.pb`, and SevenNet checkpoints are commonly `.pth`.
+- Custom MACE `.model` files: pass the local path. 
 
 ### SevenNet
 
