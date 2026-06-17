@@ -36,8 +36,8 @@ These are execution stop rules, not suggestions. User requests like "do not ask 
 | **DPA3.2-5M** | DP | `registry.dp.tech/dptech/dpa-calculator:dpa-mlip-bd246adc` | General + charge/spin, supports `--charge`/`--spin` |
 | DPA2.4-7M | DP | `registry.dp.tech/dptech/dpa-calculator:dpa-mlip-bd246adc` | Legacy multi-head |
 | **MACE-MP-0** | MACE | `registry.dp.tech/dptech/dpa-calculator:mace-mlip-db5a4d45` | General inorganic foundation. **Prefer over MACE-MPA-0** (MPA-0 GitHub download times out in Bohrium) |
-| SevenNet-0 / 7net-mf-ompa | SevenNet | `registry.dp.tech/dptech/dpa-calculator:sevennet-mlip-db5a4d45` | Graph NN |
-| MatterSim-v1-5M | MatterSim | `registry.dp.tech/dptech/dpa-calculator:mattersim-mlip-db5a4d45` | General inorganic, 5M params |
+| SevenNet cached models | SevenNet | `registry.dp.tech/dptech/dpa-calculator:sevennet-mlip-db5a4d45` | Graph NN; cached names include `sevennet-0`, `sevennet-mf-ompa`, `sevennet-omni` variants |
+| MatterSim-v1-1M / MatterSim-v1-5M | MatterSim | `registry.dp.tech/dptech/dpa-calculator:mattersim-mlip-db5a4d45` | General inorganic, 1M / 5M params |
 
 > **Image selection rule:** DPA tasks → DPA image (default). Only switch to multi-family image when user explicitly requests MACE, SevenNet, or MatterSim.
 
@@ -47,7 +47,7 @@ Pretrained models are mostly cached in the family images. If a new model must be
 
 **DPA image** ships deepmd-kit (v3.x), lammps, ASE 3.23, phonopy 2.34, pymatgen, torch 2.4+cu124.
 
-**Family images** ship the matching MLIP runtime: mace-torch 0.3.12 for MACE, sevenn 0.11.0 for SevenNet, and mattersim 1.1.2 for MatterSim. Use each image's default `base` conda env.
+**Family images** are built from a shared `mlip-base` image and add the matching MLIP runtime: mace-torch 0.3.16 for MACE, sevenn 0.12.1 for SevenNet, and mattersim 1.2.5 for MatterSim. Use each image's default `base` conda env.
 
 ### DPA Heads
 
