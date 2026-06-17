@@ -555,7 +555,7 @@ class BohriumTool(BuiltinTool):
             if code in RUNNING_CODES:
                 message = (
                     f"Job is {status_label}. "
-                    "Continue other work before polling again."
+                    "Continue other work."
                 )
             elif code == SUCCESS_CODE:
                 message = (
