@@ -39,10 +39,6 @@ These are execution stop rules, not suggestions. User requests like "do not ask 
 | SevenNet | SevenNet | `registry.dp.tech/dptech/dpa-calculator:sevennet-mlip-db5a4d45` | Graph NN. |
 | MatterSim-v1 (1M and 5M) | MatterSim | `registry.dp.tech/dptech/dpa-calculator:mattersim-mlip-db5a4d45` | General inorganic, specialized in non-equilibrium research |
 
-> **Image selection rule:** models should match image for suitable dependencies. Do not infer MLIP family from image tag strings. 
-
-Pretrained models are mostly cached in the family images. If a new model must be downloaded, stage it outside the Bohrium compute job and upload or bundle it with the task instead of cold-downloading on the task node.
-
 
 ### DPA Heads
 
