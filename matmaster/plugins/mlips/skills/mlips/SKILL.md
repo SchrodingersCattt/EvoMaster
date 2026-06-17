@@ -30,24 +30,19 @@ These are execution stop rules, not suggestions. User requests like "do not ask 
 
 | Model | Family | Image | Domain |
 |-------|--------|-------|--------|
-| **DPA4-Neo-OMat24** | DP | `registry.dp.tech/dptech/dpa-calculator:dpa-mlip-bd246adc` | General inorganic, OMat24, v20260528_rc |
-| **DPA4-Neo-OMat24-ZBL** | DP | `registry.dp.tech/dptech/dpa-calculator:dpa-mlip-bd246adc` | General inorganic, OMat24 + ZBL short-range repulsion, v20260528_rc |
-| **DPA3.1-3M** | DP | `registry.dp.tech/dptech/dpa-calculator:dpa-mlip-bd246adc` | General inorganic — **default**, 3M params |
-| **DPA3.2-5M** | DP | `registry.dp.tech/dptech/dpa-calculator:dpa-mlip-bd246adc` | General + charge/spin, supports `--charge`/`--spin` |
+| **DPA4-Neo-OMat24** | DP | `registry.dp.tech/dptech/dpa-calculator:dpa-mlip-bd246adc` | General inorganic, single-head on OMat24 |
+| **DPA4-Neo-OMat24-ZBL** | DP | `registry.dp.tech/dptech/dpa-calculator:dpa-mlip-bd246adc` | General inorganic, single-head on OMat24 + ZBL short-range repulsion |
+| **DPA3.1-3M** | DP | `registry.dp.tech/dptech/dpa-calculator:dpa-mlip-bd246adc` | General inorganic — **default**, multi-head, 3M params |
+| **DPA3.2-5M** | DP | `registry.dp.tech/dptech/dpa-calculator:dpa-mlip-bd246adc` | General, multi-head, charge/spin, supports `--charge`/`--spin` |
 | DPA2.4-7M | DP | `registry.dp.tech/dptech/dpa-calculator:dpa-mlip-bd246adc` | Legacy multi-head |
-| **MACE-MP-0** | MACE | `registry.dp.tech/dptech/dpa-calculator:mace-mlip-db5a4d45` | General inorganic foundation. **Prefer over MACE-MPA-0** (MPA-0 GitHub download times out in Bohrium) |
-| SevenNet cached models | SevenNet | `registry.dp.tech/dptech/dpa-calculator:sevennet-mlip-db5a4d45` | Graph NN; cached names include `sevennet-0`, `sevennet-mf-ompa`, `sevennet-omni` variants |
-| MatterSim-v1-1M / MatterSim-v1-5M | MatterSim | `registry.dp.tech/dptech/dpa-calculator:mattersim-mlip-db5a4d45` | General inorganic, 1M / 5M params |
+| **MACE-MP-0** | MACE | `registry.dp.tech/dptech/dpa-calculator:mace-mlip-db5a4d45` | General inorganic foundation. |
+| SevenNet | SevenNet | `registry.dp.tech/dptech/dpa-calculator:sevennet-mlip-db5a4d45` | Graph NN. |
+| MatterSim-v1 (1M and 5M) | MatterSim | `registry.dp.tech/dptech/dpa-calculator:mattersim-mlip-db5a4d45` | General inorganic, specialized in non-equilibrium research |
 
-> **Image selection rule:** DPA tasks → DPA image (default). Only switch to multi-family image when user explicitly requests MACE, SevenNet, or MatterSim.
-
-Do not infer MLIP family from image tag strings. The built-in scripts dispatch via `_calculator.py` / `build_calculator(model_name)`; ad-hoc tests should pass `--family` explicitly or probe imports instead of matching substrings such as `"dpa" in image`.
+> **Image selection rule:** models should match image for suitable dependencies. Do not infer MLIP family from image tag strings. 
 
 Pretrained models are mostly cached in the family images. If a new model must be downloaded, stage it outside the Bohrium compute job and upload or bundle it with the task instead of cold-downloading on the task node.
 
-**DPA image** ships deepmd-kit (v3.x), lammps, ASE 3.23, phonopy 2.34, pymatgen, torch 2.4+cu124.
-
-**Family images** are built: mace-torch 0.3.16 for MACE, sevenn 0.12.1 for SevenNet, and mattersim 1.2.5 for MatterSim. Use each image's default `base` env.
 
 ### DPA Heads
 
