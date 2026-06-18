@@ -637,49 +637,61 @@ class TestToolResultPayloadMapping:
         assert result['info'] == {'exit_code': 0, 'signal': None}
 
 
-class TestAskQuestionPayloadMapping:
-    """AskQuestion event family SSE payload mapping."""
+class TestInteractionPayloadMapping:
+    """Generic interaction event family SSE payload mapping."""
 
-    def test_ask_question_maps_all_fields(self) -> None:
+    def test_interaction_request_maps_all_fields(self) -> None:
         result = _public_content_for_event(
-            'ask_question',
+            'interaction_request',
             {
-                'type': 'ask_question',
+                'type': 'interaction_request',
+                'kind': 'ask_question',
                 'request_id': 'aq_1',
-                'questions': [{'question': 'Which?', 'header': 'H', 'options': []}],
-                'metadata': {'source': 'tool'},
-                'origin': 'tool:AskQuestion',
-                'preview_format': 'markdown',
+                'task_id': 'task_1',
+                'expires_at': '2026-06-18T00:00:00+00:00',
+                'payload': {
+                    'questions': [{'question': 'Which?', 'header': 'H', 'options': []}],
+                    'metadata': {'source': 'tool'},
+                    'origin': 'tool:AskQuestion',
+                    'preview_format': 'markdown',
+                },
             },
         )
+        assert result['kind'] == 'ask_question'
         assert result['request_id'] == 'aq_1'
-        assert len(result['questions']) == 1
-        assert result['origin'] == 'tool:AskQuestion'
-        assert result['preview_format'] == 'markdown'
+        assert result['task_id'] == 'task_1'
+        assert len(result['payload']['questions']) == 1
+        assert result['payload']['origin'] == 'tool:AskQuestion'
+        assert result['payload']['preview_format'] == 'markdown'
 
-    def test_ask_question_reply_maps_answers(self) -> None:
+    def test_interaction_reply_maps_payload(self) -> None:
         result = _public_content_for_event(
-            'ask_question_reply',
+            'interaction_reply',
             {
-                'type': 'ask_question_reply',
+                'type': 'interaction_reply',
+                'kind': 'ask_question',
                 'request_id': 'aq_1',
-                'answers': {'Q1': 'A1'},
-                'annotations': {'Q1': {'notes': 'extra'}},
+                'payload': {
+                    'answers': {'Q1': 'A1'},
+                    'annotations': {'Q1': {'notes': 'extra'}},
+                },
             },
         )
-        assert result['answers'] == {'Q1': 'A1'}
-        assert result['annotations'] == {'Q1': {'notes': 'extra'}}
+        assert result['kind'] == 'ask_question'
+        assert result['payload']['answers'] == {'Q1': 'A1'}
+        assert result['payload']['annotations'] == {'Q1': {'notes': 'extra'}}
 
-    def test_ask_question_timeout_maps_reason(self) -> None:
+    def test_interaction_timeout_maps_reason(self) -> None:
         result = _public_content_for_event(
-            'ask_question_timeout',
+            'interaction_timeout',
             {
-                'type': 'ask_question_timeout',
+                'type': 'interaction_timeout',
+                'kind': 'ask_question',
                 'request_id': 'aq_1',
-                'questions': [],
                 'reason': 'timeout',
             },
         )
+        assert result['kind'] == 'ask_question'
         assert result['request_id'] == 'aq_1'
         assert result['reason'] == 'timeout'
 

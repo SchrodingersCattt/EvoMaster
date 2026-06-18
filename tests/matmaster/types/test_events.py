@@ -9,9 +9,6 @@ from pydantic import TypeAdapter, ValidationError
 
 from matmaster.types.events import (
     AgentEvent,
-    AskQuestionEvent,
-    AskQuestionReplyEvent,
-    AskQuestionTimeoutEvent,
     AssistantStateEvent,
     BohriumNodeEvent,
     BusEvent,
@@ -21,6 +18,9 @@ from matmaster.types.events import (
     ErrorEvent,
     ExpRunEvent,
     FinishDetail,
+    InteractionReplyEvent,
+    InteractionRequestEvent,
+    InteractionTimeoutEvent,
     McpConnectEvent,
     McpServerStatusEvent,
     ResponseEvent,
@@ -480,48 +480,57 @@ class TestSystemEvents:
         assert evt.type == "response_figures"
         assert evt.figures[0].figure_id == "band_structure"
 
-    def test_ask_question(self) -> None:
-        evt = AskQuestionEvent(
+    def test_interaction_request(self) -> None:
+        evt = InteractionRequestEvent(
             source="system",
+            kind="ask_question",
             request_id="aq_1",
-            questions=[
-                {
-                    "question": "Which library should we use?",
-                    "header": "Library",
-                    "options": [
-                        {
-                            "label": "Pydantic (Recommended)",
-                            "description": "Runtime validation",
-                        },
-                        {
-                            "label": "dataclasses",
-                            "description": "Stdlib only",
-                        },
-                    ],
-                }
-            ],
-            preview_format="markdown",
+            task_id="task_1",
+            payload={
+                "questions": [
+                    {
+                        "question": "Which library should we use?",
+                        "header": "Library",
+                        "options": [
+                            {
+                                "label": "Pydantic (Recommended)",
+                                "description": "Runtime validation",
+                            },
+                            {
+                                "label": "dataclasses",
+                                "description": "Stdlib only",
+                            },
+                        ],
+                    }
+                ],
+                "preview_format": "markdown",
+            },
         )
-        assert evt.type == "ask_question"
+        assert evt.type == "interaction_request"
+        assert evt.kind == "ask_question"
         assert evt.request_id == "aq_1"
-        assert evt.preview_format == "markdown"
+        assert evt.task_id == "task_1"
+        assert evt.payload["preview_format"] == "markdown"
 
-    def test_ask_question_reply(self) -> None:
-        evt = AskQuestionReplyEvent(
+    def test_interaction_reply(self) -> None:
+        evt = InteractionReplyEvent(
             source="user",
+            kind="ask_question",
             request_id="aq_1",
-            answers={"Which library should we use?": "Pydantic (Recommended)"},
+            payload={
+                "answers": {"Which library should we use?": "Pydantic (Recommended)"}
+            },
         )
-        assert evt.type == "ask_question_reply"
+        assert evt.type == "interaction_reply"
 
-    def test_ask_question_timeout(self) -> None:
-        evt = AskQuestionTimeoutEvent(
+    def test_interaction_timeout(self) -> None:
+        evt = InteractionTimeoutEvent(
             source="system",
+            kind="ask_question",
             request_id="aq_1",
-            questions=[],
             reason="timeout",
         )
-        assert evt.type == "ask_question_timeout"
+        assert evt.type == "interaction_timeout"
 
 
 class TestSubagentSpawnEvent:
@@ -637,22 +646,25 @@ class TestSystemEventDiscriminator:
     def test_all_system_types(self) -> None:
         payloads = [
             {
-                "type": "ask_question",
+                "type": "interaction_request",
                 "source": "s",
+                "kind": "ask_question",
                 "request_id": "aq_1",
-                "questions": [],
+                "task_id": "task_1",
+                "payload": {},
             },
             {
-                "type": "ask_question_reply",
+                "type": "interaction_reply",
                 "source": "s",
+                "kind": "ask_question",
                 "request_id": "aq_1",
-                "answers": {},
+                "payload": {},
             },
             {
-                "type": "ask_question_timeout",
+                "type": "interaction_timeout",
                 "source": "s",
+                "kind": "ask_question",
                 "request_id": "aq_1",
-                "questions": [],
             },
             {
                 "type": "compaction",
@@ -672,9 +684,9 @@ class TestSystemEventDiscriminator:
             {"type": "subagent_spawn", "source": "s", "exp_name": "e"},
         ]
         expected_types = [
-            AskQuestionEvent,
-            AskQuestionReplyEvent,
-            AskQuestionTimeoutEvent,
+            InteractionRequestEvent,
+            InteractionReplyEvent,
+            InteractionTimeoutEvent,
             CompactionEvent,
             ExpRunEvent,
             CancelledEvent,
@@ -727,22 +739,25 @@ class TestBusEventUnion:
             {"type": "checkpoint", "source": "a"},
             # 13 SystemEvent types
             {
-                "type": "ask_question",
+                "type": "interaction_request",
                 "source": "s",
+                "kind": "ask_question",
                 "request_id": "aq_1",
-                "questions": [],
+                "task_id": "task_1",
+                "payload": {},
             },
             {
-                "type": "ask_question_reply",
+                "type": "interaction_reply",
                 "source": "s",
+                "kind": "ask_question",
                 "request_id": "aq_1",
-                "answers": {},
+                "payload": {},
             },
             {
-                "type": "ask_question_timeout",
+                "type": "interaction_timeout",
                 "source": "s",
+                "kind": "ask_question",
                 "request_id": "aq_1",
-                "questions": [],
             },
             {
                 "type": "compaction",
@@ -811,9 +826,14 @@ class TestEventSerializationRoundtrip:
             SkillHitEvent(source="a", skill_name="s"),
             ToolProgressEvent(source="a", call_id="c1", tool_name="t1"),
             CheckpointEvent(source="a"),
-            AskQuestionEvent(source="s", request_id="aq_1", questions=[]),
-            AskQuestionReplyEvent(source="s", request_id="aq_1", answers={}),
-            AskQuestionTimeoutEvent(source="s", request_id="aq_1", questions=[]),
+            InteractionRequestEvent(
+                source="s",
+                kind="ask_question",
+                request_id="aq_1",
+                task_id="task_1",
+            ),
+            InteractionReplyEvent(source="s", kind="ask_question", request_id="aq_1"),
+            InteractionTimeoutEvent(source="s", kind="ask_question", request_id="aq_1"),
             CompactionEvent(
                 source="context_compactor",
                 compaction_id="task-1:root:1",
@@ -857,9 +877,9 @@ class TestNoTypeCollision:
             "checkpoint",
             "skill_hit",
             "tool_progress",
-            "ask_question",
-            "ask_question_reply",
-            "ask_question_timeout",
+            "interaction_request",
+            "interaction_reply",
+            "interaction_timeout",
             "compaction",
             "exp_run",
             "cancelled",
@@ -889,9 +909,9 @@ _ALL_EVENT_CLASSES = [
     CheckpointEvent,
     SkillHitEvent,
     ToolProgressEvent,
-    AskQuestionEvent,
-    AskQuestionReplyEvent,
-    AskQuestionTimeoutEvent,
+    InteractionRequestEvent,
+    InteractionReplyEvent,
+    InteractionTimeoutEvent,
     CompactionEvent,
     ExpRunEvent,
     CancelledEvent,
@@ -914,9 +934,13 @@ def _make_event_instance(cls):
         ErrorEvent: {"message": "err"},
         AssistantStateEvent: {"state": {"content": "hi"}},
         SkillHitEvent: {"skill_name": "research"},
-        AskQuestionEvent: {"request_id": "aq_1", "questions": []},
-        AskQuestionReplyEvent: {"request_id": "aq_1", "answers": {}},
-        AskQuestionTimeoutEvent: {"request_id": "aq_1", "questions": []},
+        InteractionRequestEvent: {
+            "kind": "ask_question",
+            "request_id": "aq_1",
+            "task_id": "task_1",
+        },
+        InteractionReplyEvent: {"kind": "ask_question", "request_id": "aq_1"},
+        InteractionTimeoutEvent: {"kind": "ask_question", "request_id": "aq_1"},
         CompactionEvent: {
             "compaction_id": "task-1:root:1",
             "status": "running",
