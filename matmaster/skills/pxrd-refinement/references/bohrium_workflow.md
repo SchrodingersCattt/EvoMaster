@@ -7,7 +7,7 @@ tool, which submits to a Docker image with GSAS-II pre-installed.
 
 | Item | Value |
 |---|---|
-| image | `registry.dp.tech/dptech/dp/native/prod-19853/xrd-app:dev-260119` |
+| image | `registry.dp.tech/dptech/matmaster:gsas2-slim-dev260618e` |
 | GSAS-II install | `/root/g2full/GSAS-II/GSASII` (the script default) |
 | machine (single Pawley, basic Rietveld) | `c8_m32_cpu` |
 | machine (directory batch >= 5 patterns, full Rietveld) | `c32_m128_cpu` |
@@ -134,7 +134,7 @@ Submit (returns `job_id`):
 
     Bohrium(action="submit",
             input_dir="input_dir",
-            image="registry.dp.tech/dptech/dp/native/prod-19853/xrd-app:dev-260119",
+            image="registry.dp.tech/dptech/matmaster:gsas2-slim-dev260618e",
             machine="c32_m128_cpu",
             cmd="bash run.sh > log 2>&1")
 
