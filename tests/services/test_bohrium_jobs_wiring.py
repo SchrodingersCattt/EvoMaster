@@ -673,6 +673,31 @@ def test_record_poll_terminal_feeds_observed_set() -> None:
     assert snap.observed_terminal == {(True, "J")}
 
 
+def test_record_kill_feeds_observed_set() -> None:
+    table = MagicMock()
+    snap = _snapshot([])
+    ledger, _ = build_bohrium_jobs_ports(
+        session_id="s",
+        invocation_id="inv",
+        user_id="u",
+        org_id="o",
+        workspace="/share/project",
+        exporter=_exporter(),
+        table=table,
+        delivery_snapshot=snap,
+    )
+
+    ledger.record_kill(job_id="J", sandbox=True)
+
+    table.apply_kill.assert_called_once_with(
+        user_id="u",
+        org_id="o",
+        sandbox=True,
+        job_id="J",
+    )
+    assert snap.observed_terminal == {(True, "J")}
+
+
 def test_record_poll_without_snapshot_skips_observation() -> None:
     table = MagicMock()
     ledger, _ = build_bohrium_jobs_ports(

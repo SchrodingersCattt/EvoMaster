@@ -153,6 +153,8 @@ class _BohriumJobLedger:
             sandbox=bool(sandbox),
             job_id=str(job_id),
         )
+        if self._observed_terminal is not None:
+            self._observed_terminal.add((bool(sandbox), str(job_id)))
 
 
 class _SessionWorkspaceDeliveryJobsPort:

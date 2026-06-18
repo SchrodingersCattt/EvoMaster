@@ -84,7 +84,7 @@ def test_poll_records_ledger_with_raw_code(monkeypatch) -> None:
     assert poll_calls[0][1]["job_id"] == "12345"
 
 
-def test_kill_sandbox_records_terminating(monkeypatch) -> None:
+def test_kill_sandbox_records_kill_intent(monkeypatch) -> None:
     fake = _FakeLedger()
     bt = tmod.BohriumTool(session=None, workdir=Path("."), job_ledger=fake)
     monkeypatch.setattr(bt, "_build_context", lambda **kw: _ctx(sandbox=True))
