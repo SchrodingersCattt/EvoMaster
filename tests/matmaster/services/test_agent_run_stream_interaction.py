@@ -2,15 +2,15 @@ from __future__ import annotations
 
 import json
 from collections import defaultdict, deque
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
+from matmaster.integration.interaction_bridge import InteractionBridge
 from matmaster.types.events import RunResultEvent, ToolResultEvent
 from src.dao.redis_dao import RedisDao
 
-from .agent_run_stream_fixtures import (_ImmediateReplyQueue,
-                                        _make_cancel_token, _patched_service)
+from .agent_run_stream_fixtures import _make_cancel_token, _patched_service
 
 
 class _InMemoryRedisClient:
@@ -161,67 +161,151 @@ def test_active_guard_setnx_and_compare_and_delete(redis_dao):
     assert redis_dao.get_active_interaction("sess") is None
 
 
+class _BridgeDaoFake:
+    def __init__(self, replies: list[str | None], finalize_result: bool = True) -> None:
+        self.replies = deque(replies)
+        self.finalize_result = finalize_result
+        self.deleted: list[str] = []
+        self.released: list[tuple[str, str]] = []
+
+    def acquire_active_interaction(self, session_id: str, request_id: str) -> bool:
+        return True
+
+    def write_pending_interaction(
+        self, request_id: str, record: dict, ttl: int
+    ) -> None:
+        return None
+
+    def blpop_interaction_reply(self, request_id: str, timeout_sec: int) -> str | None:
+        if not self.replies:
+            return None
+        return self.replies.popleft()
+
+    def finalize_interaction(self, request_id: str, state: str) -> bool:
+        return self.finalize_result
+
+    def delete_interaction_reply(self, request_id: str) -> None:
+        self.deleted.append(request_id)
+
+    def release_active_interaction(self, session_id: str, request_id: str) -> None:
+        self.released.append((session_id, request_id))
+
+
+async def _noop_interaction_sink(event) -> None:
+    return None
+
+
+def _configure_immediate_interaction_reply(dao, request_id: str, payload: dict) -> None:
+    envelope = json.dumps(
+        {"kind": "ask_question", "request_id": request_id, "payload": payload},
+        ensure_ascii=False,
+    )
+    dao.acquire_active_interaction.return_value = True
+    dao.write_pending_interaction.return_value = None
+    dao.blpop_interaction_reply.return_value = envelope
+    dao.finalize_interaction.return_value = False
+    dao.delete_interaction_reply.return_value = None
+    dao.release_active_interaction.return_value = None
+
+
+@pytest.mark.asyncio
+async def test_request_recovers_late_answer_after_blpop_timeout():
+    dao = _BridgeDaoFake(
+        [
+            None,
+            '{"kind":"ask_question","request_id":"aq_x","payload":{"answers":{"q":"a"}}}',
+        ],
+        finalize_result=False,
+    )
+    bridge = InteractionBridge(
+        session_id="s",
+        task_id="t",
+        invocation_id="i",
+        event_sink=_noop_interaction_sink,
+        dao=dao,
+    )
+
+    out = await bridge.request(
+        kind="ask_question", request_id="aq_x", payload={"questions": []}
+    )
+
+    assert out == {"answers": {"q": "a"}}
+    assert dao.deleted == ["aq_x"]
+    assert dao.released == [("s", "aq_x")]
+
+
+@pytest.mark.asyncio
+async def test_request_rejects_envelope_mismatch():
+    dao = _BridgeDaoFake(
+        ['{"kind":"ask_question","request_id":"aq_OTHER","payload":{}}']
+    )
+    bridge = InteractionBridge(
+        session_id="s",
+        task_id="t",
+        invocation_id="i",
+        event_sink=_noop_interaction_sink,
+        dao=dao,
+    )
+
+    with pytest.raises(RuntimeError, match="mismatch"):
+        await bridge.request(kind="ask_question", request_id="aq_x", payload={})
+
+
 @pytest.mark.asyncio
 async def test_ask_question_bridge_events_go_through_fanout_and_persistence():
     async def ask_then_finish(ctx):
-        await ctx.request.interaction_bridge.ask(
+        await ctx.request.interaction_bridge.request(
+            kind="ask_question",
             request_id="aq_1",
-            questions=[
-                {
-                    "question": "Q1",
-                    "header": "H1",
-                    "options": [
-                        {"label": "A1", "description": "desc"},
-                        {"label": "A2", "description": "desc"},
-                    ],
-                    "allow_freeform": True,
-                    "multi_select": False,
-                }
-            ],
-            metadata={"scene": "test"},
+            payload={
+                "questions": [
+                    {
+                        "question": "Q1",
+                        "header": "H1",
+                        "options": [
+                            {"label": "A1", "description": "desc"},
+                            {"label": "A2", "description": "desc"},
+                        ],
+                        "allow_freeform": True,
+                        "multi_select": False,
+                    }
+                ],
+                "metadata": {"scene": "test"},
+                "origin": "tool:AskQuestion",
+                "preview_format": "markdown",
+            },
         )
         yield RunResultEvent(source="agent", status="completed", reason="natural")
 
     send_cb = MagicMock()
-    reply_queue = _ImmediateReplyQueue(
-        json.dumps(
-            {
-                "payload": {
-                    "request_id": "aq_1",
-                    "answers": {"Q1": "A1"},
-                    "annotations": {},
-                }
-            }
-        )
-    )
 
     async with _patched_service(ask_then_finish) as (svc, _, persist_events):
-        with patch(
-            "src.services.agent_run_service.RedisReplyQueue",
-            return_value=reply_queue,
-        ):
-            await svc.run_agent(
-                session_id="s1",
-                user_prompt="hi",
-                send_cb=send_cb,
-                cancel_token=_make_cancel_token(),
-                mode="direct",
-                task_id="t1",
-                invocation_id="inv-1",
-            )
+        _configure_immediate_interaction_reply(
+            svc._test_redis_dao, "aq_1", {"answers": {"Q1": "A1"}, "annotations": {}}
+        )
+        await svc.run_agent(
+            session_id="s1",
+            user_prompt="hi",
+            send_cb=send_cb,
+            cancel_token=_make_cancel_token(),
+            mode="direct",
+            task_id="t1",
+            invocation_id="inv-1",
+        )
 
     payload = send_cb.call_args_list[0].args[0]
-    assert payload["type"] == "ask_question"
+    assert payload["type"] == "interaction_request"
     assert payload["session_id"] == "s1"
     assert payload["task_id"] == "t1"
     assert payload["invocation_id"] == "inv-1"
     assert payload["content"]["request_id"] == "aq_1"
-    assert payload["content"]["metadata"] == {"scene": "test"}
+    assert payload["content"]["kind"] == "ask_question"
+    assert payload["content"]["payload"]["metadata"] == {"scene": "test"}
 
     persisted = [
         event
         for event in persist_events
-        if getattr(event, "type", None) == "ask_question"
+        if getattr(event, "type", None) == "interaction_request"
     ]
     assert len(persisted) == 1
     assert persisted[0].request_id == "aq_1"
@@ -230,21 +314,26 @@ async def test_ask_question_bridge_events_go_through_fanout_and_persistence():
 @pytest.mark.asyncio
 async def test_ask_question_tool_result_reaches_sse_before_run_result():
     async def ask_then_emit_tool_result(ctx):
-        await ctx.request.interaction_bridge.ask(
+        await ctx.request.interaction_bridge.request(
+            kind="ask_question",
             request_id="aq_1",
-            questions=[
-                {
-                    "question": "Q1",
-                    "header": "H1",
-                    "options": [
-                        {"label": "A1", "description": "desc"},
-                        {"label": "A2", "description": "desc"},
-                    ],
-                    "allow_freeform": True,
-                    "multi_select": False,
-                }
-            ],
-            metadata={"scene": "stream-order"},
+            payload={
+                "questions": [
+                    {
+                        "question": "Q1",
+                        "header": "H1",
+                        "options": [
+                            {"label": "A1", "description": "desc"},
+                            {"label": "A2", "description": "desc"},
+                        ],
+                        "allow_freeform": True,
+                        "multi_select": False,
+                    }
+                ],
+                "metadata": {"scene": "stream-order"},
+                "origin": "tool:AskQuestion",
+                "preview_format": "markdown",
+            },
         )
         yield ToolResultEvent(
             source="agent",
@@ -261,37 +350,25 @@ async def test_ask_question_tool_result_reaches_sse_before_run_result():
         yield RunResultEvent(source="agent", status="completed", reason="natural")
 
     send_cb = MagicMock()
-    reply_queue = _ImmediateReplyQueue(
-        json.dumps(
-            {
-                "payload": {
-                    "request_id": "aq_1",
-                    "answers": {"Q1": "A1"},
-                    "annotations": {},
-                }
-            }
-        )
-    )
 
     async with _patched_service(ask_then_emit_tool_result) as (svc, _, __):
-        with patch(
-            "src.services.agent_run_service.RedisReplyQueue",
-            return_value=reply_queue,
-        ):
-            await svc.run_agent(
-                session_id="s1",
-                user_prompt="hi",
-                send_cb=send_cb,
-                cancel_token=_make_cancel_token(),
-                mode="direct",
-                task_id="t1",
-                invocation_id="inv-1",
-            )
+        _configure_immediate_interaction_reply(
+            svc._test_redis_dao, "aq_1", {"answers": {"Q1": "A1"}, "annotations": {}}
+        )
+        await svc.run_agent(
+            session_id="s1",
+            user_prompt="hi",
+            send_cb=send_cb,
+            cancel_token=_make_cancel_token(),
+            mode="direct",
+            task_id="t1",
+            invocation_id="inv-1",
+        )
 
     payloads = [call.args[0] for call in send_cb.call_args_list]
     payload_types = [payload["type"] for payload in payloads]
 
-    ask_idx = payload_types.index("ask_question")
+    ask_idx = payload_types.index("interaction_request")
     tool_result_idx = payload_types.index("tool_result")
     run_result_idx = payload_types.index("run_result")
     stream_closed_idx = payload_types.index("stream_closed")
