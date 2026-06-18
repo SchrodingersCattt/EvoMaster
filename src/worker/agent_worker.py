@@ -376,7 +376,6 @@ def _run_worker_loop() -> None:
             task_id,
         )
         redis_dao.delete_stop_requested(session_id, task_id)
-        redis_dao.set_interaction_run_active(session_id)
         redis_dao.set_interaction_run_context(session_id, task_id, invocation_id or '')
 
         def send_cb(p: dict, _sid: str = session_id) -> None:
@@ -412,7 +411,7 @@ def _run_worker_loop() -> None:
                     task_id,
                     fail_reason or 'unknown',
                 )
-                redis_dao.delete_interaction_run_active(session_id)
+                redis_dao.delete_interaction_run_context(session_id)
                 LogContext.clear()
                 continue
 
@@ -528,7 +527,7 @@ def _run_worker_loop() -> None:
             if acquired:
                 _current_session_id = None
                 LogContext.clear()
-            redis_dao.delete_interaction_run_active(session_id)
+            redis_dao.delete_interaction_run_context(session_id)
             redis_dao.delete_stop_requested(session_id, task_id)
             if acquired:
                 if run_success and delivery_snapshot is not None:

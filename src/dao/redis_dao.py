@@ -18,7 +18,6 @@ logger = logging.getLogger(__name__)
 REDIS_HEALTH_CHECK_INTERVAL_SEC = 30
 
 # interaction reply 多 worker：Redis key 与取消占位值
-INTERACTION_RUN_ACTIVE_KEY = "chat:run_active:{session_id}"
 INTERACTION_RUN_CONTEXT_KEY = "chat:run_context:{session_id}"
 INTERACTION_CANCEL_VALUE = "__CANCEL__"
 INTERACTION_RUN_ACTIVE_TTL_SEC = 3600
@@ -48,10 +47,6 @@ INTERRUPT_HINT_KEY_PREFIX = "chat:interrupt_hint:"
 INTERRUPT_HINT_TTL_SEC = 60
 INTERRUPT_CONFIRM_KEY_PREFIX = "chat:interrupt_confirm:"
 INTERRUPT_CONFIRM_TTL_SEC = 10
-
-
-def _run_active_key(session_id: str) -> str:
-    return INTERACTION_RUN_ACTIVE_KEY.format(session_id=session_id.strip())
 
 
 def _run_context_key(session_id: str) -> str:
@@ -208,40 +203,7 @@ class RedisDao:
             logger.warning("Redis client init failed: %s", e)
             return None
 
-    # ---------- interaction 多 worker（run_active + per-request reply）----------
-
-    def set_interaction_run_active(self, session_id: str) -> bool:
-        """标记该会话当前有活跃 run。未配置 Redis 或失败返回 False。"""
-        client = self.get_command_client()
-        if not client:
-            return False
-        try:
-            client.set(
-                _run_active_key(session_id),
-                "1",
-                ex=INTERACTION_RUN_ACTIVE_TTL_SEC,
-            )
-            return True
-        except Exception as e:
-            logger.warning(
-                "Redis set run_active failed session_id=%s: %s", session_id, e
-            )
-            return False
-
-    def delete_interaction_run_active(self, session_id: str) -> None:
-        """清除 run 活跃标记与 run_context。"""
-        client = self.get_command_client()
-        if not client:
-            return
-        try:
-            client.delete(_run_active_key(session_id))
-            client.delete(_run_context_key(session_id))
-        except Exception as e:
-            logger.warning(
-                "Redis delete run_active/run_context failed session_id=%s: %s",
-                session_id,
-                e,
-            )
+    # ---------- interaction 多 worker（run_context + per-request reply）----------
 
     def set_interaction_run_context(
         self, session_id: str, task_id: str, invocation_id: str
@@ -282,15 +244,19 @@ class RedisDao:
             )
             return None
 
-    def is_interaction_run_active(self, session_id: str) -> bool:
-        """是否配置了 Redis 且该会话在 Redis 中有活跃 run。"""
+    def delete_interaction_run_context(self, session_id: str) -> None:
+        """清除该会话当前 run 的 task_id / invocation_id。"""
         client = self.get_command_client()
         if not client:
-            return False
+            return
         try:
-            return client.exists(_run_active_key(session_id)) > 0
-        except Exception:
-            return False
+            client.delete(_run_context_key(session_id))
+        except Exception as e:
+            logger.warning(
+                "Redis delete run_context failed session_id=%s: %s",
+                session_id,
+                e,
+            )
 
     def write_pending_interaction(
         self, request_id: str, record: dict, ttl: int

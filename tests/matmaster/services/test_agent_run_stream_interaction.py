@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import asyncio
 import json
+import threading
+import time
 from collections import defaultdict, deque
 from unittest.mock import MagicMock
 
@@ -88,6 +91,27 @@ class _InMemoryRedisClient:
                 return 1
             return 0
         raise AssertionError("unexpected eval call")
+
+
+class _BlockingRedisClient(_InMemoryRedisClient):
+    def __init__(self) -> None:
+        super().__init__()
+        self.condition = threading.Condition()
+
+    def blpop(self, key: str, timeout: int) -> tuple[str, str] | None:
+        deadline = time.monotonic() + min(timeout, 1)
+        with self.condition:
+            while not self.lists[key]:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    return None
+                self.condition.wait(timeout=remaining)
+            return key, self.lists[key].popleft()
+
+    def rpush(self, key: str, value: str) -> None:
+        with self.condition:
+            super().rpush(key, value)
+            self.condition.notify_all()
 
 
 @pytest.fixture
@@ -249,6 +273,45 @@ async def test_request_rejects_envelope_mismatch():
 
     with pytest.raises(RuntimeError, match="mismatch"):
         await bridge.request(kind="ask_question", request_id="aq_x", payload={})
+
+
+@pytest.mark.asyncio
+async def test_stop_during_ask_question_wakes_blpop_immediately(monkeypatch):
+    client = _BlockingRedisClient()
+    dao = RedisDao()
+    monkeypatch.setattr(dao, "get_command_client", lambda: client)
+    monkeypatch.setattr(dao, "create_client", lambda: client)
+    request_id = "aq_wake"
+    bridge = InteractionBridge(
+        session_id="sess-w",
+        task_id="t",
+        invocation_id="i",
+        event_sink=_noop_interaction_sink,
+        dao=dao,
+    )
+
+    async def fire_stop_after_active() -> None:
+        deadline = time.monotonic() + 1
+        while dao.get_active_interaction("sess-w") != request_id:
+            if time.monotonic() > deadline:
+                raise AssertionError("active interaction was not set")
+            await asyncio.sleep(0.01)
+        dao.finalize_interaction(request_id, "cancelled")
+        dao.rpush_interaction_cancel(request_id)
+
+    stopper = asyncio.create_task(fire_stop_after_active())
+    with pytest.raises(asyncio.CancelledError):
+        await asyncio.wait_for(
+            bridge.request(
+                kind="ask_question",
+                request_id=request_id,
+                payload={"questions": []},
+                timeout_seconds=1800,
+            ),
+            timeout=1,
+        )
+    await stopper
+    assert dao.read_pending_interaction(request_id)["state"] == "cancelled"
 
 
 @pytest.mark.asyncio
