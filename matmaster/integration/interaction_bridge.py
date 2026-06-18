@@ -37,6 +37,9 @@ class InteractionBridge:
         self._timeout_seconds = timeout_seconds
         self._lock = asyncio.Lock()
 
+    async def emit(self, event: Any) -> None:
+        await self._event_sink(event)
+
     async def request(
         self,
         *,

@@ -10,6 +10,7 @@ from typing import Any, ClassVar
 
 from matmaster.tools.builtin.base import BuiltinTool
 from matmaster.tools.tool_result import ToolResult
+from matmaster.types import InteractionTimeoutEvent
 from matmaster.types.tool_decision import ToolDecision
 from matmaster.types.tool_runner_state import ToolRunnerState
 from matmaster.types.tool_spec import ResourceClaim, ToolExecutionContext
@@ -136,25 +137,39 @@ class AskQuestionTool(BuiltinTool):
 
         normalized_questions = self._normalize_questions(arguments["questions"])
         request_id = f"aq_{uuid.uuid4().hex[:12]}"
+        request_payload = {
+            "questions": normalized_questions,
+            "metadata": arguments.get("metadata") or {},
+            "origin": "tool:AskQuestion",
+            "preview_format": "markdown",
+        }
 
-        response = await self._bridge.ask(
-            request_id=request_id,
-            questions=normalized_questions,
-            metadata=arguments.get("metadata"),
-        )
+        try:
+            reply_payload = await self._bridge.request(
+                kind="ask_question",
+                request_id=request_id,
+                payload=request_payload,
+            )
+        except TimeoutError:
+            await self._bridge.emit(
+                InteractionTimeoutEvent(
+                    source="System", kind="ask_question", request_id=request_id
+                )
+            )
+            raise
 
         content = self._render_answer_summary(
-            response["answers"],
-            response.get("annotations") or {},
+            reply_payload.get("answers") or {},
+            reply_payload.get("annotations") or {},
         )
         return ToolResult(
             status="success",
             content=content,
             payload={
-                "request_id": response["request_id"],
+                "request_id": request_id,
                 "questions": normalized_questions,
-                "answers": response["answers"],
-                "annotations": response.get("annotations") or {},
+                "answers": reply_payload.get("answers") or {},
+                "annotations": reply_payload.get("annotations") or {},
             },
         )
 
