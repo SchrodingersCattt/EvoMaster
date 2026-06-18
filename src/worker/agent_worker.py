@@ -369,7 +369,6 @@ def _run_worker_loop() -> None:
         user_info_display = (
             f"{user_info['user_id']} | {user_info['nickname']} | {user_info['email']}"
         )
-        redis_dao.delete_interaction_reply_list(session_id)
         # 清除可能残留的上一轮 stop key（含 session 级），避免上一轮 finally 中 delete 失败导致本轮一启动即被误判为已请求停止
         logger.info(
             'Agent worker: clear stop keys before run session_id=%s task_id=%s',

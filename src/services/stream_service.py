@@ -872,8 +872,6 @@ class ChatStreamService:
         if isinstance(handle, Busy):
             return None
 
-        dao = get_redis_dao()
-        dao.delete_interaction_reply_list(sid)
         return SendStreamContext(
             task_id=handle.task_id,
             invocation_id=handle.invocation_id,
