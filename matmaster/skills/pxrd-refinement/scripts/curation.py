@@ -79,9 +79,7 @@ def _rolling_min_smoothed(
     Used internally for artifact-end detection. We deliberately avoid
     `pybaselines.Baseline.mor` here because its output varies across pybaselines
     versions and can over-smooth the monotonic artifact descent, which breaks
-    slope-based artifact detection (seen on the Bohrium xrd-app image where
-    pybaselines MOR flattens the 5–13° hump and the detector stops returning a
-    sensible tmin_cut). Plain rolling-minimum is deterministic, dependency-free
+    slope-based artifact detection. Plain rolling-minimum is deterministic, dependency-free
     and empirically produces a clearly kinked slope at the artifact end.
     """
     dtth = float(np.median(np.diff(tth)))
