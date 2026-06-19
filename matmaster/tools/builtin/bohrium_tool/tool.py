@@ -56,6 +56,7 @@ from .errors import BohriumJobStateError
 from .models import BohriumSubmittedJob
 from .paths import resolve_download_target, resolve_input_source
 from .submit_review import (
+    CMD_LOG_SUFFIX,
     BohriumSubmitReviewProvider,
     normalize_execution_args,
 )
@@ -88,7 +89,7 @@ def submit_job_via_runtime(
     workdir: Path,
     session,
 ) -> BohriumSubmittedJob:
-    if not cmd.rstrip().endswith("> log 2>&1"):
+    if not cmd.rstrip().endswith(CMD_LOG_SUFFIX):
         raise BohriumError(
             "cmd not normalized (missing log redirection); "
             "normalize_execution_args must run before submit_job_via_runtime"
@@ -113,13 +114,12 @@ def submit_job_via_runtime(
             )
         except Exception as exc:
             created_ref = _created_job_ref(create_data)
-            error = BohriumTransferError(
+            raise BohriumTransferError.with_created_job_ref(
                 "Remote input upload failed after job/create; "
                 "compute job was not submitted; "
                 f"created_job_ref={created_ref}: {exc}",
-            )
-            error.created_job_ref = created_ref
-            raise error from exc
+                created_ref,
+            ) from exc
         add_data = add_job(
             ctx,
             create_data=create_data,
@@ -140,13 +140,12 @@ def submit_job_via_runtime(
                 )
             except Exception as exc:
                 created_ref = _created_job_ref(create_data)
-                error = BohriumTransferError(
+                raise BohriumTransferError.with_created_job_ref(
                     "Local input upload failed after job/create; "
                     "compute job was not submitted; "
                     f"created_job_ref={created_ref}: {exc}",
-                )
-                error.created_job_ref = created_ref
-                raise error from exc
+                    created_ref,
+                ) from exc
             add_data = add_job(
                 ctx,
                 create_data=create_data,

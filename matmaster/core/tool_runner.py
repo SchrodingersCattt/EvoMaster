@@ -74,6 +74,19 @@ _OUTCOME_MESSAGE = {
 }
 
 
+def _gate_block_result(
+    status: str, message: str, *, result_status: str = "blocked"
+) -> ToolResult:
+    return ToolResult(
+        status=result_status,
+        content=json.dumps(
+            {"success": False, "status": status, "message": message},
+            ensure_ascii=False,
+        ),
+        meta={"block_reason": status, "layer": "submit_approval_gate"},
+    )
+
+
 @dataclass
 class BatchExecutionContext:
     """Per-batch execution context used internally by FullToolRunner.
@@ -226,6 +239,45 @@ class FullToolRunner:
                 block_reason=block_reason,
             )
 
+        def _review_record(
+            *,
+            request_id: str,
+            session_id: str,
+            task_id: str,
+            tool_call_id: str,
+            review_outcome: str,
+            user_decision: str | None,
+            model_arguments: dict[str, Any],
+            review_draft_arguments: dict[str, Any],
+            final_arguments: dict[str, Any],
+            execution_args: dict[str, Any] | None,
+            normalization_changes: dict[str, Any],
+            user_changes: dict[str, Any],
+            execution_normalization_changes: dict[str, Any],
+            reported: list[dict[str, Any]],
+        ) -> dict[str, Any]:
+            return {
+                "review_content": build_review_content(user_changes, reported),
+                "audit_baseline": build_audit_payload(
+                    request_id=request_id,
+                    session_id=session_id,
+                    task_id=task_id,
+                    tool_call_id=tool_call_id,
+                    review_outcome=review_outcome,
+                    user_decision=user_decision,
+                    model_arguments=model_arguments,
+                    review_draft_arguments=review_draft_arguments,
+                    final_arguments=final_arguments,
+                    execution_arguments=execution_args,
+                    normalization_changes=normalization_changes,
+                    user_parameter_changes=user_changes,
+                    execution_normalization_changes=execution_normalization_changes,
+                    reported_input_file_changes=reported,
+                    reported_input_file_change_count=len(reported),
+                    execution_audit=None,
+                ),
+            }
+
         # ── Serial validation ──────────────────────────────
         for idx, tc in enumerate(tool_calls):
             # 1. Catalog lookup
@@ -323,24 +375,12 @@ class FullToolRunner:
                         guard = set()
                         self._state.set(RESUBMIT_SIGNATURES_KEY, guard)
 
-                    if submit_signature(draft.model_arguments) in guard:
-                        tr = ToolResult(
-                            status="blocked",
-                            content=json.dumps(
-                                {
-                                    "success": False,
-                                    "status": "ResubmitBlocked",
-                                    "message": (
-                                        "本作业已被拒绝/未获确认，请勿重复提交；"
-                                        "可总结进展或转做其它工作。"
-                                    ),
-                                },
-                                ensure_ascii=False,
-                            ),
-                            meta={
-                                "block_reason": "ResubmitBlocked",
-                                "layer": "submit_approval_gate",
-                            },
+                    model_sig = submit_signature(draft.model_arguments)
+                    if model_sig in guard:
+                        tr = _gate_block_result(
+                            "ResubmitBlocked",
+                            "本作业已被拒绝/未获确认，请勿重复提交；"
+                            "可总结进展或转做其它工作。",
                         )
                         results[idx] = (tc, tr)
                         if on_result:
@@ -376,76 +416,27 @@ class FullToolRunner:
                     )
                     reported = decision.reported_input_file_changes or []
 
-                    def _review_record(
-                        *,
-                        review_outcome: str,
-                        user_decision: str | None,
-                        execution_args: dict[str, Any] | None,
-                        execution_normalization_changes: dict[str, Any],
-                        request_id_: str = request_id,
-                        session_id_: str = session_id,
-                        task_id_: str = task_id,
-                        tool_call_id_: str = tc.id,
-                        model_arguments_: dict[str, Any] = draft.model_arguments,
-                        review_draft_arguments_: dict[
-                            str, Any
-                        ] = draft.review_draft_arguments,
-                        final_args_: dict[str, Any] = final_args,
-                        normalization_changes_: dict[
-                            str, Any
-                        ] = draft.normalization_changes,
-                        user_changes_: dict[str, Any] = user_changes,
-                        reported_: list[dict[str, Any]] = reported,
-                    ) -> dict[str, Any]:
-                        review_content = build_review_content(user_changes_, reported_)
-                        audit_baseline = build_audit_payload(
-                            request_id=request_id_,
-                            session_id=session_id_,
-                            task_id=task_id_,
-                            tool_call_id=tool_call_id_,
-                            review_outcome=review_outcome,
-                            user_decision=user_decision,
-                            model_arguments=model_arguments_,
-                            review_draft_arguments=review_draft_arguments_,
-                            final_arguments=final_args_,
-                            execution_arguments=execution_args,
-                            normalization_changes=normalization_changes_,
-                            user_parameter_changes=user_changes_,
-                            execution_normalization_changes=(
-                                execution_normalization_changes
-                            ),
-                            reported_input_file_changes=reported_,
-                            reported_input_file_change_count=len(reported_),
-                            execution_audit=None,
-                        )
-                        return {
-                            "review_content": review_content,
-                            "audit_baseline": audit_baseline,
-                        }
-
                     if outcome in _OUTCOME_STATUS:
-                        guard.add(submit_signature(draft.model_arguments))
+                        guard.add(model_sig)
                         guard.add(submit_signature(final_args))
                         record = _review_record(
+                            request_id=request_id,
+                            session_id=session_id,
+                            task_id=task_id,
+                            tool_call_id=tc.id,
                             review_outcome=outcome,
                             user_decision=decision.user_decision,
+                            model_arguments=draft.model_arguments,
+                            review_draft_arguments=draft.review_draft_arguments,
+                            final_arguments=final_args,
                             execution_args=None,
+                            normalization_changes=draft.normalization_changes,
+                            user_changes=user_changes,
                             execution_normalization_changes={},
+                            reported=reported,
                         )
-                        tr0 = ToolResult(
-                            status="blocked",
-                            content=json.dumps(
-                                {
-                                    "success": False,
-                                    "status": _OUTCOME_STATUS[outcome],
-                                    "message": _OUTCOME_MESSAGE[outcome],
-                                },
-                                ensure_ascii=False,
-                            ),
-                            meta={
-                                "block_reason": _OUTCOME_STATUS[outcome],
-                                "layer": "submit_approval_gate",
-                            },
+                        tr0 = _gate_block_result(
+                            _OUTCOME_STATUS[outcome], _OUTCOME_MESSAGE[outcome]
                         )
                         tr = attach_submit_review_record(
                             tr0,
@@ -466,25 +457,23 @@ class FullToolRunner:
                         )
                     except SubmitReviewArgumentError as exc:
                         record = _review_record(
+                            request_id=request_id,
+                            session_id=session_id,
+                            task_id=task_id,
+                            tool_call_id=tc.id,
                             review_outcome="approved",
                             user_decision=decision.user_decision,
+                            model_arguments=draft.model_arguments,
+                            review_draft_arguments=draft.review_draft_arguments,
+                            final_arguments=final_args,
                             execution_args=None,
+                            normalization_changes=draft.normalization_changes,
+                            user_changes=user_changes,
                             execution_normalization_changes={},
+                            reported=reported,
                         )
-                        tr0 = ToolResult(
-                            status="error",
-                            content=json.dumps(
-                                {
-                                    "success": False,
-                                    "status": "InvalidFinalArguments",
-                                    "message": str(exc),
-                                },
-                                ensure_ascii=False,
-                            ),
-                            meta={
-                                "block_reason": "InvalidFinalArguments",
-                                "layer": "submit_approval_gate",
-                            },
+                        tr0 = _gate_block_result(
+                            "InvalidFinalArguments", str(exc), result_status="error"
                         )
                         tr = attach_submit_review_record(
                             tr0,
@@ -498,10 +487,20 @@ class FullToolRunner:
                         continue
 
                     record = _review_record(
+                        request_id=request_id,
+                        session_id=session_id,
+                        task_id=task_id,
+                        tool_call_id=tc.id,
                         review_outcome="approved",
                         user_decision=decision.user_decision,
+                        model_arguments=draft.model_arguments,
+                        review_draft_arguments=draft.review_draft_arguments,
+                        final_arguments=final_args,
                         execution_args=execution.arguments,
+                        normalization_changes=draft.normalization_changes,
+                        user_changes=user_changes,
                         execution_normalization_changes=execution.normalization_changes,
+                        reported=reported,
                     )
                     records = self._state.get(SUBMIT_REVIEW_RECORDS_KEY)
                     if records is None:

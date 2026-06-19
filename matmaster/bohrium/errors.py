@@ -18,6 +18,14 @@ class BohriumTransferError(BohriumError):
 
     created_job_ref: object | None = None
 
+    @classmethod
+    def with_created_job_ref(
+        cls, message: str, created_job_ref: object | None
+    ) -> BohriumTransferError:
+        error = cls(message)
+        error.created_job_ref = created_job_ref
+        return error
+
 
 class BohriumRuntimeNotInitialized(BohriumError):
     """Raised when the current session has no attached Bohrium runtime."""
