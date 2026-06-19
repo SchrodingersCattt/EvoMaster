@@ -428,6 +428,19 @@ class ChatSessionsService:
         """设置会话绑定的工作区目录。仅所有者可写。"""
         return self.table.set_session_directory(session_id, directory, user_id)
 
+    def set_bohrium_submit_confirmation(
+        self,
+        session_id: str,
+        user_id: str,
+        required: bool | None,
+    ) -> bool:
+        """设置会话级 Bohrium 提交确认偏好。仅所有者可写。"""
+        return self.table.set_bohrium_submit_confirmation(
+            session_id,
+            user_id,
+            required,
+        )
+
     def update_session_workspace_prefs(
         self,
         session_id: str,

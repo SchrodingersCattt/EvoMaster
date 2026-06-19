@@ -12,6 +12,9 @@ from src.apis.sse_compression import gzip_sse_stream, should_gzip_sse
 from src.base.base_res import BaseResponse
 from src.dao.redis_dao import get_redis_dao
 from src.models.chat import (
+    BohriumSubmitConfirmationApiResponse,
+    BohriumSubmitConfirmationData,
+    BohriumSubmitConfirmationSetRequest,
     ChatAskQuestionReplyRequest,
     ChatSendRequest,
     ErrorApiResponse,
@@ -126,6 +129,17 @@ def _session_workspace_data_from_row(row: dict) -> SessionDirectoryData:
         if m in ("direct", "planner"):
             mode = m
     return SessionDirectoryData(directory=directory, mode=mode)
+
+
+def _session_bohrium_submit_confirmation_data_from_row(
+    session_id: str,
+    row: dict,
+) -> BohriumSubmitConfirmationData:
+    raw = row.get("bohrium_submit_confirmation_required")
+    return BohriumSubmitConfirmationData(
+        session_id=session_id,
+        required=None if raw is None else bool(raw),
+    )
 
 
 def _session_directory_error(exc: SessionDirectoryError) -> BaseErrorResponse:
@@ -719,6 +733,63 @@ def set_session_directory(
     if not row:
         raise NotFoundErrorResponse(msg="Session not found or you are not the owner")
     return SessionDirectoryApiResponse(data=_session_workspace_data_from_row(row))
+
+
+@router.get(
+    "/{session_id}/bohrium-submit-confirmation",
+    response_model=BohriumSubmitConfirmationApiResponse,
+    summary="查询会话级 Bohrium 任务提交确认偏好",
+    description="仅返回会话级覆盖值；required 为 null 表示当前会话未设置，是否继承/默认由后续消费链路处理。",
+    operation_id="getChatSessionBohriumSubmitConfirmation",
+    responses={
+        403: COMMON_ERROR_RESPONSES[403],
+        404: COMMON_ERROR_RESPONSES[404],
+    },
+)
+def get_bohrium_submit_confirmation(
+    session_id: str = Path(..., description="会话 ID", examples=["session-001"]),
+    user_id: str | None = Depends(UserService.optional_user_id),
+    chat_svc: ChatSessionsService = Depends(get_sessions_service),
+):
+    sid = session_id.strip()
+    row = chat_svc.get_session(sid)
+    if not row:
+        raise NotFoundErrorResponse(msg="Session not found")
+    if not chat_svc.can_access_session(sid, user_id, allow_admin_read=True):
+        raise ForbiddenErrorResponse(msg="无权限访问该会话")
+    return BohriumSubmitConfirmationApiResponse(
+        data=_session_bohrium_submit_confirmation_data_from_row(sid, row)
+    )
+
+
+@router.put(
+    "/{session_id}/bohrium-submit-confirmation",
+    response_model=BohriumSubmitConfirmationApiResponse,
+    summary="设置会话级 Bohrium 任务提交确认偏好",
+    description="仅会话所有者可写；required=true/false 设置会话级覆盖，required=null 清除覆盖。",
+    operation_id="setChatSessionBohriumSubmitConfirmation",
+    responses={
+        401: COMMON_ERROR_RESPONSES[401],
+        404: COMMON_ERROR_RESPONSES[404],
+    },
+)
+def set_bohrium_submit_confirmation(
+    session_id: str = Path(..., description="会话 ID", examples=["session-001"]),
+    body: BohriumSubmitConfirmationSetRequest = Body(...),
+    user_id: str = Depends(UserService.require_user_id),
+    chat_svc: ChatSessionsService = Depends(get_sessions_service),
+):
+    sid = session_id.strip()
+    if not chat_svc.set_bohrium_submit_confirmation(sid, user_id, body.required):
+        raise NotFoundErrorResponse(
+            msg="Session not found or you are not the owner",
+        )
+    row = chat_svc.get_session(sid)
+    if not row:
+        raise NotFoundErrorResponse(msg="Session not found or you are not the owner")
+    return BohriumSubmitConfirmationApiResponse(
+        data=_session_bohrium_submit_confirmation_data_from_row(sid, row)
+    )
 
 
 @router.put(

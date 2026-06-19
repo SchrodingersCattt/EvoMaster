@@ -346,6 +346,32 @@ class SessionDirectorySetRequest(BaseModel):
     )
 
 
+# ---------- Bohrium 提交确认偏好（会话级） ----------
+
+
+class BohriumSubmitConfirmationData(BaseModel):
+    """GET/PUT /chat/sessions/{session_id}/bohrium-submit-confirmation 的 data 字段"""
+
+    session_id: str = Field(description="会话 ID")
+    required: bool | None = Field(
+        default=None,
+        description="会话级 Bohrium 提交确认覆盖值；null 表示未设置/继承",
+    )
+
+
+class BohriumSubmitConfirmationApiResponse(BaseResponse[BohriumSubmitConfirmationData]):
+    """Bohrium 提交确认偏好规范响应"""
+
+
+class BohriumSubmitConfirmationSetRequest(BaseModel):
+    """PUT /chat/sessions/{session_id}/bohrium-submit-confirmation 请求体"""
+
+    required: bool | None = Field(
+        default=None,
+        description="会话级覆盖值；null 表示清除覆盖",
+    )
+
+
 # ---------- 会话标题（重命名） ----------
 
 
@@ -511,6 +537,10 @@ class ChatSendRequest(BaseModel):
         default=None,
         max_length=2048,
         description="可选，前端传入的本轮 Bohrium 远端工作目录（/share 或 /personal 下），随 query 写入历史事件；持久化请用 PUT …/session-directory",
+    )
+    bohrium_submit_confirmation_required: bool | None = Field(
+        default=None,
+        description="可选，Bohrium 任务提交是否需要确认；显式传入时同步写入会话级设置，并透传到本轮 job",
     )
     replace_last_turn: bool = Field(
         default=False,

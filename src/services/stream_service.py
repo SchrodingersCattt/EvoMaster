@@ -277,6 +277,7 @@ class ChatStreamService:
         model: str | None = None,
         byok_credential_id: str | None = None,
         bohrium_required: bool = False,
+        bohrium_submit_confirmation_required: bool | None = None,
         workspace: str | None = None,
         origin: str | None = None,
         delivery: dict | None = None,
@@ -322,6 +323,9 @@ class ChatStreamService:
             'images': list(images or []),
             # 纯用户/会话意图；workspace ⇒ 必须上 Bohrium 的推导统一在 run_bohrium_stage
             'bohrium_required': bool(bohrium_required),
+            'bohrium_submit_confirmation_required': (
+                bohrium_submit_confirmation_required
+            ),
             'workspace': workspace_value,
             'origin': origin,
             'delivery': delivery,
@@ -770,12 +774,27 @@ class ChatStreamService:
             return None
         req_fields = req.model_dump(exclude_unset=True)
         self._sessions_service.ensure_session(sid, user_id=user_id)
+        user_content = (req.content or '').strip()
 
         resolved_directory = SessionDirectoryResolver(self._sessions_service).resolve(
             session_id=sid,
             request_directory=req.directory,
             request_directory_provided="directory" in req_fields,
         )
+        # 会话配置是用户选择的持久状态：即使本轮之后因 busy 未入队，也应保留这次显式设置。
+        if (
+            user_content
+            and user_id
+            and req.bohrium_submit_confirmation_required is not None
+        ):
+            if not self._sessions_service.set_bohrium_submit_confirmation(
+                sid,
+                user_id,
+                req.bohrium_submit_confirmation_required,
+            ):
+                raise RuntimeError(
+                    f"persist bohrium_submit_confirmation failed: session_id={sid}"
+                )
 
         mode = self._resolve_mode(req.mode)
 
@@ -797,8 +816,6 @@ class ChatStreamService:
             (org_id_val and project_id_val is not None)
             or resolved_directory.bohrium_required
         )
-
-        user_content = (req.content or '').strip()
 
         def _run_pre_event_hook() -> None:
             if req.replace_last_turn:
@@ -863,6 +880,9 @@ class ChatStreamService:
             model=model,
             byok_credential_id=byok_credential_id,
             bohrium_required=bohrium_required,
+            bohrium_submit_confirmation_required=(
+                req.bohrium_submit_confirmation_required
+            ),
             workspace=resolved_directory.remote_workdir,
             origin=None,
             delivery=None,

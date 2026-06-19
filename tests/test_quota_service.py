@@ -5,6 +5,30 @@ from __future__ import annotations
 from src.services.quota_service import QuotaStatus
 
 
+async def test_check_quota_status_maps_client_data(monkeypatch):
+    from src.services import quota_service as mod
+
+    async def _fake_fetch_quota_info(user_id):
+        assert user_id == 'u1'
+        return {
+            'credit_remaining': 1.25,
+            'credit_reset_at': '2026-06-09',
+            'photon_remaining': 3,
+            'photon_overflow_enabled': True,
+            'available_micro': 1_250_000,
+        }
+
+    monkeypatch.setattr(mod, 'fetch_quota_info', _fake_fetch_quota_info)
+
+    status = await mod.check_quota_status('u1')
+
+    assert status.remaining_yuan == 1.25
+    assert status.reset_at == '2026-06-09'
+    assert status.photon_remaining == 3.0
+    assert status.photon_overflow_enabled is True
+    assert status.available_micro == 1_250_000
+
+
 class TestIsExhausted:
     def test_free_credit_available_not_exhausted(self):
         assert QuotaStatus(remaining_yuan=1.0).is_exhausted is False

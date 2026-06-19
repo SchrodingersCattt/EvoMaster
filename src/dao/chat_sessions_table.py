@@ -128,8 +128,9 @@ class ChatSessionsTable(BaseTable):
                 cursor.execute(
                     f"""
                     SELECT session_id, user_id, org_id, project_id, session_directory,
-                           chat_mode, session_title, status, is_shared, last_task_id,
-                           created_at, updated_at, deleted_at, deleted_by
+                           chat_mode, bohrium_submit_confirmation_required,
+                           session_title, status, is_shared, last_task_id, created_at,
+                           updated_at, deleted_at, deleted_by
                     FROM {self.table_name}
                     WHERE session_id = %s
                       {deleted_filter}
@@ -181,6 +182,28 @@ class ChatSessionsTable(BaseTable):
                 e,
             )
             return False
+
+    def get_latest_org_id_by_user(self, user_id: str) -> str | None:
+        """返回该用户最近一次会话记录中的 org_id；无记录返回 None。"""
+        with self.get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    f"""
+                    SELECT org_id
+                    FROM {self.table_name}
+                    WHERE user_id = %s
+                      AND org_id IS NOT NULL
+                      AND org_id != ''
+                      AND deleted_at IS NULL
+                    ORDER BY created_at DESC
+                    LIMIT 1
+                    """,
+                    (user_id,),
+                )
+                row = cursor.fetchone()
+                if not row:
+                    return None
+                return str(row["org_id"]).strip() or None
 
     def update_session_workspace_prefs(
         self,
@@ -243,6 +266,29 @@ class ChatSessionsTable(BaseTable):
             directory=directory,
             chat_mode=WORKSPACE_PREF_UNSET,
         )
+
+    def set_bohrium_submit_confirmation(
+        self,
+        session_id: str,
+        user_id: str,
+        required: bool | None,
+    ) -> bool:
+        """设置会话级 Bohrium 提交确认偏好；None 表示清除覆盖。仅所有者可写。"""
+        stored_value = None if required is None else int(required)
+        with self.get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    f"""
+                    UPDATE {self.table_name}
+                    SET bohrium_submit_confirmation_required = %s,
+                        updated_at = NOW()
+                    WHERE session_id = %s AND user_id = %s
+                      AND deleted_at IS NULL
+                    """,
+                    (stored_value, session_id, user_id),
+                )
+                conn.commit()
+                return cursor.rowcount > 0
 
     def set_session_title(
         self,
