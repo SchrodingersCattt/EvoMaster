@@ -23,9 +23,7 @@ import logging
 from dataclasses import dataclass
 from typing import Any
 
-import aiohttp
-
-from utils.env import MATMASTER_TOOLS_SERVER
+from clients.quota_client import fetch_quota_info
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -99,42 +97,31 @@ async def check_quota_status(user_id: str) -> QuotaStatus:
     只读 ``credit_remaining``（金额，元）；缺失或非法时按 0 处理（视为额度耗尽）。
     请求异常向上抛出。
     """
-    url = f'{MATMASTER_TOOLS_SERVER.rstrip("/")}/api/v1/quota/info'
-    headers = {"X-User-Id": user_id}
-    logger.info("check_quota_status request: url=%s headers=%s", url, headers)
-    async with aiohttp.ClientSession() as session:
-        async with session.get(url, headers=headers) as resp:
-            resp.raise_for_status()
-            data: dict[str, Any] = await resp.json()
-            inner = (data or {}).get("data") or {}
-            credit = _coerce_number(inner.get("credit_remaining"))
-            remaining = max(0.0, credit) if credit is not None else 0.0
-            reset_at = inner.get("credit_reset_at")
-            reset_at = reset_at if isinstance(reset_at, str) and reset_at else None
-            # 光子余额为可选字段：缺失（未启用）保持 None，闸口退化为只看金额额度。
-            photon_remaining = _coerce_number(inner.get("photon_remaining"))
-            # 光子代扣偏好（opt-in，默认 False）：缺失/非法按 False，闸口不把光子计入放行。
-            photon_overflow_enabled = bool(inner.get("photon_overflow_enabled"))
-            # 可用额度（micro）：旧 tools-server 不返回则为 None（关闭 in-run 熔断）。
-            available_raw = inner.get("available_micro")
-            available_micro = (
-                int(available_raw) if isinstance(available_raw, int) else None
-            )
-            logger.info(
-                "check_quota_status response: user_id=%s status=%s "
-                "remaining=%s reset_at=%s photon_remaining=%s "
-                "photon_overflow_enabled=%s",
-                user_id,
-                resp.status,
-                remaining,
-                reset_at,
-                photon_remaining,
-                photon_overflow_enabled,
-            )
-            return QuotaStatus(
-                remaining_yuan=remaining,
-                reset_at=reset_at,
-                photon_remaining=photon_remaining,
-                photon_overflow_enabled=photon_overflow_enabled,
-                available_micro=available_micro,
-            )
+    inner = await fetch_quota_info(user_id)
+    credit = _coerce_number(inner.get("credit_remaining"))
+    remaining = max(0.0, credit) if credit is not None else 0.0
+    reset_at = inner.get("credit_reset_at")
+    reset_at = reset_at if isinstance(reset_at, str) and reset_at else None
+    # 光子余额为可选字段：缺失（未启用）保持 None，闸口退化为只看金额额度。
+    photon_remaining = _coerce_number(inner.get("photon_remaining"))
+    # 光子代扣偏好（opt-in，默认 False）：缺失/非法按 False，闸口不把光子计入放行。
+    photon_overflow_enabled = bool(inner.get("photon_overflow_enabled"))
+    # 可用额度（micro）：旧 tools-server 不返回则为 None（关闭 in-run 熔断）。
+    available_raw = inner.get("available_micro")
+    available_micro = int(available_raw) if isinstance(available_raw, int) else None
+    logger.info(
+        "check_quota_status response: user_id=%s remaining=%s reset_at=%s "
+        "photon_remaining=%s photon_overflow_enabled=%s",
+        user_id,
+        remaining,
+        reset_at,
+        photon_remaining,
+        photon_overflow_enabled,
+    )
+    return QuotaStatus(
+        remaining_yuan=remaining,
+        reset_at=reset_at,
+        photon_remaining=photon_remaining,
+        photon_overflow_enabled=photon_overflow_enabled,
+        available_micro=available_micro,
+    )
