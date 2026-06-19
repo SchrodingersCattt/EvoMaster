@@ -395,7 +395,7 @@ class AgentRunService:
             if byok_id:
                 # BYOK：凭证由 tools-server 下发，绕开 llm_config / routes，用户自付不扣额度。
                 from matmaster.providers.llm_factory import build_byok_provider_bundle
-                from src.services.llm_credential_client import (
+                from clients.llm_credential_client import (
                     ByokCredentialError,
                     fetch_byok_credential,
                 )
