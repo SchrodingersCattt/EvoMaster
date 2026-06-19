@@ -781,6 +781,7 @@ class ChatStreamService:
             request_directory=req.directory,
             request_directory_provided="directory" in req_fields,
         )
+        # 会话配置是用户选择的持久状态：即使本轮之后因 busy 未入队，也应保留这次显式设置。
         if (
             user_content
             and user_id

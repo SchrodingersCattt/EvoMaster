@@ -93,11 +93,11 @@ def get_user_level_runtime_preference(user_id: str) -> UserLevelRuntimePreferenc
     return UserLevelRuntimePreference(
         project_id=_coerce_project_id(data.get("last_selected_project_id")),
         model=_coerce_model(data.get("last_selected_model")),
-        bohrium_submit_confirmation_required=data.get(
-            "bohrium_submit_confirmation_required"
-        )
-        if isinstance(data.get("bohrium_submit_confirmation_required"), bool)
-        else None,
+        bohrium_submit_confirmation_required=(
+            data.get("bohrium_submit_confirmation_required")
+            if isinstance(data.get("bohrium_submit_confirmation_required"), bool)
+            else None
+        ),
     )
 
 

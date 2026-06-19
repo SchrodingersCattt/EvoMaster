@@ -359,9 +359,7 @@ class BohriumSubmitConfirmationData(BaseModel):
     )
 
 
-class BohriumSubmitConfirmationApiResponse(
-    BaseResponse[BohriumSubmitConfirmationData]
-):
+class BohriumSubmitConfirmationApiResponse(BaseResponse[BohriumSubmitConfirmationData]):
     """Bohrium 提交确认偏好规范响应"""
 
 
@@ -542,7 +540,7 @@ class ChatSendRequest(BaseModel):
     )
     bohrium_submit_confirmation_required: bool | None = Field(
         default=None,
-        description="可选，Bohrium 任务提交是否需要确认；stream 仅接收并透传该值，后续消费由下游链路处理",
+        description="可选，Bohrium 任务提交是否需要确认；显式传入时同步写入会话级设置，并透传到本轮 job",
     )
     replace_last_turn: bool = Field(
         default=False,
