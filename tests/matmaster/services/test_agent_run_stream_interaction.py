@@ -440,3 +440,40 @@ async def test_ask_question_tool_result_reaches_sse_before_run_result():
     assert payloads[tool_result_idx]["content"]["id"] == "call_aq_1"
     assert payloads[tool_result_idx]["content"]["name"] == "AskQuestion"
     assert payloads[tool_result_idx]["content"]["result"] == '"Q1"="A1"'
+
+
+@pytest.mark.asyncio
+async def test_submit_gate_constructed_only_when_enabled():
+    async with _patched_service(
+        [RunResultEvent(source="agent", status="completed", reason="natural")]
+    ) as (svc, _, __):
+        await svc.run_agent(
+            session_id="s1",
+            user_prompt="hi",
+            send_cb=MagicMock(),
+            cancel_token=_make_cancel_token(),
+            mode="direct",
+            task_id="t1",
+            invocation_id="inv-1",
+            submit_confirmation_enabled=False,
+        )
+        assert svc._test_fake_exp.last_ctx.request.ports.submit_approval_gate is None
+
+    async with _patched_service(
+        [RunResultEvent(source="agent", status="completed", reason="natural")]
+    ) as (svc, _, __):
+        await svc.run_agent(
+            session_id="s1",
+            user_prompt="hi",
+            send_cb=MagicMock(),
+            cancel_token=_make_cancel_token(),
+            mode="direct",
+            task_id="t1",
+            invocation_id="inv-1",
+            submit_confirmation_enabled=True,
+        )
+
+        from matmaster.integration.submit_approval_gate import BridgeSubmitApprovalGate
+
+        gate = svc._test_fake_exp.last_ctx.request.ports.submit_approval_gate
+        assert isinstance(gate, BridgeSubmitApprovalGate)

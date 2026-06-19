@@ -267,6 +267,7 @@ class AgentRunService:
         delivery_snapshot: DeliverySnapshot | None = None,
         job_context_mode: str = "workspace_observation",
         cancel_controller: CancellationController | None = None,
+        submit_confirmation_enabled: bool = False,
     ) -> tuple[bool | tuple[bool, str], int, dict[str, Any] | None]:
         """Execute agent pipeline using generator event stream with fanout dispatch.
 
@@ -514,6 +515,15 @@ class AgentRunService:
                 dao=get_redis_dao(),
                 timeout_seconds=1800,
             )
+            from matmaster.integration.submit_approval_gate import (
+                BridgeSubmitApprovalGate,
+            )
+
+            submit_approval_gate = (
+                BridgeSubmitApprovalGate(bridge)
+                if submit_confirmation_enabled
+                else None
+            )
             # -- Stage 5: History --
             wiring = build_history_wiring(
                 events_table=events_table,
@@ -586,6 +596,7 @@ class AgentRunService:
                         ),
                         bohrium_job_ledger=bohrium_ledger_port,
                         workspace_jobs=bohrium_jobs_port,
+                        submit_approval_gate=submit_approval_gate,
                     ),
                 ),
             )
