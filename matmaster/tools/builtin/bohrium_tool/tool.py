@@ -55,6 +55,10 @@ from matmaster.types.topology import ToolPlane
 from .errors import BohriumJobStateError
 from .models import BohriumSubmittedJob
 from .paths import resolve_download_target, resolve_input_source
+from .submit_review import (
+    BohriumSubmitReviewProvider,
+    normalize_execution_args,
+)
 from .transfers import (
     download_remote_results,
     prepare_input_archive,
@@ -84,6 +88,12 @@ def submit_job_via_runtime(
     workdir: Path,
     session,
 ) -> BohriumSubmittedJob:
+    if not cmd.rstrip().endswith("> log 2>&1"):
+        raise BohriumError(
+            "cmd not normalized (missing log redirection); "
+            "normalize_execution_args must run before submit_job_via_runtime"
+        )
+
     ctx = build_bohrium_context(session=session, require_project=True)
     source = resolve_input_source(
         raw_path=str(input_dir),
@@ -91,9 +101,7 @@ def submit_job_via_runtime(
         session=session,
     )
 
-    cmd_stripped = cmd.rstrip()
-    if not cmd_stripped.endswith("> log 2>&1"):
-        cmd = cmd_stripped + " > log 2>&1"
+    cmd = cmd.rstrip()
 
     if source.kind == "remote_share_dir":
         create_data = create_job(ctx, job_name=job_name)
@@ -108,7 +116,8 @@ def submit_job_via_runtime(
             raise BohriumTransferError(
                 "Remote input upload failed after job/create; "
                 "compute job was not submitted; "
-                f"created_job_ref={created_ref}: {exc}"
+                f"created_job_ref={created_ref}: {exc}",
+                created_job_ref=created_ref,
             ) from exc
         add_data = add_job(
             ctx,
@@ -123,7 +132,19 @@ def submit_job_via_runtime(
     else:
         with prepare_input_archive(source, session=session) as zip_path:
             create_data = create_job(ctx, job_name=job_name)
-            upload = upload_input_archive(create_data=create_data, zip_path=zip_path)
+            try:
+                upload = upload_input_archive(
+                    create_data=create_data,
+                    zip_path=zip_path,
+                )
+            except Exception as exc:
+                created_ref = _created_job_ref(create_data)
+                raise BohriumTransferError(
+                    "Local input upload failed after job/create; "
+                    "compute job was not submitted; "
+                    f"created_job_ref={created_ref}: {exc}",
+                    created_job_ref=created_ref,
+                ) from exc
             add_data = add_job(
                 ctx,
                 create_data=create_data,
@@ -251,6 +272,9 @@ class BohriumTool(BuiltinTool):
     stop_mode: ClassVar[str] = "cancellable"
     exposed_to_model: ClassVar[bool] = True
     max_result_chars: ClassVar[int] = 0
+    submit_review_provider: ClassVar[BohriumSubmitReviewProvider] = (
+        BohriumSubmitReviewProvider()
+    )
 
     # In-turn query pacing. Minimum seconds between two real platform queries
     # for the same running job within one agent run. Kept as class attributes
@@ -444,9 +468,14 @@ class BohriumTool(BuiltinTool):
             )
 
     def _submit(self, args: dict[str, Any]) -> ToolResult:
-        input_dir = args.get("input_dir", "")
-        image = args.get("image", "")
-        cmd = args.get("cmd", "")
+        try:
+            exec_args = normalize_execution_args(args).arguments
+        except ValueError as exc:
+            return ToolResult(status="error", content=f"Submit arguments rejected: {exc}")
+
+        input_dir = exec_args.get("input_dir", "")
+        image = exec_args.get("image", "")
+        cmd = exec_args.get("cmd", "")
 
         if not input_dir:
             return ToolResult(
@@ -459,9 +488,9 @@ class BohriumTool(BuiltinTool):
         if not cmd:
             return ToolResult(status="error", content="Missing required parameter: cmd")
 
-        machine = args.get("machine", "c32_m128_cpu")
-        job_name = args.get("job_name", "matmaster-job")
-        disk_size = int(args.get("disk_size", 50))
+        machine = exec_args["machine"]
+        job_name = exec_args["job_name"]
+        disk_size = exec_args["disk_size"]
 
         ctx: BohriumContext | None = None
         try:
@@ -496,9 +525,43 @@ class BohriumTool(BuiltinTool):
                     },
                     ensure_ascii=False,
                 ),
+                meta={
+                    "submit_execution_audit": {
+                        "execution_attempted": True,
+                        "external_effect_started": True,
+                        "job_create_attempted": True,
+                        "job_id": submitted.job_id,
+                        "input_upload_attempted": True,
+                        "job_add_attempted": True,
+                    }
+                },
+            )
+        except BohriumTransferError as exc:
+            return ToolResult(
+                status="error",
+                content=str(exc),
+                meta={
+                    "submit_execution_audit": {
+                        "execution_attempted": True,
+                        "external_effect_started": True,
+                        "job_create_attempted": True,
+                        "job_id": exc.created_job_ref,
+                        "input_upload_attempted": True,
+                        "job_add_attempted": False,
+                    }
+                },
             )
         except (BohriumError, ValueError) as exc:
-            return ToolResult(status="error", content=str(exc))
+            return ToolResult(
+                status="error",
+                content=str(exc),
+                meta={
+                    "submit_execution_audit": {
+                        "execution_attempted": True,
+                        "external_effect_started": False,
+                    }
+                },
+            )
         except Exception as exc:
             logger.error(
                 "bohrium submit failed action=submit base_url=%s sandbox=%s error=%s",

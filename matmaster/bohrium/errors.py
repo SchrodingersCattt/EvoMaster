@@ -16,6 +16,10 @@ class BohriumAPIError(BohriumError):
 class BohriumTransferError(BohriumError):
     """Raised when archive upload, download, or publish fails."""
 
+    def __init__(self, message: str, *, created_job_ref: object = None) -> None:
+        super().__init__(message)
+        self.created_job_ref = created_job_ref
+
 
 class BohriumRuntimeNotInitialized(BohriumError):
     """Raised when the current session has no attached Bohrium runtime."""
