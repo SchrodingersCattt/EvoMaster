@@ -20,7 +20,8 @@ from src.services.feishu_open_api import (
 )
 from src.services.quota_service import check_quota_status
 from src.services.stream_service import get_stream_service
-from src.utils.constant import DB_CONFIG, REDIS_URL
+from src.services.user_runtime_preference_service import get_user_runtime_preference
+from src.utils.constant import REDIS_URL
 from src.utils.feishu_event_crypto import parse_event_json as feishu_parse_event_json
 from src.utils.feishu_event_crypto import verify_lark_signature
 from utils.env import SERVICE_ENV
@@ -78,47 +79,6 @@ def _collect_current_response_chunks(
     return chunks
 
 
-def _get_user_preferences(
-    user_id: str,
-) -> tuple[int | None, str | None, str | None]:
-    """从 DB 读取用户偏好：(project_id, llm, org_id)。"""
-    import pymysql
-
-    project_id: int | None = None
-    llm: str | None = None
-    org_id: str | None = None
-    try:
-        conn = pymysql.connect(**DB_CONFIG)
-        try:
-            with conn.cursor() as cursor:
-                cursor.execute(
-                    "SELECT last_selected_project_id, last_selected_model"
-                    " FROM user_preference WHERE user_id = %s LIMIT 1",
-                    (user_id,),
-                )
-                row = cursor.fetchone()
-                if row:
-                    pid = row.get("last_selected_project_id")
-                    project_id = int(pid) if pid is not None else None
-                    m = row.get("last_selected_model")
-                    llm = str(m).strip() if m else None
-
-                cursor.execute(
-                    "SELECT org_id FROM evo_chat_sessions"
-                    " WHERE user_id = %s AND org_id IS NOT NULL AND org_id != ''"
-                    " ORDER BY created_at DESC LIMIT 1",
-                    (user_id,),
-                )
-                org_row = cursor.fetchone()
-                if org_row:
-                    org_id = str(org_row["org_id"]).strip() or None
-        finally:
-            conn.close()
-    except Exception as exc:
-        logger.warning("feishu _get_user_preferences failed: %s", exc)
-    return project_id, llm, org_id
-
-
 async def _run_agent_and_reply_feishu(
     *,
     user_id: str,
@@ -128,12 +88,12 @@ async def _run_agent_and_reply_feishu(
     tenant_token: str,
 ) -> None:
     stream_svc = get_stream_service()
-    project_id, model, org_id = _get_user_preferences(user_id)
+    runtime_pref = get_user_runtime_preference(user_id)
     req = ChatSendRequest(
         content=user_prompt,
         mode="direct",
-        bohrium_project_id=project_id,
-        model=model,
+        bohrium_project_id=runtime_pref.project_id,
+        model=runtime_pref.model,
     )
     try:
         quota_status = await check_quota_status(user_id)
@@ -164,7 +124,9 @@ async def _run_agent_and_reply_feishu(
         return
 
     try:
-        ctx = stream_svc.prepare_send_message(session_id, req, user_id, org_id=org_id)
+        ctx = stream_svc.prepare_send_message(
+            session_id, req, user_id, org_id=runtime_pref.org_id
+        )
     except Exception:
         logger.exception("feishu prepare_send_message failed session_id=%s", session_id)
         reply_text_message(

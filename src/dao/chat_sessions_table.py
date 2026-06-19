@@ -182,6 +182,28 @@ class ChatSessionsTable(BaseTable):
             )
             return False
 
+    def get_latest_org_id_by_user(self, user_id: str) -> str | None:
+        """返回该用户最近一次会话记录中的 org_id；无记录返回 None。"""
+        with self.get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    f"""
+                    SELECT org_id
+                    FROM {self.table_name}
+                    WHERE user_id = %s
+                      AND org_id IS NOT NULL
+                      AND org_id != ''
+                      AND deleted_at IS NULL
+                    ORDER BY created_at DESC
+                    LIMIT 1
+                    """,
+                    (user_id,),
+                )
+                row = cursor.fetchone()
+                if not row:
+                    return None
+                return str(row["org_id"]).strip() or None
+
     def update_session_workspace_prefs(
         self,
         session_id: str,

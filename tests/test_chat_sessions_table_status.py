@@ -59,3 +59,18 @@ def test_service_lists_waiting_or_active_ids():
     table.list_session_ids_by_status.assert_called_once_with(
         "user-1", ["waiting", "active"]
     )
+
+
+def test_get_latest_org_id_by_user_filters_empty_and_deleted_sessions():
+    table, cursor = _table_with_cursor()
+    cursor.fetchone.return_value = {"org_id": " org-1 "}
+
+    assert table.get_latest_org_id_by_user("user-1") == "org-1"
+
+    sql, params = cursor.execute.call_args[0]
+    assert "WHERE user_id = %s" in sql
+    assert "org_id IS NOT NULL" in sql
+    assert "org_id != ''" in sql
+    assert "deleted_at IS NULL" in sql
+    assert "ORDER BY created_at DESC" in sql
+    assert params == ("user-1",)
