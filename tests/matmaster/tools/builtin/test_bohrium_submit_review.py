@@ -74,6 +74,7 @@ def test_provider_object_implements_protocol():
         )
         is not None
     )
-    assert provider.normalize_execution_args({"action": "submit"}).arguments[
-        "machine"
-    ] == "c32_m128_cpu"
+    assert (
+        provider.normalize_execution_args({"action": "submit"}).arguments["machine"]
+        == "c32_m128_cpu"
+    )

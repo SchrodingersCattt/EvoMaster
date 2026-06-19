@@ -135,7 +135,9 @@ def normalize_execution_args(args: Any) -> SubmitExecutionArgs:
 class BohriumSubmitReviewProvider:
     """无状态 Bohrium submit review provider。"""
 
-    def build_review_draft(self, model_args: dict[str, Any]) -> SubmitReviewDraft | None:
+    def build_review_draft(
+        self, model_args: dict[str, Any]
+    ) -> SubmitReviewDraft | None:
         return build_review_draft(model_args)
 
     def normalize_execution_args(self, args: dict[str, Any]) -> SubmitExecutionArgs:

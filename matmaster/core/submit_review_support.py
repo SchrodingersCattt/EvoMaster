@@ -170,3 +170,56 @@ def enforce_submit_review_contract(
         audit_payload,
         block_reason=None,
     )
+
+
+def install_submit_review_hooks(
+    *,
+    runner_state: Any,
+    hook_executor: Any,
+    run_identity: Any,
+    submit_approval_gate: Any,
+) -> None:
+    """Wire submit review capability into runner state and POST hook rewrites."""
+    from matmaster.core.hooks import HookEvent
+
+    runner_state.set(SUBMIT_APPROVAL_GATE_KEY, submit_approval_gate)
+    runner_state.set(RUN_IDENTITY_KEY, run_identity)
+
+    def _merge_execution_audit(
+        audit_baseline: dict[str, Any],
+        result: Any,
+    ) -> dict[str, Any]:
+        execution_audit = (result.meta or {}).get("submit_execution_audit")
+        if not execution_audit:
+            return audit_baseline
+        return {**audit_baseline, **execution_audit}
+
+    def _record_for(tool_call_id: str) -> dict[str, Any] | None:
+        records = runner_state.get(SUBMIT_REVIEW_RECORDS_KEY) or {}
+        return records.get(tool_call_id)
+
+    async def _attach_post(ctx, result):
+        record = _record_for(ctx.tool_call_id)
+        if record is None:
+            return None
+        audit = _merge_execution_audit(record["audit_baseline"], result)
+        record["audit_baseline"] = audit
+        return attach_submit_review_record(
+            result,
+            record["review_content"],
+            audit,
+        )
+
+    async def _enforce_post(ctx, result):
+        record = _record_for(ctx.tool_call_id)
+        if record is None:
+            return None
+        audit = _merge_execution_audit(record["audit_baseline"], result)
+        return enforce_submit_review_contract(
+            result,
+            record["review_content"],
+            audit,
+        )
+
+    hook_executor.rewrite(HookEvent.POST_TOOL_CALL, _attach_post)
+    hook_executor.rewrite(HookEvent.POST_TOOL_CALL, _enforce_post)

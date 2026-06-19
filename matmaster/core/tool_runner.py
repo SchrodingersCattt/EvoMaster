@@ -27,6 +27,7 @@ from matmaster.core.hooks import (
     PostToolCallContext,
     PreToolCallContext,
 )
+from matmaster.core.structural_validation import StructuralValidation
 from matmaster.core.submit_review_support import (
     RESUBMIT_SIGNATURES_KEY,
     RUN_IDENTITY_KEY,
@@ -38,7 +39,6 @@ from matmaster.core.submit_review_support import (
     compute_parameter_changes,
     submit_signature,
 )
-from matmaster.core.structural_validation import StructuralValidation
 from matmaster.core.tool_scheduler import SchedulerTicket, ToolScheduler
 from matmaster.tools.tool_catalog import ToolCatalog
 from matmaster.tools.tool_result import ToolResult, normalize_tool_result
@@ -367,7 +367,9 @@ class FullToolRunner:
                             await on_result(tc, tr)
                         continue
 
-                    final_args = decision.final_arguments or draft.review_draft_arguments
+                    final_args = (
+                        decision.final_arguments or draft.review_draft_arguments
+                    )
                     user_changes = compute_parameter_changes(
                         draft.review_draft_arguments,
                         final_args,
@@ -380,26 +382,40 @@ class FullToolRunner:
                         user_decision: str | None,
                         execution_args: dict[str, Any] | None,
                         execution_normalization_changes: dict[str, Any],
+                        request_id_: str = request_id,
+                        session_id_: str = session_id,
+                        task_id_: str = task_id,
+                        tool_call_id_: str = tc.id,
+                        model_arguments_: dict[str, Any] = draft.model_arguments,
+                        review_draft_arguments_: dict[
+                            str, Any
+                        ] = draft.review_draft_arguments,
+                        final_args_: dict[str, Any] = final_args,
+                        normalization_changes_: dict[
+                            str, Any
+                        ] = draft.normalization_changes,
+                        user_changes_: dict[str, Any] = user_changes,
+                        reported_: list[dict[str, Any]] = reported,
                     ) -> dict[str, Any]:
-                        review_content = build_review_content(user_changes, reported)
+                        review_content = build_review_content(user_changes_, reported_)
                         audit_baseline = build_audit_payload(
-                            request_id=request_id,
-                            session_id=session_id,
-                            task_id=task_id,
-                            tool_call_id=tc.id,
+                            request_id=request_id_,
+                            session_id=session_id_,
+                            task_id=task_id_,
+                            tool_call_id=tool_call_id_,
                             review_outcome=review_outcome,
                             user_decision=user_decision,
-                            model_arguments=draft.model_arguments,
-                            review_draft_arguments=draft.review_draft_arguments,
-                            final_arguments=final_args,
+                            model_arguments=model_arguments_,
+                            review_draft_arguments=review_draft_arguments_,
+                            final_arguments=final_args_,
                             execution_arguments=execution_args,
-                            normalization_changes=draft.normalization_changes,
-                            user_parameter_changes=user_changes,
+                            normalization_changes=normalization_changes_,
+                            user_parameter_changes=user_changes_,
                             execution_normalization_changes=(
                                 execution_normalization_changes
                             ),
-                            reported_input_file_changes=reported,
-                            reported_input_file_change_count=len(reported),
+                            reported_input_file_changes=reported_,
+                            reported_input_file_change_count=len(reported_),
                             execution_audit=None,
                         )
                         return {

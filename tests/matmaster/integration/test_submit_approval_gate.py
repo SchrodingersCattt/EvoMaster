@@ -72,9 +72,7 @@ async def test_approved_and_rejected():
                     "action": "submit",
                     "cmd": "run > log 2>&1",
                 },
-                "reported_input_file_changes": [
-                    {"relative_path": "a", "lines": "1"}
-                ],
+                "reported_input_file_changes": [{"relative_path": "a", "lines": "1"}],
             }
         )
     )
@@ -107,8 +105,6 @@ async def test_busy_timeout_cancel_mapping():
     assert len(timeout_bridge.emitted) == 1
     assert timeout_bridge.emitted[0].kind == "submit_review"
 
-    cancelled_gate = BridgeSubmitApprovalGate(
-        _FakeBridge(exc=asyncio.CancelledError())
-    )
+    cancelled_gate = BridgeSubmitApprovalGate(_FakeBridge(exc=asyncio.CancelledError()))
     cancelled = await cancelled_gate.review(_req())
     assert cancelled.review_outcome == "cancelled"
