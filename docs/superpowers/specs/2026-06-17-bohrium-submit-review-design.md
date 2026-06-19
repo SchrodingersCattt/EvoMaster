@@ -61,7 +61,7 @@
 - 用户确认后，使用最终 submit 参数继续执行 Bohrium submit。
 - 用户拒绝后，不调用 `job/create`、不上传、不调用 `job/add`，返回模型可见的 `ToolResult(status="blocked")`，并在同 run 内阻止对同一作业的自动重提交。
 - 用户对 submit 参数的修改进入模型可见的 `ToolResult.content.review.parameter_changes`。
-- 用户对 `input_dir` 内文件的修改进入模型可见的 `ToolResult.content.review.reported_input_file_changes`。
+- 用户对 `input_dir` 内文件的修改进入模型可见的 `ToolResult.content.review.input_file_changes`。
 - 文件内容不进入 review request / reply / tool_result content / payload；前端只回传路径和可选摘要。
 - 审计摘要进入 `ToolResult.payload.bohrium_submit_review`（带上限）。
 - 保持 API / Worker 分离：确认请求由 worker 发出，回复可由任意 API 实例接收，经 Redis per-request reply key 回到执行 run 的 worker。
@@ -75,7 +75,8 @@
 - 不改变 Bohrium `query` / `download` / `kill` / `list_images` / `list_machines` 语义。
 - 不改 Bohrium job ledger 既有状态机；只在 submit 审计 payload 中记录外部副作用是否已开始。
 - 不把通用 AskQuestion 工具当作 submit 确认闸门。
-- 不让前端通过 reply 提交文件 patch；文件修改由前端文件能力提前完成，reply 只报告改了哪些文件。
+- 不让前端通过 reply 提交文件 patch；文件修改由前端文件能力提前完成，reply 只报告改了哪些文件及修改行号（行号同属前端报告，后端不算 diff）。
+- **不在工具内提供文件新建 / 删除 / 重命名能力**；只表达对既有文件的内容修改，工具外的此类操作不感知、不负责。
 - **不新增 run loop 业务状态**，不停止 agent 自动循环来表达“等待用户”（见 §5.7）。
 - **不做确认后到打包之间的 TOCTOU 兜底**（无 snapshot / 无 revision / 无锁）。
 
@@ -228,7 +229,7 @@ execution_normalization_changes  final_arguments        -> execution_arguments
 
 `execution_normalization_changes` 默认应为空；若非空只能是非语义类型转换（如 `"80"`→`80`）。用户确认后**不得**再悄悄改 `cmd` / `image` / `machine` / `job_name` / `disk_size` / `input_dir` 等语义字段。
 
-**`content.review` 不暴露 `normalization_changes` / `execution_normalization_changes` 两类内部 diff**（仅进 payload 审计），避免增加 agent 侧复杂度；agent 看到的参数变化统一用 `parameter_changes`（= `user_parameter_changes`）表达，另含 `submitted_arguments`、`changed_fields`、文件变更等 agent 有用字段（见 §10.1）。
+**`content.review` 不暴露 `normalization_changes` / `execution_normalization_changes` 两类内部 diff**（仅进 payload 审计），避免增加 agent 侧复杂度；agent 看到的参数变化统一用 `parameter_changes`（= `user_parameter_changes`）表达，另含 `input_file_changes` 文件变更（见 §10.1）。完整提交参数 `execution_arguments` 与 `changed_fields` 等审计字段只进 payload。
 
 ### 5.5 cmd 语义变化必须在 review 前
 
@@ -296,7 +297,7 @@ raw tool result
 
 ### 5.10 reported 文件变化，无 TOCTOU 兜底
 
-后端不读文件内容、不验证文件是否真改变。字段命名 `reported_input_file_changes`，并带 `input_file_changes_source: "frontend_reported"`。
+后端不读文件内容、不算 diff、不验证文件是否真改变。文件变化（含修改行号 `lines`）一律由前端文件能力上报，带 `input_file_changes_source: "frontend_reported"`。给 LLM 的 content 用 `input_file_changes`（每条 `relative_path` + `lines`），前端 reply 与 payload 审计用 `reported_input_file_changes`。
 
 确认后到打包上传之间，若用户继续改文件，**由用户自负**：v1 不做 snapshot / revision / 锁。确认后照常立即解析 `input_dir` 并打包提交。
 
@@ -400,10 +401,9 @@ API 只接受用户行为；`parameter_changes` 由 runner 据 `review_draft_arg
     "disk_size": 80
   },
   "reported_input_file_changes": [
-    { "relative_path": "input.inp", "operation": "modified", "summary": "用户修改了 cutoff 和收敛阈值" },
-    { "relative_path": "run.sh", "operation": "modified" }
-  ],
-  "user_note": "已确认提交"
+    { "relative_path": "input.inp", "lines": "12-15,30" },
+    { "relative_path": "run.sh", "lines": "8" }
+  ]
 }
 ```
 
@@ -427,9 +427,8 @@ API 只接受用户行为；`parameter_changes` 由 runner 据 `review_draft_arg
     "disk_size": 50
   },
   "reported_input_file_changes": [
-    { "relative_path": "input.inp", "operation": "modified", "summary": "用户还在调整参数，暂不提交" }
-  ],
-  "user_note": "先暂停，我还要继续改参数"
+    { "relative_path": "input.inp", "lines": "12-15" }
+  ]
 }
 ```
 
@@ -446,25 +445,25 @@ review_outcome  approved | rejected | timeout | cancelled | review_unavailable |
 
 ### 6.5 reported_input_file_changes
 
+本工具流程只表达对 `input_dir` 内既有文件的内容修改。新建 / 删除 / 重命名等文件级操作不在工具职责内：不上报、不规范化、不进 tool_result 或 payload（§3.2）。用户若在工具之外做了这些操作，工具不感知也不负责。
+
 前端传入：
 
 ```json
-{ "relative_path": "subdir/input.inp", "operation": "modified", "summary": "...", "previous_relative_path": null }
+{ "relative_path": "subdir/input.inp", "lines": "12-15,30" }
 ```
 
 后端规范化后：
 
 ```json
-{ "path": "/share/case_001/subdir/input.inp", "relative_path": "subdir/input.inp", "operation": "modified", "summary": "..." }
+{ "path": "/share/case_001/subdir/input.inp", "relative_path": "subdir/input.inp", "lines": "12-15,30" }
 ```
 
 - `relative_path`：相对最终 `input_dir` 的 POSIX 路径，优先字段。
-- `path`：后端据最终 `input_dir` 计算的完整路径；前端可传但非主字段。
-- `operation`：`created` / `modified` / `deleted` / `renamed`。
-- `summary`：可选短摘要。
-- `previous_relative_path`：仅 `renamed`。
+- `path`：后端据最终 `input_dir` 计算的完整路径；前端可传但非主字段，仅进 payload 审计。
+- `lines`：被修改的行号，紧凑字符串（如 `"12-15,30"` 表示第 12–15 行与第 30 行）。前端文件能力上报，后端不读内容、不算 diff、不验证是否真改变。
 
-后端不读内容、不验证是否真改变；只做路径边界、结构、数量、体积校验。
+content 投影（`content.review.input_file_changes`）每条只取 `relative_path` + `lines`；带绝对 `path` 的完整结构只进 payload。后端只做路径边界、`lines` 格式、数量、体积校验。
 
 ## 7. 路径与大小校验
 
@@ -475,15 +474,16 @@ review_outcome  approved | rejected | timeout | cancelled | review_unavailable |
 3. `relative_path` 用 POSIX 校验；禁止空、以 `/` 开头、含 `..`、含 NUL、超长。
 4. 同传 `path` 与 `relative_path` 时校验一致。
 5. 用 `os.path.commonpath()` 校验最终 path 在 input_dir 内，不用 `startswith()`。
-6. `renamed` 校验新旧路径；`deleted` 文件可能不存在，不依赖 `realpath(strict=True)`。
+6. 只表达内容修改：被改文件须存在于最终 `input_dir` 内；不处理 `created` / `deleted` / `renamed`。
 7. symlink 策略：打包不跟随逃逸出 input_dir 的 symlink；如需跟随，resolve 后仍须在 input_dir 下。
+8. `lines` 仅接受 `N` 或 `N-M`（要求 `M ≥ N`）的逗号分隔串；非法格式拒绝，不解析文件内容。
 
 大小规则：
 
-- `content.review.reported_input_file_changes` 最多 20 条，含 `reported_input_file_change_count`、`reported_input_file_changes_truncated`。
+- `content.review.input_file_changes` 最多 20 条；超限时附 `input_file_changes_truncated: true`（不截断则该字段不出现），精确条数留在 payload。
 - `payload.bohrium_submit_review.reported_input_file_changes` 最多 200 条。
-- 单条 `summary` 最多 500 字符。
-- reply payload 总字节硬上限（如 256 KiB）；超限 API 拒绝并提示前端减少摘要体积。
+- 单条 `lines` 字符串最多 200 字符；超限按行段截断并标记。
+- reply payload 总字节硬上限（如 256 KiB）；超限 API 拒绝并提示前端减少行号体积。
 
 ## 8. API / Worker 通信
 
@@ -513,8 +513,7 @@ body：
   "kind": "submit_review_reply",
   "decision": "submit",
   "submit_arguments": {},
-  "reported_input_file_changes": [],
-  "user_note": "..."
+  "reported_input_file_changes": []
 }
 ```
 
@@ -585,7 +584,7 @@ LLM tool call: Bohrium submit
 
 ### 9.2 ToolCallEvent arguments 不回写
 
-`ToolCallEvent.arguments` 仍是模型原始参数，不回写 final args。真实提交参数由 `tool_result.content.review.submitted_arguments` 与 `payload.bohrium_submit_review.execution_arguments` 表达。tool_call 表示模型意图，tool_result 表示实际执行与人类介入。
+`ToolCallEvent.arguments` 仍是模型原始参数，不回写 final args。content 用 `parameter_changes` 告诉 agent 哪些参数被改，完整真实提交参数由 `payload.bohrium_submit_review.execution_arguments` 表达。tool_call 表示模型意图，tool_result 表示实际执行与人类介入。
 
 ## 10. ToolResult 合同
 
@@ -600,30 +599,24 @@ LLM tool call: Bohrium submit
   "status": "Submitted",
   "use_sandbox": true,
   "review": {
-    "outcome": "approved",
-    "user_confirmed": true,
-    "message": "用户确认了 Bohrium 提交，并修改了提交参数和输入文件。",
-    "submitted_arguments": {
-      "action": "submit", "input_dir": "/share/case_001", "image": "new-image",
-      "cmd": "python run.py --ecut 600 > log 2>&1", "machine": "c64_m256_cpu",
-      "job_name": "case-001-reviewed", "disk_size": 80
-    },
-    "changed_fields": ["image", "cmd", "machine", "job_name", "disk_size"],
     "parameter_changes": {
       "image": { "from": "old-image", "to": "new-image" },
       "cmd": { "from": "python run.py > log 2>&1", "to": "python run.py --ecut 600 > log 2>&1" }
     },
-    "reported_input_file_change_count": 2,
-    "reported_input_file_changes_truncated": false,
-    "reported_input_file_changes": [
-      { "path": "/share/case_001/input.inp", "relative_path": "input.inp", "operation": "modified", "summary": "用户修改了 cutoff 和收敛阈值" },
-      { "path": "/share/case_001/run.sh", "relative_path": "run.sh", "operation": "modified" }
-    ],
-    "input_file_changes_source": "frontend_reported",
-    "user_note": "已确认提交"
+    "input_file_changes": [
+      { "relative_path": "input.inp", "lines": "12-15,30" },
+      { "relative_path": "run.sh", "lines": "8" }
+    ]
   }
 }
 ```
+
+`review` 只保留 agent 决策必需的两类增量，各自「有才出现」：
+
+- `parameter_changes`：用户改了哪些 submit 参数，每项 `from` / `to`；未改则省略。
+- `input_file_changes`：用户改了 `input_dir` 内哪些文件，每条 `relative_path` + 修改行号 `lines`（紧凑字符串，如 `"12-15,30"`）。行号由前端上报、后端不读不算（§5.10）；未改则省略，超过 20 条时附 `input_file_changes_truncated: true`（见 §7）。
+
+两者皆空时 `review` 整块省略，content 退回 `success` / `job_id` / `status` / `use_sandbox` 四个顶层字段。完整 `execution_arguments`、规范化 diff、文件来源等审计信息只进 §10.3 payload，不进 content。
 
 ### 10.2 用户拒绝
 
@@ -635,27 +628,18 @@ LLM tool call: Bohrium submit
   "status": "UserRejected",
   "message": "用户拒绝了本次 Bohrium 提交。请不要重新提交本作业，可总结当前进展、转去做其它工作，或结束本轮等待用户继续反馈。",
   "review": {
-    "outcome": "rejected",
-    "user_confirmed": false,
-    "final_draft_arguments": {
-      "action": "submit", "input_dir": "/share/case_001", "image": "new-image",
-      "cmd": "python run.py --dry-run > log 2>&1", "machine": "c32_m128_cpu",
-      "job_name": "matmaster-job", "disk_size": 50
-    },
-    "changed_fields": ["image", "cmd"],
     "parameter_changes": {
       "image": { "from": "old-image", "to": "new-image" },
       "cmd": { "from": "python run.py > log 2>&1", "to": "python run.py --dry-run > log 2>&1" }
     },
-    "reported_input_file_change_count": 1,
-    "reported_input_file_changes": [
-      { "path": "/share/case_001/input.inp", "relative_path": "input.inp", "operation": "modified", "summary": "用户还在调整参数，暂不提交" }
-    ],
-    "input_file_changes_source": "frontend_reported",
-    "user_note": "参数还没最终确认，先不要提交。"
+    "input_file_changes": [
+      { "relative_path": "input.inp", "lines": "12-15" }
+    ]
   }
 }
 ```
+
+拒绝路径的 `review` 与成功路径同构（`parameter_changes` + `input_file_changes`）；顶层 `message` 承担「别重提交」指令，无需 `outcome` / `user_confirmed` 重复表达。用户当时的完整草稿参数进 §10.3 payload，不进 content。
 
 对应 `ToolResult.meta`（runner 内部信号，不进模型消息、不进 public payload）：
 
@@ -699,9 +683,7 @@ LLM tool call: Bohrium submit
     "job_create_attempted": true,
     "job_id": "12345",
     "input_upload_attempted": true,
-    "job_add_attempted": true,
-
-    "user_note": "已确认提交"
+    "job_add_attempted": true
   }
 }
 ```
@@ -742,7 +724,7 @@ submit_job_via_runtime():
 4. 新增 reply API（强校验 session/run/request/tool_call/kind；不写共享 list）。
 5. 服务层按 opt-in 构造并注入 `SubmitApprovalGate`（顶层交互 run 且开关为真；子 agent 不注入）。
 6. 改造 `FullToolRunner` 串行阶段：闸门 await（§5.6、§9）；submit 经审批走 `execution_args`、进 validation/policy；reject/timeout/unavailable/invalid 返回 blocked + 重提交护栏。
-7. 路径校验与文件变化摘要（relative_path 优先、commonpath、symlink 策略、count/summary/payload size limit）。
+7. 路径校验与文件变化行号（relative_path 优先、commonpath、symlink 策略、lines 格式校验、count/payload size limit）。
 8. ToolResult augmentation：`attach_submit_review_record()` → POST hook → `enforce_submit_review_contract()`。
 9. 补齐 tests。
 
@@ -759,7 +741,7 @@ Focused tests：
 7. per-request reply key：AskQuestion reply 不被 submit gate 消费，反之亦然；stale/duplicate reply 返回 409 或幂等忽略。
 8. POST hook 破坏性 rewrite：删 `content.review` / `payload.bohrium_submit_review` 后 finalizer 恢复必要字段与摘要。
 9. cmd hidden normalization：确认后的 `cmd` 不被 `_submit()`/`submit_job_via_runtime()` 隐式追加；review UI 展示的 `cmd` 与 `job/add` 收到的一致。
-10. path escape：`../x`、`/absolute`、NUL、symlink escape、rename previous path escape、deleted file 不存在但 relative path 合法。
+10. path escape 与 lines 格式：`../x`、`/absolute`、NUL、symlink escape 被拒；非法 `lines`（如 `5-2`、含字母）被拒，合法 `lines`（`"12-15,30"`）通过。
 11. payload 大小限制：大量文件变化时 content 截断、payload 截断标记正确；超 reply 字节上限 API 报错。
 12. partial side effect：`job/create` 成功但上传失败时 payload 记 `external_effect_started=true` 与 job ref。
 13. no file content leakage：request / reply / tool_result content / payload 都不含文件正文或 patch。
@@ -798,23 +780,19 @@ agent 看到（节选）：
 {
   "success": true, "job_id": "12345", "status": "Submitted", "use_sandbox": true,
   "review": {
-    "outcome": "approved", "user_confirmed": true,
-    "changed_fields": ["image", "cmd", "machine"],
     "parameter_changes": {
       "image": { "from": "old-image", "to": "new-image" },
       "cmd": { "from": "python run.py > log 2>&1", "to": "python run.py --ecut 600 > log 2>&1" },
       "machine": { "from": "c32_m128_cpu", "to": "c64_m256_cpu" }
     },
-    "reported_input_file_change_count": 2,
-    "reported_input_file_changes": [
-      { "path": "/share/case_001/input.inp", "relative_path": "input.inp", "operation": "modified" },
-      { "path": "/share/case_001/run.sh", "relative_path": "run.sh", "operation": "modified" }
-    ],
-    "input_file_changes_source": "frontend_reported"
+    "input_file_changes": [
+      { "relative_path": "input.inp", "lines": "12-15" },
+      { "relative_path": "run.sh", "lines": "3,8-9" }
+    ]
   }
 }
 ```
 
 ### 14.2 用户拒绝但保留草稿修改
 
-用户改 `cmd`、改 `input.inp`，点拒绝并备注。agent 看到 `status="blocked"` 的 content（见 §10.2），消息明确“不要重新提交本作业”。run 不新增状态：模型若继续做别的工作则继续，若无更多工具调用则以 `completed` 收尾；同 run 内若模型再次提交同一作业，被 §5.7 护栏直接 blocked。等待用户下一条消息继续。
+用户改 `cmd`、改 `input.inp`，点拒绝。agent 看到 `status="blocked"` 的 content（见 §10.2），消息明确“不要重新提交本作业”。run 不新增状态：模型若继续做别的工作则继续，若无更多工具调用则以 `completed` 收尾；同 run 内若模型再次提交同一作业，被 §5.7 护栏直接 blocked。等待用户下一条消息继续。
