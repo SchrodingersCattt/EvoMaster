@@ -23,6 +23,7 @@ class UserRuntimePreference:
     project_id: int | None = None
     model: str | None = None
     org_id: str | None = None
+    user_bohrium_submit_confirmation_required: bool | None = None
 
 
 def _get_latest_org_id(
@@ -62,4 +63,7 @@ def get_user_runtime_preference(
         project_id=user_level.project_id,
         model=user_level.model,
         org_id=org_id,
+        user_bohrium_submit_confirmation_required=(
+            user_level.bohrium_submit_confirmation_required
+        ),
     )

@@ -74,3 +74,16 @@ def test_get_latest_org_id_by_user_filters_empty_and_deleted_sessions():
     assert "deleted_at IS NULL" in sql
     assert "ORDER BY created_at DESC" in sql
     assert params == ("user-1",)
+
+
+def test_set_bohrium_submit_confirmation_allows_clearing_override():
+    table, cursor = _table_with_cursor()
+    cursor.rowcount = 1
+
+    assert table.set_bohrium_submit_confirmation("s1", "u1", None) is True
+
+    sql, params = cursor.execute.call_args[0]
+    assert "bohrium_submit_confirmation_required = %s" in sql
+    assert "WHERE session_id = %s AND user_id = %s" in sql
+    assert "deleted_at IS NULL" in sql
+    assert params == (None, "s1", "u1")

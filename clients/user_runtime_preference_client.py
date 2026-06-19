@@ -21,6 +21,7 @@ _REQUEST_TIMEOUT = httpx.Timeout(5.0, connect=3.0)
 class UserLevelRuntimePreference:
     project_id: int | None = None
     model: str | None = None
+    bohrium_submit_confirmation_required: bool | None = None
 
 
 def _runtime_preference_url(user_id: str) -> str:
@@ -92,6 +93,11 @@ def get_user_level_runtime_preference(user_id: str) -> UserLevelRuntimePreferenc
     return UserLevelRuntimePreference(
         project_id=_coerce_project_id(data.get("last_selected_project_id")),
         model=_coerce_model(data.get("last_selected_model")),
+        bohrium_submit_confirmation_required=data.get(
+            "bohrium_submit_confirmation_required"
+        )
+        if isinstance(data.get("bohrium_submit_confirmation_required"), bool)
+        else None,
     )
 
 

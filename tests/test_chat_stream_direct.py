@@ -210,6 +210,40 @@ def test_prepare_send_message_captures_turn_input_before_user_event():
     events_service.add_history_event.assert_called_once()
 
 
+def test_prepare_send_message_persists_and_passes_submit_confirmation():
+    from src.models.chat import ChatSendRequest
+    from src.services.stream_service import ChatStreamService
+
+    sessions_service = MagicMock()
+    sessions_service.get_session.return_value = {"session_directory": None}
+    sessions_service.try_acquire_session_run.return_value = (True, None)
+    events_service = MagicMock()
+    events_service.get_latest_scope_event_id.return_value = 0
+    service = ChatStreamService(
+        sessions_service=sessions_service,
+        events_service=events_service,
+        deploy_state_service=MagicMock(),
+    )
+    req = ChatSendRequest(
+        content="run",
+        bohrium_submit_confirmation_required=False,
+    )
+
+    with (
+        patch("src.services.stream_service.REDIS_URL", "redis://test"),
+        patch("src.services.stream_service.get_redis_dao", return_value=MagicMock()),
+    ):
+        ctx = service.prepare_send_message("sess-1", req, user_id="user-1")
+
+    assert ctx is not None
+    assert ctx.job["bohrium_submit_confirmation_required"] is False
+    sessions_service.set_bohrium_submit_confirmation.assert_called_once_with(
+        "sess-1",
+        "user-1",
+        False,
+    )
+
+
 def test_generate_send_stream_skips_current_task_in_history_replay():
     """发送流回放历史时不应再次回放当前任务刚落库的 query。"""
     from src.services.stream_service import ChatStreamService, SendStreamContext
