@@ -20,6 +20,7 @@ from matmaster.context.ports import (
 from matmaster.types.events import BusEvent
 from matmaster.types.figures import FigureUploadConfig
 from matmaster.types.messages import Message
+from matmaster.types.submit_review import SubmitApprovalGate
 
 __all__ = [
     "AgentRunPorts",
@@ -36,6 +37,7 @@ __all__ = [
     "PlaygroundCompactionPort",
     "PreCompactionBarrier",
     "SessionEventHistoryPort",
+    "SubmitApprovalGate",
     "UserTurnContextWriteRequest",
     "UserTurnContextWriter",
 ]
@@ -180,6 +182,7 @@ class AgentRunPorts:
     user_turn_context_writer: UserTurnContextWriter | None = None
     bohrium_job_ledger: BohriumJobLedgerPort | None = None
     workspace_jobs: WorkspaceJobsPort | None = None
+    submit_approval_gate: SubmitApprovalGate | None = None
 
 
 @dataclass(frozen=True)
