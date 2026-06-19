@@ -49,16 +49,20 @@ def test_query_filters_user_and_status_in():
     assert params == ("user-9", "waiting", "active")
 
 
-def test_service_lists_waiting_or_active_ids():
+def test_service_lists_live_run_ids():
     from src.services.sessions_service import ChatSessionsService
 
     table = MagicMock()
     table.list_session_ids_by_status.return_value = ["s1", "s2"]
     svc = ChatSessionsService(table)
-    assert svc.list_waiting_or_active_session_ids("user-1") == ["s1", "s2"]
+    svc.is_session_run_live = MagicMock(return_value=True)
+    assert svc.list_live_run_session_ids("user-1") == ["s1", "s2"]
     table.list_session_ids_by_status.assert_called_once_with(
         "user-1", ["waiting", "active"]
     )
+    assert svc.is_session_run_live.call_count == 2
+    svc.is_session_run_live.assert_any_call("s1")
+    svc.is_session_run_live.assert_any_call("s2")
 
 
 def test_get_latest_org_id_by_user_filters_empty_and_deleted_sessions():

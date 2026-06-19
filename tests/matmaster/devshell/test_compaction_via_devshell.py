@@ -378,7 +378,7 @@ class TestSummaryStrategy:
         assert msgs[0].content == "You are a helpful assistant."
         assert isinstance(msgs[1], UserMessage)
         assert "[Compacted Context]" not in (msgs[1].content or "")
-        assert "<compacted_history>" in (msgs[1].content or "")
+        assert "<compacted-history>" in (msgs[1].content or "")
         assert "Concise summary of work done." in msgs[1].content
         assert "Analyze this dataset" not in msgs[1].content
 
@@ -397,7 +397,7 @@ class TestSummaryStrategy:
         assert provider.call_count == 1
         call_msgs = provider.call_messages[0]
         assert call_msgs == []
-        assert "<compacted_history>" in (msgs[1].content or "")
+        assert "<compacted-history>" in (msgs[1].content or "")
 
 
 # ── Test 6: 滑动窗口回退 ─────────────────────────────────
@@ -421,7 +421,7 @@ class TestSlidingWindowFallback:
         # 无 compact bundle 消息
         assert isinstance(msgs[0], SystemMessage)
         assert "[Compacted Context]" not in (msgs[0].content or "")
-        assert not any("<compacted_history>" in (m.content or "") for m in msgs)
+        assert not any("<compacted-history>" in (m.content or "") for m in msgs)
         assert compactor._compaction_count == 1
 
 

@@ -14,41 +14,45 @@ def _summary() -> WorkspaceJobsSummary:
     return WorkspaceJobsSummary(
         total=2,
         active=1,
-        pending_terminal=1,
-        recent_terminal=0,
+        unhandled_terminal=1,
+        handled_recent_terminal=0,
         by_status={"running": 1, "failed": 1},
         failed=1,
         stopped=0,
         lost=0,
+        unhandled_action=1,
     )
 
 
 # ---- observation: inline 态 ----
-def test_inline_renders_summary_and_columnar_details() -> None:
+def test_inline_renders_summary_flags_and_columnar_details() -> None:
     jobs = WorkspaceJobs(
         workspace="/share/p",
         active_jobs=({"job_id": "a1", "job_name": "n1", "status": "running"},),
-        pending_terminal_jobs=({"job_id": "p1", "job_name": "n2", "status": "failed"},),
+        unhandled_terminal_jobs=(
+            {"job_id": "p1", "job_name": "n2", "status": "failed"},
+        ),
         mode="workspace_observation",
         summary=_summary(),
     )
     section = WorkspaceJobsSource.from_jobs(jobs).to_sections()[0]
-    assert section.key == "workspace_jobs"
-    assert section.tag == "workspace_jobs"
+    assert section.key == "workspace-jobs"
+    assert section.tag == "workspace-jobs"
     assert section.order == SectionOrder.WORKSPACE_JOBS
     assert section.views == frozenset({ContextView.RUNTIME, ContextView.CHECKPOINT})
-    lines = section.content.splitlines()
-    assert lines[0] == "workspace /share/p"
-    assert lines[1] == "mode workspace_observation"
-    assert lines[2].startswith("summary {")
-    assert lines[3] == "active job_id,job_name,status"
-    assert lines[4] == "a1,n1,running"
-    assert "pending_terminal job_id,job_name,status" in section.content
-    assert "p1,n2,failed" in section.content
+    content = section.content
+    assert "mode workspace_observation" in content
+    assert "required_truncated false" in content
+    assert "handled_recent_has_more false" in content
+    assert "handled_recent_unavailable false" in content
+    assert "active job_id,job_name,status" in content
+    assert "a1,n1,running" in content
+    assert "unhandled_terminal job_id,job_name,status" in content
+    assert "p1,n2,failed" in content
 
 
 # ---- observation: compact 态 ----
-def test_compact_renders_export_samples_omitted() -> None:
+def test_compact_renders_export_preview_with_group_and_omitted() -> None:
     jobs = WorkspaceJobs(
         workspace="/share/p",
         mode="workspace_observation",
@@ -56,21 +60,81 @@ def test_compact_renders_export_samples_omitted() -> None:
         export=WorkspaceJobsExport(
             path="/share/p/.matmaster/context/workspace_jobs/s-i.csv",
             format="csv",
-            row_count=1020,
+            row_count=143,
             columns=("group", "job_id"),
             reason="row_limit",
         ),
-        priority_samples=({"job_id": "p1", "job_name": "n2", "status": "failed"},),
-        omitted_count=1019,
+        preview_rows=(
+            {
+                "group": "unhandled_terminal",
+                "job_id": "p1",
+                "job_name": "n2",
+                "status": "failed",
+            },
+        ),
+        preview_limit=50,
+        omitted_count=93,
     )
     content = WorkspaceJobsSource.from_jobs(jobs).to_sections()[0].content
     assert "details_exported {" in content
     assert "read_hint " in content
-    assert "action_hint " in content  # summary.failed=1
-    assert "priority_samples job_id,job_name,status" in content
-    assert "p1,n2,failed" in content
-    assert "omitted_from_prompt {" in content
-    assert "active job_id" not in content  # compact 不渲染 active 明细 block
+    assert "action_hint " in content
+    assert "prompt_preview {" in content
+    assert '"preview_limit": 50' in content
+    assert '"omitted_rows": 93' in content
+    assert "preview_rows group,job_id,job_name,status" in content
+    assert "unhandled_terminal,p1,n2,failed" in content
+    assert "active job_id" not in content
+
+
+def test_compact_required_truncated_renders_hint() -> None:
+    jobs = WorkspaceJobs(
+        workspace="/share/p",
+        mode="workspace_observation",
+        summary=_summary(),
+        required_truncated=True,
+        export=WorkspaceJobsExport(
+            path="/share/p/.matmaster/context/workspace_jobs/s-i.csv",
+            format="csv",
+            row_count=3000,
+            columns=("group", "job_id"),
+            reason="row_limit",
+        ),
+    )
+    content = WorkspaceJobsSource.from_jobs(jobs).to_sections()[0].content
+    assert "required_truncated true" in content
+    assert "required_truncated_hint" in content
+
+
+def test_compact_action_hint_uses_unhandled_action_only() -> None:
+    summary = WorkspaceJobsSummary(
+        total=1,
+        active=0,
+        unhandled_terminal=0,
+        handled_recent_terminal=1,
+        by_status={"failed": 1},
+        failed=1,
+        stopped=0,
+        lost=0,
+        unhandled_action=0,
+    )
+    jobs = WorkspaceJobs(
+        workspace="/share/p",
+        mode="workspace_observation",
+        summary=summary,
+        export=WorkspaceJobsExport(
+            path="/share/p/.matmaster/context/workspace_jobs/s-i.csv",
+            format="csv",
+            row_count=1,
+            columns=("group", "job_id"),
+            reason="row_limit",
+        ),
+        preview_limit=50,
+    )
+
+    content = WorkspaceJobsSource.from_jobs(jobs).to_sections()[0].content
+
+    assert "action_hint " not in content
 
 
 # ---- observation: error 态 ----
@@ -109,7 +173,7 @@ def _job(
 def test_delivery_jobs_render_current_instruction_template_text() -> None:
     jobs = WorkspaceJobs(
         mode="session_workspace_delivery",
-        pending_terminal_jobs=(
+        unhandled_terminal_jobs=(
             _job("f1", "failed", job_name="relax-fail"),
             _job("s1", "stopped", job_name="relax-stop"),
             _job("l1", "lost", job_name="relax-lost"),
@@ -137,7 +201,7 @@ def test_delivery_jobs_render_current_instruction_template_text() -> None:
 def test_delivery_instruction_lists_all_pending_jobs() -> None:
     jobs = WorkspaceJobs(
         mode="session_workspace_delivery",
-        pending_terminal_jobs=(
+        unhandled_terminal_jobs=(
             _job("t1", "finished", job_name="one"),
             _job("t2", "failed", job_name="two"),
             _job("t3", "stopped", job_name="three"),
@@ -182,14 +246,15 @@ def test_delivery_compact_renders_failed_samples_success_count_and_path() -> Non
         summary=WorkspaceJobsSummary(
             total=982,
             active=0,
-            pending_terminal=982,
-            recent_terminal=0,
+            unhandled_terminal=982,
+            handled_recent_terminal=0,
             by_status={"finished": 980, "failed": 2},
             failed=2,
             stopped=0,
             lost=0,
+            unhandled_action=2,
         ),
-        priority_samples=(
+        preview_rows=(
             _job("f1", "failed", job_name="relax-fail"),
             _job("l3", "lost", job_name="relax-lost"),
         ),
@@ -218,14 +283,15 @@ def test_delivery_export_failure_renders_samples_and_warning_no_path() -> None:
         summary=WorkspaceJobsSummary(
             total=600,
             active=0,
-            pending_terminal=600,
-            recent_terminal=0,
+            unhandled_terminal=600,
+            handled_recent_terminal=0,
             by_status={"finished": 599, "failed": 1},
             failed=1,
             stopped=0,
             lost=0,
+            unhandled_action=1,
         ),
-        priority_samples=(_job("f1", "failed", job_name="relax-fail"),),
+        preview_rows=(_job("f1", "failed", job_name="relax-fail"),),
         export_error=WorkspaceJobsExportError(
             reason="write_failed", rows=600, target_path="/share/p/x.csv"
         ),
@@ -237,23 +303,3 @@ def test_delivery_export_failure_renders_samples_and_warning_no_path() -> None:
     assert "完整明细导出失败，被省略的作业未必已交付。" in text
     assert "/share/p/x.csv" not in text
     assert "已导出" not in text
-
-
-def test_compact_truncated_renders_snapshot_hint() -> None:
-    jobs = WorkspaceJobs(
-        workspace="/share/p",
-        mode="workspace_observation",
-        summary=_summary(),
-        snapshot_truncated=True,
-        export=WorkspaceJobsExport(
-            path="/share/p/.matmaster/context/workspace_jobs/s-i.csv",
-            format="csv",
-            row_count=3000,
-            columns=("group", "job_id"),
-            reason="row_limit",
-        ),
-    )
-
-    lines = WorkspaceJobsSource.from_jobs(jobs).lines
-
-    assert any("snapshot_truncated_hint" in line for line in lines)

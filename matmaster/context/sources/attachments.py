@@ -201,7 +201,7 @@ class SessionAttachmentsSource:
             return ()
         return (
             ContextSection(
-                key="session_attachments",
+                key="session-attachments",
                 tag="attachments",
                 content=text,
                 order=SectionOrder.SESSION_ATTACHMENTS,

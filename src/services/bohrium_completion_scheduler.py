@@ -84,8 +84,8 @@ def decide(unit: dict[str, Any], cfg: SchedulerConfig) -> Reason | None:
 def render_prompt(reason: Reason) -> str:
     """渲染唤醒原因头；具体 job 清单与处理指令由 delivery context 承载。"""
     return {
-        Reason.FINAL: "本会话的 Bohrium 作业批次已全部到达终态。",
-        Reason.PROGRESS: "本会话又有 Bohrium 作业到达终态、结果待处理，仍有作业在运行。",
+        Reason.FINAL: "本会话的 Bohrium 作业已全部到达终态。",
+        Reason.PROGRESS: "本会话有 Bohrium 作业到达终态、结果待处理，仍有作业在运行。",
         Reason.FIRST_FAILURE: "本会话出现失败的 Bohrium 作业，仍有作业在运行。",
         Reason.STALLED: "本会话有 Bohrium 作业结果待处理，另有作业长时间无法查询状态。",
     }[reason]

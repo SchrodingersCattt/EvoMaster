@@ -290,6 +290,63 @@ def test_prepare_messages_truncates_only_largest_tool_results_needed_to_fit() ->
     assert full_messages[5].content == "L" * 16_000
 
 
+def test_prepare_messages_continues_after_tool_truncation_when_still_over_budget(
+    monkeypatch,
+) -> None:
+    from matmaster.context import compaction
+
+    compact_request = UserMessage(content=SUMMARY_USER_REQUEST_TEMPLATE)
+    tool_a = _tool("a", "A" * 8_000)
+    tool_b = _tool("b", "B" * 8_000)
+    full_messages = [
+        SystemMessage(content="sys"),
+        UserMessage(content="large non-tool context"),
+        _assistant("a", "b"),
+        tool_a,
+        tool_b,
+    ]
+
+    def fake_estimate(messages, safety_margin=1.0):
+        if len(messages) != 1:
+            return sum(fake_estimate([msg], safety_margin=1.0) for msg in messages)
+        msg = messages[0]
+        if msg is compact_request:
+            return 5
+        if isinstance(msg, SystemMessage):
+            return 10
+        if isinstance(msg, UserMessage):
+            return 80
+        if isinstance(msg, AssistantMessage):
+            return 40
+        if isinstance(msg, ToolMessage):
+            if "[tool_result truncated before summary call]" in (msg.content or ""):
+                return 20
+            return 100
+        return 1
+
+    monkeypatch.setattr(compaction, "estimate_tokens", fake_estimate)
+
+    prep = prepare_messages_for_summary_call(
+        full_messages=full_messages,
+        phase="runtime",
+        turn_input=None,
+        compact_request=compact_request,
+        context_limit=120,
+        reserved_summary_tokens=20,
+    )
+
+    assert prep.message_budget == 100
+    assert prep.prepared_tokens > prep.message_budget
+    assert prep.truncated_tool_call_ids == ("a", "b")
+    assert prep.messages[3] is not tool_a
+    assert prep.messages[4] is not tool_b
+    assert "[tool_result truncated before summary call]" in (
+        prep.messages[3].content or ""
+    )
+    assert full_messages[3] is tool_a
+    assert full_messages[4] is tool_b
+
+
 class RecordingProvider:
     def __init__(
         self,
@@ -348,7 +405,7 @@ async def test_call_summary_llm_uses_real_messages_tools_and_tool_choice_none() 
     roles = [msg.role.value for msg in call["messages"]]
     assert roles == ["system", "user", "assistant", "user"]
     assert call["messages"][0].content == "main system"
-    assert "<compact_request>" in (call["messages"][-1].content or "")
+    assert "<compact-request>" in (call["messages"][-1].content or "")
 
 
 @pytest.mark.asyncio

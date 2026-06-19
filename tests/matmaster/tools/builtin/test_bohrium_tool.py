@@ -753,7 +753,7 @@ class TestBohriumExecution:
         submitted = bohrium_tool_module.submit_job_via_runtime(
             input_dir=str(input_dir),
             image="registry.dp.tech/dptech/cp2k:2024.1",
-            cmd="cp2k.popt -i input.inp",
+            cmd="cp2k.popt -i input.inp > log 2>&1",
             machine="c64_m256_cpu",
             job_name="matmaster-job",
             disk_size=50,
@@ -799,7 +799,7 @@ class TestBohriumExecution:
         submitted = bohrium_tool_module.submit_job_via_runtime(
             input_dir=str(input_dir),
             image="registry.dp.tech/dptech/cp2k:2024.1",
-            cmd="cp2k.popt -i input.inp",
+            cmd="cp2k.popt -i input.inp > log 2>&1",
             machine="c64_m256_cpu",
             job_name="matmaster-job",
             disk_size=50,

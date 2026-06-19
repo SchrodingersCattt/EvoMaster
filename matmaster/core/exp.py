@@ -386,6 +386,18 @@ class Exp:
         figure_upload_config = request.ports.figure_upload.config
         if figure_upload_config is not None:
             runner_state.set("figure_upload_config", figure_upload_config)
+        submit_approval_gate = request.ports.submit_approval_gate
+        if submit_approval_gate is not None and spawn_id is None:
+            from matmaster.core.submit_review_support import (
+                install_submit_review_hooks,
+            )
+
+            install_submit_review_hooks(
+                runner_state=runner_state,
+                hook_executor=hook_executor,
+                run_identity=self._build_run_identity(ctx, spawn_id=spawn_id),
+                submit_approval_gate=submit_approval_gate,
+            )
         self._register_cleanup(runner_state.clear)
 
         full_runner = FullToolRunner(

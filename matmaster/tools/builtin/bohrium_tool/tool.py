@@ -8,7 +8,7 @@ lives in software skills.
 Design decisions:
 - query returns the job's current status in a single call; long-running
   monitoring lives in the separate monitor process, not in the agent
-- submit auto-appends "> log 2>&1" if missing
+- submit receives already-normalized commands and rejects missing log redirection
 - kill is asynchronous; callers must query to confirm terminal state
 - Credentials resolved via runtime bridge (session > env fallback)
 - Remote /share paths require active session with upload_directory
@@ -56,6 +56,11 @@ from utils.tracing import get_tracer, record_span_exception, set_log_context_att
 from .errors import BohriumJobStateError
 from .models import BohriumSubmittedJob
 from .paths import resolve_download_target, resolve_input_source
+from .submit_review import (
+    CMD_LOG_SUFFIX,
+    BohriumSubmitReviewProvider,
+    normalize_execution_args,
+)
 from .transfers import (
     download_remote_results,
     prepare_input_archive,
@@ -95,6 +100,12 @@ def submit_job_via_runtime(
         span.set_attribute("bohrium.machine", machine)
         span.set_attribute("bohrium.disk_size", disk_size)
         try:
+            if not cmd.rstrip().endswith(CMD_LOG_SUFFIX):
+                raise BohriumError(
+                    "cmd not normalized (missing log redirection); "
+                    "normalize_execution_args must run before submit_job_via_runtime"
+                )
+
             ctx = build_bohrium_context(session=session, require_project=True)
             span.set_attribute("bohrium.sandbox", ctx.sandbox)
             span.set_attribute("bohrium.project_id", ctx.credentials.project_id)
@@ -105,9 +116,7 @@ def submit_job_via_runtime(
             )
             span.set_attribute("bohrium.input_source.kind", source.kind)
 
-            cmd_stripped = cmd.rstrip()
-            if not cmd_stripped.endswith("> log 2>&1"):
-                cmd = cmd_stripped + " > log 2>&1"
+            cmd = cmd.rstrip()
 
             # Shared add_job kwargs for both input-source branches; keep the
             # per-branch calls limited to what actually differs (create_data /
@@ -132,10 +141,11 @@ def submit_job_via_runtime(
                     )
                 except Exception as exc:
                     created_ref = _created_job_ref(create_data)
-                    raise BohriumTransferError(
+                    raise BohriumTransferError.with_created_job_ref(
                         "Remote input upload failed after job/create; "
                         "compute job was not submitted; "
-                        f"created_job_ref={created_ref}: {exc}"
+                        f"created_job_ref={created_ref}: {exc}",
+                        created_ref,
                     ) from exc
                 add_data = add_job(
                     ctx,
@@ -146,9 +156,19 @@ def submit_job_via_runtime(
             else:
                 with prepare_input_archive(source, session=session) as zip_path:
                     create_data = create_job(ctx, job_name=job_name)
-                    upload = upload_input_archive(
-                        create_data=create_data, zip_path=zip_path
-                    )
+                    try:
+                        upload = upload_input_archive(
+                            create_data=create_data,
+                            zip_path=zip_path,
+                        )
+                    except Exception as exc:
+                        created_ref = _created_job_ref(create_data)
+                        raise BohriumTransferError.with_created_job_ref(
+                            "Local input upload failed after job/create; "
+                            "compute job was not submitted; "
+                            f"created_job_ref={created_ref}: {exc}",
+                            created_ref,
+                        ) from exc
                     add_data = add_job(
                         ctx,
                         create_data=create_data,
@@ -208,9 +228,9 @@ class BohriumTool(BuiltinTool):
                 "description": "Operation to perform.",
             },
             # --- submit ---
-            'input_dir': {
-                'type': 'string',
-                'description': 'Directory containing and only containing all input files to upload. (submit)',
+            "input_dir": {
+                "type": "string",
+                "description": "Directory containing and only containing all input files to upload. (submit)",
             },
             "image": {
                 "type": "string",
@@ -277,6 +297,9 @@ class BohriumTool(BuiltinTool):
     stop_mode: ClassVar[str] = "cancellable"
     exposed_to_model: ClassVar[bool] = True
     max_result_chars: ClassVar[int] = 0
+    submit_review_provider: ClassVar[BohriumSubmitReviewProvider] = (
+        BohriumSubmitReviewProvider()
+    )
 
     # In-turn query pacing. Minimum seconds between two real platform queries
     # for the same running job within one agent run. Kept as class attributes
@@ -308,69 +331,69 @@ class BohriumTool(BuiltinTool):
     # (duplicates skills, drifts on tag bumps; see evaluation/AGENTS_evaluation.md DevShell).
     def prompt(self, ctx: ToolDescriptionContext | None = None) -> str | None:
         return (
-            '## Bohrium tool usage\n'
-            '- **Always** load the corresponding software skill first (cp2k, qe, abacus, orca, '
-            'lammps, gromacs, pyscf, abinit, pyatb, mlips) to obtain image, machine, '
-            'and cmd — do this **before** calling list_images or list_machines.\n'
-            '- Only call list_images / list_machines when the loaded skill does not '
-            'provide a default image or machine, or you need to verify availability.\n'
-            '\n'
-            '### Actions\n'
-            '- **submit**: package input directory and submit a job, returns job_id. '
-            'input_dir MUST be a dedicated directory that contains ONLY the files '
-            'required by this job. NEVER pass a shared / catch-all directory (e.g. '
-            '`/share`, the workspace root, or any folder holding unrelated structures, '
-            'prior outputs, or other jobs\' inputs) — the whole directory is packaged '
-            'and uploaded as-is. If the needed inputs are scattered in a shared '
-            'location, first create a fresh job-specific subdirectory, copy or '
-            'symlink ONLY the necessary files into it, then use that path as '
-            'input_dir. '
-            'cmd runs in the directory where input files are unpacked — do NOT '
+            "## Bohrium tool usage\n"
+            "- **Always** load the corresponding software skill first (cp2k, qe, abacus, orca, "
+            "lammps, gromacs, pyscf, abinit, pyatb, mlips) to obtain image, machine, "
+            "and cmd — do this **before** calling list_images or list_machines.\n"
+            "- Only call list_images / list_machines when the loaded skill does not "
+            "provide a default image or machine, or you need to verify availability.\n"
+            "\n"
+            "### Actions\n"
+            "- **submit**: package input directory and submit a job, returns job_id. "
+            "input_dir MUST be a dedicated directory that contains ONLY the files "
+            "required by this job. NEVER pass a shared / catch-all directory (e.g. "
+            "`/share`, the workspace root, or any folder holding unrelated structures, "
+            "prior outputs, or other jobs' inputs) — the whole directory is packaged "
+            "and uploaded as-is. If the needed inputs are scattered in a shared "
+            "location, first create a fresh job-specific subdirectory, copy or "
+            "symlink ONLY the necessary files into it, then use that path as "
+            "input_dir. "
+            "cmd runs in the directory where input files are unpacked — do NOT "
             'prepend "cd <path> &&" or any directory change. '
             'cmd MUST end with "> log 2>&1" (auto-appended if missing).\n'
-            '- **query**: query a job\'s current status in a single call and '
-            'by single job_id. The first query for a job returns immediately; '
-            'repeated in-turn query calls for the same running job may be '
-            'paced by the tool. Only call query when you actively need to '
-            'confirm one job\'s current status.\n'
-            '- **download**: download artifacts for a finished or failed job into result_dir. '
-            'Use only after query reports Finished or Failed. Requires result_dir; '
-            'retrieves logs and artifacts for analysis.\n'
-            '- **kill**: request termination of a previously submitted job. Use only when '
-            'the user explicitly wants to stop a running job. The call is '
-            'asynchronous; follow up with query to confirm terminal state.\n'
-            '- **list_images**: list the user\'s own private Docker images (filtered by keyword).\n'
-            '- **list_machines**: query available machine types (cpu / gpu).\n'
-            '\n'
-            '### Handoff & exit\n'
-            '- After submit succeeds, sanity-check the job ONCE with query '
-            'before ending your turn: Failed → triage immediately (download '
-            'logs, fix and resubmit, or report); Running → started cleanly; '
-            'still queued (Pending/Scheduling) → safe to end as well, a later '
-            'failure will wake you. For a batch sharing one '
-            'image/machine/config, checking a few jobs is enough — once any '
-            'job reaches Running the shared config is validated; do NOT '
-            'verify every job.\n'
-            '- By default do NOT wait for completion: no sleep loops, no '
-            'poll-until-finished. Background monitoring takes over after '
-            'submit; when jobs reach terminal states (or the first failure '
-            'appears) you will be invoked again automatically with current '
-            'job state in context.\n'
-            '- Exception — quick jobs: if a job is expected to finish within '
-            'a few minutes, you MAY keep querying it in-turn. The Bohrium tool '
-            'automatically paces repeated query calls for the same running '
-            'job, so do NOT manage query cadence yourself with Bash sleep. If '
-            'you have other pending work, do that FIRST instead of firing a '
-            'query and waiting — once a paced query is issued, this turn '
-            'blocks until that tool call returns and you cannot do other work '
-            'meanwhile. Still wait at most ~5 minutes in total; after that '
-            'hand off to background monitoring and end your turn.\n'
-            '- A submit error means NO job was created: fix and resubmit, or '
-            'report it. Never end your turn implying a failed submit '
-            'succeeded.\n'
-            '- When ending your turn, summarize submitted jobs (job_id, '
-            'job_name) and tell the user results will be delivered '
-            'automatically.\n'
+            "- **query**: query a job's current status in a single call and "
+            "by single job_id. The first query for a job returns immediately; "
+            "repeated in-turn query calls for the same running job may be "
+            "paced by the tool. Only call query when you actively need to "
+            "confirm one job's current status.\n"
+            "- **download**: download artifacts for a finished or failed job into result_dir. "
+            "Use only after query reports Finished or Failed. Requires result_dir; "
+            "retrieves logs and artifacts for analysis.\n"
+            "- **kill**: request termination of a previously submitted job. Use only when "
+            "the user explicitly wants to stop a running job. The call is "
+            "asynchronous; follow up with query to confirm terminal state.\n"
+            "- **list_images**: list the user's own private Docker images (filtered by keyword).\n"
+            "- **list_machines**: query available machine types (cpu / gpu).\n"
+            "\n"
+            "### Handoff & exit\n"
+            "- After submit succeeds, sanity-check the job ONCE with query "
+            "before ending your turn: Failed → triage immediately (download "
+            "logs, fix and resubmit, or report); Running → started cleanly; "
+            "still queued (Pending/Scheduling) → safe to end as well, a later "
+            "failure will wake you. For a batch sharing one "
+            "image/machine/config, checking a few jobs is enough — once any "
+            "job reaches Running the shared config is validated; do NOT "
+            "verify every job.\n"
+            "- By default do NOT wait for completion: no sleep loops, no "
+            "poll-until-finished. Background monitoring takes over after "
+            "submit; when jobs reach terminal states (or the first failure "
+            "appears) you will be invoked again automatically with current "
+            "job state in context.\n"
+            "- Exception — quick jobs: if a job is expected to finish within "
+            "a few minutes, you MAY keep querying it in-turn. The Bohrium tool "
+            "automatically paces repeated query calls for the same running "
+            "job, so do NOT manage query cadence yourself with Bash sleep. If "
+            "you have other pending work, do that FIRST instead of firing a "
+            "query and waiting — once a paced query is issued, this turn "
+            "blocks until that tool call returns and you cannot do other work "
+            "meanwhile. Still wait at most ~5 minutes in total; after that "
+            "hand off to background monitoring and end your turn.\n"
+            "- A submit error means NO job was created: fix and resubmit, or "
+            "report it. Never end your turn implying a failed submit "
+            "succeeded.\n"
+            "- When ending your turn, summarize submitted jobs (job_id, "
+            "job_name) and tell the user results will be delivered "
+            "automatically.\n"
         )
 
     def _build_context(self, *, require_project: bool = False) -> BohriumContext:
@@ -474,9 +497,16 @@ class BohriumTool(BuiltinTool):
             )
 
     def _submit(self, args: dict[str, Any]) -> ToolResult:
-        input_dir = args.get("input_dir", "")
-        image = args.get("image", "")
-        cmd = args.get("cmd", "")
+        try:
+            exec_args = normalize_execution_args(args).arguments
+        except ValueError as exc:
+            return ToolResult(
+                status="error", content=f"Submit arguments rejected: {exc}"
+            )
+
+        input_dir = exec_args.get("input_dir", "")
+        image = exec_args.get("image", "")
+        cmd = exec_args.get("cmd", "")
 
         if not input_dir:
             return ToolResult(
@@ -489,9 +519,9 @@ class BohriumTool(BuiltinTool):
         if not cmd:
             return ToolResult(status="error", content="Missing required parameter: cmd")
 
-        machine = args.get("machine", "c32_m128_cpu")
-        job_name = args.get("job_name", "matmaster-job")
-        disk_size = int(args.get("disk_size", 50))
+        machine = exec_args["machine"]
+        job_name = exec_args["job_name"]
+        disk_size = exec_args["disk_size"]
 
         ctx: BohriumContext | None = None
         try:
@@ -528,9 +558,43 @@ class BohriumTool(BuiltinTool):
                     },
                     ensure_ascii=False,
                 ),
+                meta={
+                    "submit_execution_audit": {
+                        "execution_attempted": True,
+                        "external_effect_started": True,
+                        "job_create_attempted": True,
+                        "job_id": submitted.job_id,
+                        "input_upload_attempted": True,
+                        "job_add_attempted": True,
+                    }
+                },
+            )
+        except BohriumTransferError as exc:
+            return ToolResult(
+                status="error",
+                content=str(exc),
+                meta={
+                    "submit_execution_audit": {
+                        "execution_attempted": True,
+                        "external_effect_started": True,
+                        "job_create_attempted": True,
+                        "job_id": exc.created_job_ref,
+                        "input_upload_attempted": True,
+                        "job_add_attempted": False,
+                    }
+                },
             )
         except (BohriumError, ValueError) as exc:
-            return ToolResult(status="error", content=str(exc))
+            return ToolResult(
+                status="error",
+                content=str(exc),
+                meta={
+                    "submit_execution_audit": {
+                        "execution_attempted": True,
+                        "external_effect_started": False,
+                    }
+                },
+            )
         except Exception as exc:
             logger.error(
                 "bohrium submit failed action=submit base_url=%s sandbox=%s error=%s",
@@ -585,10 +649,7 @@ class BohriumTool(BuiltinTool):
             )
 
             if code in RUNNING_CODES:
-                message = (
-                    f"Job is {status_label}. "
-                    "Continue other work before polling again."
-                )
+                message = f"Job is {status_label}. " "Continue other work."
             elif code == SUCCESS_CODE:
                 message = (
                     "Job is Finished. Call "
@@ -652,7 +713,7 @@ class BohriumTool(BuiltinTool):
         import urllib.request
         from urllib.parse import quote
 
-        encoded_path = quote(path, safe='/')
+        encoded_path = quote(path, safe="/")
         url = f"{host.rstrip('/')}/api/download/{encoded_path}?token={token}"
         req = urllib.request.Request(url)
         with urllib.request.urlopen(req, timeout=5) as resp:

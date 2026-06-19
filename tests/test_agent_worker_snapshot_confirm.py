@@ -20,6 +20,7 @@ def _run_one_round(
     confirm_exc=None,
     run_agent_exc=None,
     origin=None,
+    submit_confirmation_required=False,
 ):
     """注入全部外部依赖，跑一轮循环，返回 (有序调用名列表, run_agent 收到的 kwargs)。"""
     calls: list[str] = []
@@ -32,6 +33,7 @@ def _run_one_round(
         # notify=False 跳过完成卡片/邮件分支，缩小注入面
         "delivery": {"notify": False},
         "origin": origin,
+        "bohrium_submit_confirmation_required": submit_confirmation_required,
     }
 
     fake_redis = MagicMock()
@@ -141,3 +143,14 @@ def test_bohrium_completion_origin_uses_delivery_mode(monkeypatch):
     assert received["job_context_mode"] == "session_workspace_delivery"
     assert received["delivery_snapshot"] is snap
     assert calls == ["acquire", "snapshot", "run_agent", "confirm", "release:True"]
+
+
+def test_submit_confirmation_flag_passed_to_run_agent(monkeypatch):
+    _, received = _run_one_round(
+        monkeypatch,
+        snapshot_obj=object(),
+        run_result=True,
+        submit_confirmation_required=True,
+    )
+
+    assert received["submit_confirmation_enabled"] is True

@@ -44,8 +44,8 @@ def session_sections(events, until_event_id, include_attachments):
     if include_attachments:
         sections.append(
             ContextSection(
-                key="session_attachments",
-                tag="session_attachments",
+                key="session-attachments",
+                tag="session-attachments",
                 content="file_1 old.cif https://oss/old.cif",
                 order=SectionOrder.SESSION_ATTACHMENTS,
                 views=frozenset({ContextView.RUNTIME, ContextView.CHECKPOINT}),
@@ -141,8 +141,8 @@ async def test_runtime_compaction_uses_high_water_and_compacted_history_marker()
     assert isinstance(messages[0], SystemMessage)
     assert isinstance(messages[1], UserMessage)
     assert result.base_messages is not None
-    assert "<compacted_history>" in result.base_messages[0]["content"]
-    assert "<previous_session_summary>" not in result.base_messages[0]["content"]
+    assert "<compacted-history>" in result.base_messages[0]["content"]
+    assert "<previous-session-summary>" not in result.base_messages[0]["content"]
     assert result.strategy == "summary"
     assert result.durability == "durable"
     assert result.checkpoint_covered_until_event_id == 9
@@ -181,18 +181,18 @@ async def test_runtime_compaction_reinjects_current_instruction_text() -> None:
     )
 
     runtime_content = messages[1].content or ""
-    assert "<compacted_history>" in runtime_content
+    assert "<compacted-history>" in runtime_content
     assert (
-        "<current_instruction>\n"
+        "<current-instruction>\n"
         "Run exact fitting with alpha=0.37.\n"
-        "</current_instruction>"
+        "</current-instruction>"
     ) in runtime_content
     assert "current.cif" not in runtime_content
     assert "current.png" not in runtime_content
     assert "/share/current/POSCAR" not in runtime_content
     assert messages[1].images == []
     assert result.base_messages is not None
-    assert "<current_instruction>" not in result.base_messages[0]["content"]
+    assert "<current-instruction>" not in result.base_messages[0]["content"]
     assert result.checkpoint_covered_until_event_id == 9
 
 
@@ -267,7 +267,7 @@ async def test_preflight_compaction_uses_raw_current_input_without_double_wrap()
         SystemMessage(content="sys"),
         UserMessage(content="old question"),
         AssistantMessage(content="old answer"),
-        UserMessage(content="<user_instructions>wrapped</user_instructions>"),
+        UserMessage(content="<user-instructions>wrapped</user-instructions>"),
     ]
 
     result = await compactor.apply_summary(
@@ -278,7 +278,7 @@ async def test_preflight_compaction_uses_raw_current_input_without_double_wrap()
     )
 
     runtime_content = messages[1].content or ""
-    assert runtime_content.count("<current_instruction>") == 1
+    assert runtime_content.count("<current-instruction>") == 1
     assert "Use current file." in runtime_content
     assert "file_1 current.cif https://oss/current.cif" in runtime_content
     assert "wrapped" not in runtime_content
@@ -311,7 +311,7 @@ async def test_preflight_plan_without_current_split_keeps_runtime_boundary() -> 
     )
 
     runtime_content = messages[1].content or ""
-    assert "<current_instruction>" not in runtime_content
+    assert "<current-instruction>" not in runtime_content
     assert result.checkpoint_covered_until_event_id == 33
 
 
@@ -330,8 +330,8 @@ async def test_preflight_summary_split_and_reattach_share_current_input_source()
         AssistantMessage(content="old answer"),
         UserMessage(
             content=(
-                "<user_instructions>rendered instructions</user_instructions>\n"
-                "<current_instruction>rendered current query</current_instruction>"
+                "<user-instructions>rendered instructions</user-instructions>\n"
+                "<current-instruction>rendered current query</current-instruction>"
             )
         ),
     ]
@@ -361,7 +361,7 @@ async def test_preflight_summary_split_and_reattach_share_current_input_source()
 
     runtime_content = messages[1].content or ""
     assert result.checkpoint_covered_until_event_id == 7
-    assert runtime_content.count("<current_instruction>") == 1
+    assert runtime_content.count("<current-instruction>") == 1
     assert "current query" in runtime_content
     assert "rendered current query" not in runtime_content
 
@@ -387,7 +387,7 @@ async def test_apply_summary_replaces_messages_and_returns_durable_snapshot() ->
     assert len(messages) == 2
     assert isinstance(messages[0], SystemMessage)
     assert isinstance(messages[1], UserMessage)
-    assert "<compacted_history>" in (messages[1].content or "")
+    assert "<compacted-history>" in (messages[1].content or "")
     assert result.strategy == "summary"
     assert result.durability == "durable"
     assert result.base_messages is not None

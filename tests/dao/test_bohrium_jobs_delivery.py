@@ -474,19 +474,24 @@ def test_scan_splits_same_session_by_workspace(jobs_table, sessions_shadow):
         assert u["pending_terminal"] == 1
 
 
-def test_query_workspace_active_spans_sessions(jobs_table, sessions_shadow):
+def test_query_workspace_active_spans_sessions_with_limit(jobs_table, sessions_shadow):
     _register_session(sessions_shadow, session="sess-A")
     _register_session(sessions_shadow, session="sess-B")
     _seed_job(jobs_table, session="sess-A", job_id="601")
     _seed_job(jobs_table, session="sess-B", job_id="602")
 
     rows = jobs_table.query_workspace_active(
-        user_id="u1", org_id="o1", workspace="/share/project"
+        user_id="u1", org_id="o1", workspace="/share/project", limit=10
     )
     assert sorted(r["job_id"] for r in rows) == ["601", "602"]
 
+    limited = jobs_table.query_workspace_active(
+        user_id="u1", org_id="o1", workspace="/share/project", limit=1
+    )
+    assert len(limited) == 1
 
-def test_query_workspace_pending_terminal_spans_sessions_with_limit(
+
+def test_query_workspace_unhandled_terminal_spans_sessions_with_limit(
     jobs_table, sessions_shadow
 ):
     _register_session(sessions_shadow, session="sess-A")
@@ -494,18 +499,18 @@ def test_query_workspace_pending_terminal_spans_sessions_with_limit(
     _seed_job(jobs_table, session="sess-A", job_id="701", status="finished")
     _seed_job(jobs_table, session="sess-B", job_id="702", status="finished")
 
-    rows = jobs_table.query_workspace_pending_terminal(
+    rows = jobs_table.query_workspace_unhandled_terminal(
         user_id="u1", org_id="o1", workspace="/share/project", limit=10
     )
     assert sorted(r["job_id"] for r in rows) == ["701", "702"]
 
-    limited = jobs_table.query_workspace_pending_terminal(
+    limited = jobs_table.query_workspace_unhandled_terminal(
         user_id="u1", org_id="o1", workspace="/share/project", limit=1
     )
     assert len(limited) == 1
 
 
-def test_query_workspace_recent_terminal_ignores_handled_and_orders_desc(
+def test_query_workspace_handled_recent_terminal_excludes_unhandled_desc(
     jobs_table, sessions_shadow
 ):
     _register_session(sessions_shadow)
@@ -513,7 +518,7 @@ def test_query_workspace_recent_terminal_ignores_handled_and_orders_desc(
     _seed_job(jobs_table, job_id="802", status="finished")
     _shift_terminal_at(sessions_shadow, job_id="801", seconds_ago=300)
     _shift_terminal_at(sessions_shadow, job_id="802", seconds_ago=100)
-    # 把 801 标 handled：recent 仍应包含它（不受 handled_at 影响）
+    # ack 801 → handled; 802 stays unhandled
     snap_rows = jobs_table.list_pending_terminal_snapshot(
         user_id="u1", org_id="o1", session_id="sess-1", workspace="/share/project"
     )
@@ -525,10 +530,11 @@ def test_query_workspace_recent_terminal_ignores_handled_and_orders_desc(
         row_ids=[r["id"] for r in snap_rows if r["job_id"] == "801"],
     )
 
-    rows = jobs_table.query_workspace_recent_terminal(
+    rows = jobs_table.query_workspace_handled_recent_terminal(
         user_id="u1", org_id="o1", workspace="/share/project", limit=10
     )
-    assert [r["job_id"] for r in rows] == ["802", "801"]
+    # only the handled row; unhandled 802 excluded
+    assert [r["job_id"] for r in rows] == ["801"]
 
 
 def test_query_session_active_scoped_by_session_and_workspace(

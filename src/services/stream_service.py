@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from functools import lru_cache
 
 from matmaster.config.exp import DEFAULT_MODE, SUPPORTED_MODES
-from matmaster.context.sources.turn_input import TurnInput
+from matmaster.context.sources.turn_input import TurnInput, TurnInstructionTag
 from src.dao.redis_dao import (
     STREAM_CHANNEL_PREFIX,
     get_redis_dao,
@@ -34,7 +34,6 @@ from src.services.stream_queue_forwarder import (
     start_subscription_before_history_replay,
     subscribe_enqueue_and_forward,
 )
-from src.services.stream_reply_queue import RedisReplyQueue
 from src.services.stream_sse_filter import (
     REPLAY_DISCARDED_EVENT_TYPES,
     _dedupe_replayed_terminal_events,
@@ -281,6 +280,7 @@ class ChatStreamService:
         workspace: str | None = None,
         origin: str | None = None,
         delivery: dict | None = None,
+        instruction_tag: TurnInstructionTag = "current-instruction",
         pre_event_hook: Callable[[], None] | None = None,
     ) -> RunHandle | Busy:
         """共享内核：确保会话、占锁、快照边界、写发起事件并组装 job。
@@ -309,6 +309,7 @@ class ChatStreamService:
             images=images,
             workspace_paths=workspace_paths,
             pre_turn_history_event_id=pre_turn_history_event_id,
+            instruction_tag=instruction_tag,
         )
         event = event_writer(task_id, invocation_id)
         job = {
@@ -472,6 +473,7 @@ class ChatStreamService:
             workspace=workspace,
             origin=origin,
             delivery=delivery_payload,
+            instruction_tag="system-reminder",
         )
         if isinstance(handle, Busy):
             logger.info(
@@ -716,9 +718,7 @@ class ChatStreamService:
                 self.sse_format(
                     self._session_wakeup_payload(sid, "session_waiting_snapshot")
                 )
-                for sid in self._sessions_service.list_waiting_or_active_session_ids(
-                    uid
-                )
+                for sid in self._sessions_service.list_live_run_session_ids(uid)
             ]
 
         if not REDIS_URL:
@@ -795,6 +795,20 @@ class ChatStreamService:
                 raise RuntimeError(
                     f"persist bohrium_submit_confirmation failed: session_id={sid}"
                 )
+        effective_submit_confirmation_required = (
+            req.bohrium_submit_confirmation_required
+        )
+        if effective_submit_confirmation_required is None:
+            row = self._sessions_service.get_session(sid)
+            raw_submit_confirmation = (
+                row.get("bohrium_submit_confirmation_required")
+                if isinstance(row, dict)
+                else None
+            )
+            if raw_submit_confirmation is not None:
+                effective_submit_confirmation_required = bool(raw_submit_confirmation)
+        if effective_submit_confirmation_required is None:
+            effective_submit_confirmation_required = False
 
         mode = self._resolve_mode(req.mode)
 
@@ -881,7 +895,7 @@ class ChatStreamService:
             byok_credential_id=byok_credential_id,
             bohrium_required=bohrium_required,
             bohrium_submit_confirmation_required=(
-                req.bohrium_submit_confirmation_required
+                effective_submit_confirmation_required
             ),
             workspace=resolved_directory.remote_workdir,
             origin=None,
@@ -891,8 +905,6 @@ class ChatStreamService:
         if isinstance(handle, Busy):
             return None
 
-        dao = get_redis_dao()
-        dao.delete_interaction_reply_list(sid)
         return SendStreamContext(
             task_id=handle.task_id,
             invocation_id=handle.invocation_id,
@@ -900,14 +912,6 @@ class ChatStreamService:
             user_msg=handle.event,
             job=handle.job,
         )
-
-    def get_reply_queue(self, session_id: str) -> RedisReplyQueue | None:
-        """供 POST /ask_question_reply 写入使用；无活跃 run 时返回 None。仅 Worker 队列模式，由 Redis run_active 判定。"""
-        if not REDIS_URL:
-            return None
-        if get_redis_dao().is_interaction_run_active(session_id):
-            return RedisReplyQueue(session_id)
-        return None
 
     def get_run_context(self, session_id: str) -> dict | None:
         """当前 run 的 task_id / invocation_id。仅 Worker 队列模式，从 Redis 取。供写入历史等用。"""

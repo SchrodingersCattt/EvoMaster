@@ -476,9 +476,9 @@ class TestRunItemsAssistantState:
 
         provider = RecordingContentProvider()
         task = (
-            "<user_instructions>\nUse SI units.\n</user_instructions>"
+            "<user-instructions>\nUse SI units.\n</user-instructions>"
             "\n\n"
-            "<current_instruction>\nfit structure\n</current_instruction>"
+            "<current-instruction>\nfit structure\n</current-instruction>"
         )
         kernel_runtime = make_kernel_runtime(provider=provider)
         kernel = AgentKernel()

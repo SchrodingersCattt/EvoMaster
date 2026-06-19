@@ -42,7 +42,7 @@ logger = logging.getLogger(__name__)
 _EMPTY_USER_INSTRUCTIONS_HASH = hash_user_instructions("")
 
 SUMMARY_USER_REQUEST_TEMPLATE = """\
-<compact_request>
+<compact-request>
 当前会话上下文已接近上限，需要你对所有对话进行压缩。请按以下要求输出
 一份结构化摘要，后续对话将以输出的摘要作为历史背景继续，使用的语言需要
 同之前用户使用的语言维持一致。
@@ -59,11 +59,11 @@ SUMMARY_USER_REQUEST_TEMPLATE = """\
 - 不要调用任何工具
 - 不要继续推进工具调用未完成的任务，只对其结果做总结
 - 不要新增没有提到的信息
-</compact_request>\
+</compact-request>\
 """
 
 _SUMMARY_USER_REQUEST_TEMPLATE_EN_RESERVED = """\
-<compact_request>
+<compact-request>
 The conversation context above is approaching the limit. Please produce a
 structured summary; subsequent dialogue will treat your summary as the
 historical context. Match the language of the conversation above.
@@ -80,10 +80,10 @@ Output requirements:
 - Do not call any tools (disabled at API level even if tools appear relevant).
 - Do not continue any in-flight tool-driven reasoning; only summarize results.
 - Do not add information not present above.
-- If the conversation above starts with a <compacted_history> block, merge it
+- If the conversation above starts with a <compacted-history> block, merge it
   with later events into a single fresh summary; do not copy the old block
   verbatim.
-</compact_request>\
+</compact-request>\
 """
 
 _TRUNCATE_HEAD_CHARS = 1200
@@ -93,7 +93,7 @@ _IMAGE_TOKEN_ESTIMATE = 2000
 
 CURRENT_INPUT_CONTINUATION_INSTRUCTION = (
     "不要向用户复述上述摘要，除非用户明确要求。"
-    "当前用户指令位于下面的 <current_instruction> 块中；"
+    "当前用户指令位于下面的 <current-instruction> 块中；"
     "请基于摘要背景直接执行该指令。"
 )
 
@@ -318,9 +318,6 @@ def prepare_messages_for_summary_call(
         prepared_tokens = estimate_tokens(working, safety_margin=1.0)
         if prepared_tokens <= message_budget:
             break
-
-    if prepared_tokens > message_budget:
-        raise ValueError("summary input exceeds context window after tool truncation")
 
     return SummaryInputPreparation(
         messages=working,

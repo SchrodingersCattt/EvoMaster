@@ -59,9 +59,9 @@ def test_build_sections_returns_attachments_skills_tools_in_order() -> None:
     sections = builder.build_sections(until_event_id=None, include_attachments=True)
 
     keys = tuple(section.key for section in sections)
-    assert "session_skills" in keys
-    assert "session_tools" in keys
-    assert "session_attachments" in keys
+    assert "session-skills" in keys
+    assert "session-tools" in keys
+    assert "session-attachments" in keys
 
 
 def test_session_context_builder_renders_skills_section() -> None:
@@ -74,7 +74,7 @@ def test_session_context_builder_renders_skills_section() -> None:
 
     sections = builder.build_sections(until_event_id=None, include_attachments=False)
 
-    assert any(section.tag == "loaded_skills" for section in sections)
+    assert any(section.tag == "loaded-skills" for section in sections)
 
 
 def test_build_sections_until_event_id_truncates_attachments() -> None:
@@ -86,7 +86,7 @@ def test_build_sections_until_event_id_truncates_attachments() -> None:
     )
 
     sections = builder.build_sections(until_event_id=10, include_attachments=True)
-    attachments = next(s for s in sections if s.key == "session_attachments")
+    attachments = next(s for s in sections if s.key == "session-attachments")
 
     assert "a.csv" in attachments.content
     assert "b.csv" not in attachments.content
@@ -114,7 +114,7 @@ def test_build_sections_exclude_attachments_drops_section() -> None:
     sections = builder.build_sections(until_event_id=None, include_attachments=False)
 
     keys = tuple(section.key for section in sections)
-    assert "session_attachments" not in keys
+    assert "session-attachments" not in keys
 
 
 def test_build_sections_empty_inputs_returns_empty_tuple() -> None:

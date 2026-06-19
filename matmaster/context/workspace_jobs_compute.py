@@ -30,8 +30,21 @@ CSV_COLUMNS: tuple[str, ...] = (
 )
 
 SUMMARY_COLUMNS: tuple[str, ...] = ("job_id", "job_name", "status")
+PREVIEW_COLUMNS: tuple[str, ...] = ("group", *SUMMARY_COLUMNS)
 
 _ACTION_STATUSES = ("failed", "lost", "stopped")
+REQUIRED_TRUNCATED_HINT = (
+    "Workspace required context hit the safety cap and may be incomplete; some "
+    "required jobs are absent from both this summary and the exported CSV."
+)
+HANDLED_RECENT_HINT = (
+    "handled_recent_terminal is reference-only history truncated to "
+    "HANDLED_RECENT_LIMIT; older handled jobs are intentionally omitted."
+)
+HANDLED_RECENT_UNAVAILABLE_HINT = (
+    "handled_recent_terminal reference history could not be loaded; required "
+    "active/unhandled context is still present if no required_context_error exists."
+)
 
 
 def render_job_json(job: Mapping[str, JsonValue]) -> str:
@@ -43,34 +56,39 @@ def summary_to_dict(s: WorkspaceJobsSummary) -> dict[str, JsonValue]:
     return {
         "total": s.total,
         "active": s.active,
-        "pending_terminal": s.pending_terminal,
-        "recent_terminal": s.recent_terminal,
+        "unhandled_terminal": s.unhandled_terminal,
+        "handled_recent_terminal": s.handled_recent_terminal,
         "by_status": dict(s.by_status),
         "failed": s.failed,
         "stopped": s.stopped,
         "lost": s.lost,
+        "unhandled_action": s.unhandled_action,
     }
 
 
 def compute_summary(
     active: tuple[JsonObject, ...],
-    pending: tuple[JsonObject, ...],
-    recent: tuple[JsonObject, ...],
+    unhandled: tuple[JsonObject, ...],
+    handled_recent: tuple[JsonObject, ...],
 ) -> WorkspaceJobsSummary:
     by_status: dict[str, int] = {}
-    for group in (active, pending, recent):
+    for group in (active, unhandled, handled_recent):
         for job in group:
             status = str(job.get("status"))
             by_status[status] = by_status.get(status, 0) + 1
+    unhandled_action = sum(
+        1 for job in unhandled if str(job.get("status")) in _ACTION_STATUSES
+    )
     return WorkspaceJobsSummary(
-        total=len(active) + len(pending) + len(recent),
+        total=len(active) + len(unhandled) + len(handled_recent),
         active=len(active),
-        pending_terminal=len(pending),
-        recent_terminal=len(recent),
+        unhandled_terminal=len(unhandled),
+        handled_recent_terminal=len(handled_recent),
         by_status=by_status,
         failed=by_status.get("failed", 0),
         stopped=by_status.get("stopped", 0),
         lost=by_status.get("lost", 0),
+        unhandled_action=unhandled_action,
     )
 
 
@@ -87,7 +105,10 @@ def render_csv_block(
     return (f"{label} {','.join(columns)}", *buf.getvalue().splitlines())
 
 
-def render_inline_lines(jobs: WorkspaceJobs) -> tuple[str, ...]:
+def render_head_lines(jobs: WorkspaceJobs) -> list[str]:
+    """workspace/mode/summary + required/handled flags + hints。inline 与
+    compact/error 三态共用的唯一头部块，新增 flag 只在此处改一次。
+    """
     lines: list[str] = []
     if jobs.workspace:
         lines.append(f"workspace {jobs.workspace}")
@@ -95,10 +116,45 @@ def render_inline_lines(jobs: WorkspaceJobs) -> tuple[str, ...]:
         lines.append(f"mode {jobs.mode}")
     if jobs.summary is not None:
         lines.append(f"summary {render_job_json(summary_to_dict(jobs.summary))}")
+    if jobs.required_error is not None:
+        lines.append(
+            f"required_context_error {render_job_json(dict(jobs.required_error))}"
+        )
+    lines.append(f"required_truncated {str(jobs.required_truncated).lower()}")
+    lines.append(f"handled_recent_has_more {str(jobs.handled_recent_has_more).lower()}")
+    lines.append(
+        f"handled_recent_unavailable {str(jobs.handled_recent_unavailable).lower()}"
+    )
+    if jobs.required_truncated:
+        lines.append(f'required_truncated_hint "{REQUIRED_TRUNCATED_HINT}"')
+    if jobs.handled_recent_has_more:
+        lines.append(f'handled_recent_hint "{HANDLED_RECENT_HINT}"')
+    if jobs.handled_recent_unavailable:
+        lines.append(
+            f'handled_recent_unavailable_hint "{HANDLED_RECENT_UNAVAILABLE_HINT}"'
+        )
+    return lines
+
+
+def render_inline_lines(jobs: WorkspaceJobs) -> tuple[str, ...]:
+    has_workspace_job_content = bool(
+        jobs.mode
+        or jobs.summary is not None
+        or jobs.active_jobs
+        or jobs.unhandled_terminal_jobs
+        or jobs.handled_recent_terminal_jobs
+        or jobs.required_error is not None
+        or jobs.required_truncated
+        or jobs.handled_recent_has_more
+        or jobs.handled_recent_unavailable
+    )
+    if not has_workspace_job_content:
+        return ()
+    lines = render_head_lines(jobs)
     for label, group in (
         ("active", jobs.active_jobs),
-        ("pending_terminal", jobs.pending_terminal_jobs),
-        ("recent_terminal", jobs.recent_terminal_jobs),
+        ("unhandled_terminal", jobs.unhandled_terminal_jobs),
+        ("handled_recent_terminal", jobs.handled_recent_terminal_jobs),
     ):
         if group:
             lines.extend(render_csv_block(label, SUMMARY_COLUMNS, group))
@@ -114,39 +170,106 @@ def _with_group(job: JsonObject, group: str) -> dict[str, JsonValue]:
     return {"group": group, **job}
 
 
-def select_priority_samples(
-    active: tuple[JsonObject, ...],
-    pending: tuple[JsonObject, ...],
-    recent: tuple[JsonObject, ...],
+def select_observation_preview_rows(
     *,
-    action_limit: int,
-    fill_limit: int,
+    active: tuple[JsonObject, ...],
+    unhandled_terminal: tuple[JsonObject, ...],
+    handled_recent_terminal: tuple[JsonObject, ...],
+    limit: int,
 ) -> tuple[JsonObject, ...]:
-    """行动关键样本（pending 的 failed/lost/stopped）优先全内联，受 action_limit
-    约束；其余按 pending(非 action) → active → recent 顺序填充，受 fill_limit 约束。
-    样本只渲染 job_id/job_name/status，不加 group。
+    """observation compact preview。顺序：unhandled action -> active ->
+    unhandled other -> handled recent。每行在选择阶段打上来源 group，renderer
+    不得从裸 job 反推 bucket。
     """
-    action = [j for j in pending if str(j.get("status")) in _ACTION_STATUSES][
-        :action_limit
+    unhandled_action = [
+        _with_group(j, "unhandled_terminal")
+        for j in unhandled_terminal
+        if str(j.get("status")) in _ACTION_STATUSES
     ]
-    fill_candidates = (
-        [j for j in pending if str(j.get("status")) not in _ACTION_STATUSES]
-        + list(active)
-        + list(recent)
-    )
-    return tuple(action + fill_candidates[:fill_limit])
+    unhandled_other = [
+        _with_group(j, "unhandled_terminal")
+        for j in unhandled_terminal
+        if str(j.get("status")) not in _ACTION_STATUSES
+    ]
+    active_rows = [_with_group(j, "active") for j in active]
+    handled_recent_rows = [
+        _with_group(j, "handled_recent_terminal") for j in handled_recent_terminal
+    ]
+    selected: list[JsonObject] = []
+    for pool in (unhandled_action, active_rows, unhandled_other, handled_recent_rows):
+        remaining = limit - len(selected)
+        if remaining <= 0:
+            break
+        selected.extend(pool[:remaining])
+    return tuple(selected)
+
+
+def select_delivery_preview_rows(
+    rows: tuple[JsonObject, ...],
+    *,
+    limit: int,
+) -> tuple[JsonObject, ...]:
+    """delivery compact preview：只取 failed/lost/stopped，单 bucket 不打 group。"""
+    action = [j for j in rows if str(j.get("status")) in _ACTION_STATUSES]
+    return tuple(action[:limit])
+
+
+_PREVIEW_TRUNCATION_MARKER = "...<truncated>"
+PREVIEW_FIELD_CHAR_LIMIT = 240
+
+
+def _truncate_preview_cell(value: JsonValue) -> JsonValue:
+    if not isinstance(value, str):
+        return value
+    if len(value) <= PREVIEW_FIELD_CHAR_LIMIT:
+        return value
+    keep = max(0, PREVIEW_FIELD_CHAR_LIMIT - len(_PREVIEW_TRUNCATION_MARKER))
+    return value[:keep] + _PREVIEW_TRUNCATION_MARKER
+
+
+def _truncate_preview_row(
+    row: JsonObject,
+    columns: tuple[str, ...],
+) -> dict[str, JsonValue]:
+    out = dict(row)
+    for column in columns:
+        out[column] = _truncate_preview_cell(out.get(column))
+    return out
+
+
+def trim_preview_rows_to_char_limit(
+    rows: tuple[JsonObject, ...],
+    *,
+    columns: tuple[str, ...],
+    char_limit: int,
+) -> tuple[JsonObject, ...]:
+    """Bound rendered compact preview. CSV remains the complete snapshot.
+
+    Render each row once and accumulate the joined length (header + one line per
+    row, newline-separated) instead of re-rendering the whole block per row.
+    """
+    truncated = [_truncate_preview_row(row, columns) for row in rows]
+    header, *row_lines = render_csv_block("preview_rows", columns, truncated)
+    selected: list[JsonObject] = []
+    rendered_len = len(header)
+    for row, line in zip(truncated, row_lines):
+        rendered_len += 1 + len(line)
+        if rendered_len > char_limit:
+            break
+        selected.append(row)
+    return tuple(selected)
 
 
 def build_csv_rows(
     active: tuple[JsonObject, ...],
-    pending: tuple[JsonObject, ...],
-    recent: tuple[JsonObject, ...],
+    unhandled: tuple[JsonObject, ...],
+    handled_recent: tuple[JsonObject, ...],
 ) -> list[dict[str, JsonValue]]:
     rows: list[dict[str, JsonValue]] = []
     for group, items in (
         ("active", active),
-        ("pending_terminal", pending),
-        ("recent_terminal", recent),
+        ("unhandled_terminal", unhandled),
+        ("handled_recent_terminal", handled_recent),
     ):
         for job in items:
             rows.append(_with_group(job, group))

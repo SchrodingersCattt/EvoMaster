@@ -58,7 +58,7 @@ class Compactor:
 
         messages[:] = [
             messages[0],
-            UserMessage(content="<compacted_history>summary</compacted_history>"),
+            UserMessage(content="<compacted-history>summary</compacted-history>"),
         ]
         return CompactionResult(
             compaction_id=plan.compaction_id,
@@ -254,25 +254,29 @@ async def test_compaction_plan_runner_passes_configured_summary_safety_margin(
 
 
 @pytest.mark.asyncio
-async def test_compaction_plan_runner_preflight_summary_failure_raises() -> None:
+async def test_compaction_plan_runner_preflight_summary_failure_uses_fallback() -> None:
     provider = Provider(RuntimeError("network down"))
     compactor = Compactor()
     state = _KernelState(
         messages=[SystemMessage(content="sys"), UserMessage(content="old")]
     )
 
-    with pytest.raises(RuntimeError, match="network down"):
-        async for _item in run_compaction_plan(
+    events = [
+        item.event
+        async for item in run_compaction_plan(
             kernel_spec=_kernel_spec(),
             kernel_resources=_kernel_resources(provider, compactor),
             state=state,
             plan=_plan("preflight"),
             checkpoint_sink=None,
             tool_definitions=None,
-        ):
-            pass
+        )
+    ]
 
-    assert compactor.fallback_calls == []
+    assert compactor.summary_calls == []
+    assert compactor.fallback_calls[0][1] == "network down"
+    assert events[-1].phase == "preflight"
+    assert events[-1].strategy == "sliding_window"
 
 
 @pytest.mark.asyncio

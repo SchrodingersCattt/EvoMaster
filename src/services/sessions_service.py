@@ -404,9 +404,14 @@ class ChatSessionsService:
         uid = row.get("user_id")
         return str(uid) if uid is not None else None
 
-    def list_waiting_or_active_session_ids(self, user_id: str) -> list[str]:
-        """该用户名下仍在 waiting 或 active 的 session_id。"""
-        return self.table.list_session_ids_by_status(user_id, ["waiting", "active"])
+    def list_live_run_session_ids(self, user_id: str) -> list[str]:
+        """该用户名下确实还有在途 run 的 session_id（用于 wakeup snapshot）。
+
+        先取 DB 中 waiting/active 的会话，再用 is_session_run_live 过滤掉
+        部署/重启后残留（run 已不存在）的，避免快照一连上就误报一堆旧会话。
+        """
+        raw = self.table.list_session_ids_by_status(user_id, ["waiting", "active"])
+        return [sid for sid in raw if self.is_session_run_live(sid)]
 
     def set_session_bohrium(
         self,
@@ -657,6 +662,21 @@ class ChatSessionsService:
         if owner is None or owner == get_worker_id():
             return False
         return registry.is_worker_alive(owner)
+
+    def is_session_run_live(self, session_id: str) -> bool:
+        """该会话当前是否真有在途 run（只读，绝不改库）。
+
+        queued（已入队）/ 本 pod 在跑 / 别的存活 pod 在跑，任一为真即视为存活；
+        三者皆否说明上一轮 run 已随部署/重启消失，是残留 waiting/active，交由既有懒恢复处理：
+        active 残留打开时经 generate_subscribe_stream 的 is_stale 分支重置并发 run_interrupted；
+        waiting 残留在状态读取时由 reconcile_waiting_status 静默重置 idle（不发提示）。
+        """
+        sid = session_id.strip()
+        if REDIS_URL and get_redis_dao().is_session_run_queued(sid):
+            return True
+        if self.is_session_running_on_this_pod(sid):
+            return True
+        return self.is_session_run_on_another_pod(sid)
 
     def reset_session_status_to_idle_in_db(self, session_id: str) -> None:
         """

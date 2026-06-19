@@ -2,21 +2,18 @@ from __future__ import annotations
 
 import asyncio
 import json
+from unittest.mock import patch
 
 import pytest
 from pydantic import ValidationError
 
-from src.apis.chat_api import ask_question_reply, router
-from src.models.chat import ChatAskQuestionReplyRequest
-from src.utils.exceptions import ConflictErrorResponse, ForbiddenErrorResponse
-
-
-class _ReplyQueue:
-    def __init__(self) -> None:
-        self.values: list[str] = []
-
-    def put_content(self, content: str) -> None:
-        self.values.append(content)
+from src.apis.chat_api import interaction_reply, router
+from src.models.chat import InteractionReplyRequest
+from src.utils.exceptions import (
+    ConflictErrorResponse,
+    ForbiddenErrorResponse,
+    NotFoundErrorResponse,
+)
 
 
 class _ChatSvc:
@@ -28,15 +25,8 @@ class _ChatSvc:
 
 
 class _StreamSvc:
-    def __init__(self, queue: _ReplyQueue | None = None) -> None:
-        self.queue = queue
+    def __init__(self) -> None:
         self.published: list[tuple[str, dict]] = []
-
-    def get_reply_queue(self, session_id: str):
-        return self.queue
-
-    def get_run_context(self, session_id: str) -> dict:
-        return {"task_id": "task-1", "invocation_id": "inv-1"}
 
     def publish_reply_event(self, session_id: str, payload: dict) -> None:
         self.published.append((session_id, payload))
@@ -56,82 +46,181 @@ class _EventsSvc:
         self.history.append((session_id, payload, user_id))
 
 
-def _ask_question_req() -> ChatAskQuestionReplyRequest:
-    return ChatAskQuestionReplyRequest(
-        request_id="aq_1",
-        answers={"Q1": "A1"},
-        annotations={"Q1": {"freeform": "notes"}},
+class _RedisDao:
+    def __init__(self) -> None:
+        self.records: dict[str, dict[str, str]] = {}
+        self.envelopes: list[tuple[str, str]] = []
+
+    def read_pending_interaction(self, request_id: str) -> dict | None:
+        return self.records.get(request_id)
+
+    def answer_pending_interaction(self, request_id: str, envelope: str) -> str:
+        record = self.records.get(request_id)
+        if record is None:
+            return "not_found"
+        if record.get("state") != "pending":
+            return "not_pending"
+        record["state"] = "answered"
+        self.envelopes.append((request_id, envelope))
+        return "ok"
+
+
+def _pending_record(
+    *,
+    session_id: str = "sess-1",
+    kind: str = "ask_question",
+    state: str = "pending",
+) -> dict[str, str]:
+    return {
+        "kind": kind,
+        "session_id": session_id,
+        "task_id": "task-1",
+        "invocation_id": "inv-1",
+        "state": state,
+        "expires_at": "",
+    }
+
+
+def _reply_req(kind: str = "ask_question") -> InteractionReplyRequest:
+    return InteractionReplyRequest(
+        kind=kind,
+        payload={
+            "answers": {"Q1": "A1"},
+            "annotations": {"Q1": {"freeform": "notes"}},
+        },
     )
 
 
-def test_ask_question_reply_publishes_structured_content_and_json_queue_value() -> None:
-    queue = _ReplyQueue()
-    stream = _StreamSvc(queue)
+def test_interaction_reply_publishes_structured_event_and_reply_envelope() -> None:
+    dao = _RedisDao()
+    dao.records["aq_1"] = _pending_record()
+    stream = _StreamSvc()
     events = _EventsSvc()
 
-    asyncio.run(
-        ask_question_reply(
-            session_id="sess-1",
-            req=_ask_question_req(),
-            user_id="user-1",
-            chat_svc=_ChatSvc(),
-            stream_svc=stream,
-            events_svc=events,
+    with patch("src.apis.chat_api.get_redis_dao", return_value=dao):
+        asyncio.run(
+            interaction_reply(
+                session_id="sess-1",
+                request_id="aq_1",
+                req=_reply_req(),
+                user_id="user-1",
+                chat_svc=_ChatSvc(),
+                stream_svc=stream,
+                events_svc=events,
+            )
         )
-    )
 
     payload = stream.published[0][1]
-    assert payload["type"] == "ask_question_reply"
-    assert payload["content"] == {
+    assert payload["type"] == "interaction_reply"
+    assert payload["kind"] == "ask_question"
+    assert payload["request_id"] == "aq_1"
+    assert payload["payload"] == _reply_req().payload
+    assert payload["task_id"] == "task-1"
+    assert payload["invocation_id"] == "inv-1"
+    assert json.loads(dao.envelopes[0][1]) == {
+        "kind": "ask_question",
         "request_id": "aq_1",
-        "answers": {"Q1": "A1"},
-        "annotations": {"Q1": {"freeform": "notes"}},
+        "payload": _reply_req().payload,
     }
-    assert json.loads(queue.values[0]) == {"payload": payload["content"]}
     assert events.history == [("sess-1", payload, "user-1")]
 
 
-def test_ask_question_reply_rejects_empty_request_id() -> None:
-    with pytest.raises(ValidationError, match="request_id"):
-        ChatAskQuestionReplyRequest(request_id=" ", answers={"Q1": "A1"})
-
-
-def test_ask_question_reply_requires_answers_or_annotations() -> None:
-    with pytest.raises(ValidationError, match="answers"):
-        ChatAskQuestionReplyRequest(request_id="aq_1")
+def test_interaction_reply_rejects_empty_kind() -> None:
+    with pytest.raises(ValidationError, match="kind"):
+        InteractionReplyRequest(kind=" ", payload={})
 
 
 def test_reply_endpoint_rejects_inaccessible_session() -> None:
     with pytest.raises(ForbiddenErrorResponse):
         asyncio.run(
-            ask_question_reply(
+            interaction_reply(
                 session_id="sess-1",
-                req=_ask_question_req(),
+                request_id="aq_1",
+                req=_reply_req(),
                 user_id="user-1",
                 chat_svc=_ChatSvc(allowed=False),
-                stream_svc=_StreamSvc(_ReplyQueue()),
+                stream_svc=_StreamSvc(),
                 events_svc=_EventsSvc(),
             )
         )
 
 
-def test_reply_endpoint_rejects_missing_active_run() -> None:
-    with pytest.raises(ConflictErrorResponse):
-        asyncio.run(
-            ask_question_reply(
-                session_id="sess-1",
-                req=_ask_question_req(),
-                user_id="user-1",
-                chat_svc=_ChatSvc(),
-                stream_svc=_StreamSvc(queue=None),
-                events_svc=_EventsSvc(),
+def test_reply_404_when_request_not_found() -> None:
+    with patch("src.apis.chat_api.get_redis_dao", return_value=_RedisDao()):
+        with pytest.raises(NotFoundErrorResponse):
+            asyncio.run(
+                interaction_reply(
+                    session_id="sess-1",
+                    request_id="aq_missing",
+                    req=_reply_req(),
+                    user_id="user-1",
+                    chat_svc=_ChatSvc(),
+                    stream_svc=_StreamSvc(),
+                    events_svc=_EventsSvc(),
+                )
             )
-        )
+
+
+def test_reply_409_when_kind_mismatch() -> None:
+    dao = _RedisDao()
+    dao.records["aq_K"] = _pending_record(kind="ask_question")
+
+    with patch("src.apis.chat_api.get_redis_dao", return_value=dao):
+        with pytest.raises(ConflictErrorResponse):
+            asyncio.run(
+                interaction_reply(
+                    session_id="sess-1",
+                    request_id="aq_K",
+                    req=_reply_req(kind="submit_review"),
+                    user_id="user-1",
+                    chat_svc=_ChatSvc(),
+                    stream_svc=_StreamSvc(),
+                    events_svc=_EventsSvc(),
+                )
+            )
+
+
+def test_reply_409_when_not_pending() -> None:
+    dao = _RedisDao()
+    dao.records["aq_L"] = _pending_record(state="timeout")
+
+    with patch("src.apis.chat_api.get_redis_dao", return_value=dao):
+        with pytest.raises(ConflictErrorResponse):
+            asyncio.run(
+                interaction_reply(
+                    session_id="sess-1",
+                    request_id="aq_L",
+                    req=_reply_req(),
+                    user_id="user-1",
+                    chat_svc=_ChatSvc(),
+                    stream_svc=_StreamSvc(),
+                    events_svc=_EventsSvc(),
+                )
+            )
+
+
+def test_reply_404_when_session_mismatch() -> None:
+    dao = _RedisDao()
+    dao.records["aq_M"] = _pending_record(session_id="other-session")
+
+    with patch("src.apis.chat_api.get_redis_dao", return_value=dao):
+        with pytest.raises(NotFoundErrorResponse):
+            asyncio.run(
+                interaction_reply(
+                    session_id="sess-1",
+                    request_id="aq_M",
+                    req=_reply_req(),
+                    user_id="user-1",
+                    chat_svc=_ChatSvc(),
+                    stream_svc=_StreamSvc(),
+                    events_svc=_EventsSvc(),
+                )
+            )
 
 
 def test_legacy_reply_route_is_removed() -> None:
     paths = {getattr(route, "path", "") for route in router.routes}
-    removed_path = "/{session_id}/" + "confirmation" + "_reply"
+    removed_path = "/{session_id}/" + "ask_question" + "_reply"
 
     assert removed_path not in paths
-    assert "/{session_id}/ask_question_reply" in paths
+    assert "/{session_id}/interactions/{request_id}/reply" in paths

@@ -86,6 +86,7 @@ def _step_turn_input(inputs: ContextCompositionInputs) -> tuple[ContextSection, 
             instruction=TurnInstructionSource(
                 user_text=delivery_text,
                 deferred=turn_input.instruction.deferred,
+                tag=turn_input.instruction.tag,
             ),
         )
     if inputs.defer_turn_instruction:
