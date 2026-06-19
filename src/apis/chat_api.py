@@ -12,9 +12,9 @@ from src.apis.sse_compression import gzip_sse_stream, should_gzip_sse
 from src.base.base_res import BaseResponse
 from src.dao.redis_dao import get_redis_dao
 from src.models.chat import (
-    ChatAskQuestionReplyRequest,
     ChatSendRequest,
     ErrorApiResponse,
+    InteractionReplyRequest,
     RunStatusApiResponse,
     RunStatusData,
     SessionDirectoryApiResponse,
@@ -75,6 +75,7 @@ COMMON_ERROR_RESPONSES = {
 
 
 router = APIRouter(tags=["Chat Sessions"])
+_MAX_REPLY_PAYLOAD_BYTES = 256 * 1024
 
 SSE_HEADERS = {
     "Cache-Control": "no-cache",
@@ -467,69 +468,37 @@ def stop_session(
     session_id: str = Path(..., description="会话 ID", examples=["session-001"]),
     user_id: str | None = Depends(UserService.optional_user_id),
     chat_svc: ChatSessionsService = Depends(get_sessions_service),
-    stream_svc: ChatStreamService = Depends(get_stream_service),
 ):
     """终止该会话当前正在运行的任务。有权限访问即可调用；多 worker 时通过 Redis 广播，始终返回 200。
-    若当前正在等待用户交互回复，会向回复队列投递取消哨兵以立即唤醒阻塞线程。"""
+    若当前正在等待用户交互回复，会向 per-request reply key 投递取消哨兵以立即唤醒阻塞线程。"""
     sid = session_id.strip()
     if not chat_svc.can_access_session(sid, user_id):
         raise ForbiddenErrorResponse(msg="无权限访问该会话")
-    reply_queue = stream_svc.get_reply_queue(sid)
-    if reply_queue is not None:
-        try:
-            reply_queue.put_cancel()
-        except Exception:
-            pass
+    dao = get_redis_dao()
+    active_request_id = dao.get_active_interaction(sid)
+    if active_request_id:
+        dao.finalize_interaction(active_request_id, "cancelled")
+        dao.rpush_interaction_cancel(active_request_id)
     chat_svc.stop_session_run(sid)
     return BaseResponse(msg="ok")
 
 
-def _submit_interaction_reply(
-    *,
-    sid: str,
-    event_type: str,
-    content: str | dict,
-    queue_value: str,
-    stream_svc: ChatStreamService,
-    events_svc: ChatEventsService,
-    user_id: str | None,
-) -> None:
-    reply_queue = stream_svc.get_reply_queue(sid)
-    if reply_queue is None:
-        raise ConflictErrorResponse(
-            msg="当前无活跃任务，或任务已结束",
-        )
-
-    payload = {
-        "source": "User",
-        "type": event_type,
-        "content": content,
-        "session_id": sid,
-    }
-    run_ctx = stream_svc.get_run_context(sid)
-    if run_ctx:
-        payload["task_id"] = run_ctx.get("task_id")
-        payload["invocation_id"] = run_ctx.get("invocation_id")
-
-    stream_svc.publish_reply_event(sid, payload)
-    reply_queue.put_content(queue_value)
-    events_svc.add_history_event(sid, payload, user_id=user_id)
-
-
 @router.post(
-    "/{session_id}/ask_question_reply",
+    "/{session_id}/interactions/{request_id}/reply",
     response_model=BaseResponse,
-    summary="提交结构化问答回复",
-    description="当会话流返回 ask_question 时，调用本接口提交结构化答案，Agent 会继续执行。",
-    operation_id="replyChatSessionAskQuestion",
+    summary="提交交互回复",
+    description="对 interaction_request 提交回复，Agent 会继续执行。",
+    operation_id="replyChatSessionInteraction",
     responses={
         403: COMMON_ERROR_RESPONSES[403],
+        404: COMMON_ERROR_RESPONSES[404],
         409: COMMON_ERROR_RESPONSES[409],
     },
 )
-async def ask_question_reply(
+async def interaction_reply(
     session_id: str = Path(..., description="会话 ID", examples=["session-001"]),
-    req: ChatAskQuestionReplyRequest = Body(...),
+    request_id: str = Path(..., description="交互请求 ID", examples=["aq_xxx"]),
+    req: InteractionReplyRequest = Body(...),
     user_id: str | None = Depends(UserService.optional_user_id),
     chat_svc: ChatSessionsService = Depends(get_sessions_service),
     stream_svc: ChatStreamService = Depends(get_stream_service),
@@ -538,20 +507,42 @@ async def ask_question_reply(
     sid = session_id.strip()
     if not chat_svc.can_access_session(sid, user_id):
         raise ForbiddenErrorResponse(msg="无权限访问该会话")
-    content = {
-        "request_id": req.request_id,
-        "answers": req.answers,
-        "annotations": req.annotations,
-    }
-    _submit_interaction_reply(
-        sid=sid,
-        event_type="ask_question_reply",
-        content=content,
-        queue_value=json.dumps({"payload": content}, ensure_ascii=False),
-        stream_svc=stream_svc,
-        events_svc=events_svc,
-        user_id=user_id,
+    dao = get_redis_dao()
+    record = dao.read_pending_interaction(request_id)
+    if record is None:
+        raise NotFoundErrorResponse(msg="交互请求不存在或已过期")
+    if record.get("session_id") != sid:
+        raise NotFoundErrorResponse(msg="交互请求不存在或已过期")
+    if record.get("kind") != req.kind:
+        raise ConflictErrorResponse(msg="交互类型不匹配")
+    if (
+        len(json.dumps(req.payload, ensure_ascii=False).encode())
+        > _MAX_REPLY_PAYLOAD_BYTES
+    ):
+        raise ConflictErrorResponse(msg="回复内容过大")
+
+    envelope = json.dumps(
+        {"kind": req.kind, "request_id": request_id, "payload": req.payload},
+        ensure_ascii=False,
     )
+    result = dao.answer_pending_interaction(request_id, envelope)
+    if result == "not_found":
+        raise NotFoundErrorResponse(msg="交互请求不存在或已过期")
+    if result == "not_pending":
+        raise ConflictErrorResponse(msg="交互已 answered/timeout/cancelled")
+
+    reply_event = {
+        "source": "User",
+        "type": "interaction_reply",
+        "kind": req.kind,
+        "request_id": request_id,
+        "payload": req.payload,
+        "session_id": sid,
+        "task_id": record.get("task_id"),
+        "invocation_id": record.get("invocation_id"),
+    }
+    stream_svc.publish_reply_event(sid, reply_event)
+    events_svc.add_history_event(sid, reply_event, user_id=user_id)
     return BaseResponse(msg="ok")
 
 

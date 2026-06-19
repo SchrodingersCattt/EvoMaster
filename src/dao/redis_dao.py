@@ -1,5 +1,6 @@
 """Redis 连接与发布（DAO 层：仅负责与 Redis 的 I/O）。
-另提供 interaction reply 多 worker 用：run_active 标记、run_context（task_id/invocation_id）、回复 list 的读写。
+另提供 interaction 多 worker 用：run_active 标记、run_context 与 per-request
+交互传输原语。
 """
 
 import json
@@ -17,11 +18,14 @@ logger = logging.getLogger(__name__)
 REDIS_HEALTH_CHECK_INTERVAL_SEC = 30
 
 # interaction reply 多 worker：Redis key 与取消占位值
-INTERACTION_RUN_ACTIVE_KEY = "chat:run_active:{session_id}"
 INTERACTION_RUN_CONTEXT_KEY = "chat:run_context:{session_id}"
-INTERACTION_REPLY_LIST_KEY = "chat:confirmation_reply:{session_id}"
 INTERACTION_CANCEL_VALUE = "__CANCEL__"
 INTERACTION_RUN_ACTIVE_TTL_SEC = 3600
+HUMAN_INTERACTION_KEY = "human_interaction:{request_id}"
+INTERACTION_REPLY_KEY = "interaction_reply:{request_id}"
+HUMAN_INTERACTION_ACTIVE_KEY = "human_interaction_active:{session_id}"
+INTERACTION_TERMINAL_TTL = 300
+INTERACTION_REPLY_BUFFER = 60
 
 # 多 worker 时 run 所在 pod 向其它 pod 的 subscribe 流推送事件（Pub/Sub）
 STREAM_CHANNEL_PREFIX = "chat:stream:"
@@ -45,20 +49,24 @@ INTERRUPT_CONFIRM_KEY_PREFIX = "chat:interrupt_confirm:"
 INTERRUPT_CONFIRM_TTL_SEC = 10
 
 
-def _run_active_key(session_id: str) -> str:
-    return INTERACTION_RUN_ACTIVE_KEY.format(session_id=session_id.strip())
-
-
 def _run_context_key(session_id: str) -> str:
     return INTERACTION_RUN_CONTEXT_KEY.format(session_id=session_id.strip())
 
 
-def _reply_list_key(session_id: str) -> str:
-    return INTERACTION_REPLY_LIST_KEY.format(session_id=session_id.strip())
-
-
 def _stop_key(session_id: str, task_id: str) -> str:
     return AGENT_STOP_KEY_PREFIX + session_id.strip() + ":" + (task_id or "").strip()
+
+
+def _human_interaction_key(request_id: str) -> str:
+    return HUMAN_INTERACTION_KEY.format(request_id=request_id)
+
+
+def _interaction_reply_key(request_id: str) -> str:
+    return INTERACTION_REPLY_KEY.format(request_id=request_id)
+
+
+def _human_interaction_active_key(session_id: str) -> str:
+    return HUMAN_INTERACTION_ACTIVE_KEY.format(session_id=session_id)
 
 
 def user_wakeup_channel(user_id: str) -> str:
@@ -75,6 +83,40 @@ def _interrupt_hint_key(session_id: str) -> str:
 
 def _interrupt_confirm_key(session_id: str) -> str:
     return INTERRUPT_CONFIRM_KEY_PREFIX + (session_id or "").strip()
+
+
+_ANSWER_PENDING_LUA = """
+if redis.call('EXISTS', KEYS[1]) == 0 then
+  return 0
+end
+if redis.call('HGET', KEYS[1], 'state') ~= 'pending' then
+  return 1
+end
+redis.call('HSET', KEYS[1], 'state', 'answered')
+redis.call('EXPIRE', KEYS[1], ARGV[2])
+redis.call('RPUSH', KEYS[2], ARGV[1])
+redis.call('EXPIRE', KEYS[2], ARGV[3])
+return 2
+"""
+
+_FINALIZE_INTERACTION_LUA = """
+if redis.call('EXISTS', KEYS[1]) == 0 then
+  return 0
+end
+if redis.call('HGET', KEYS[1], 'state') ~= 'pending' then
+  return 0
+end
+redis.call('HSET', KEYS[1], 'state', ARGV[1])
+redis.call('EXPIRE', KEYS[1], ARGV[2])
+return 1
+"""
+
+_RELEASE_ACTIVE_LUA = """
+if redis.call('GET', KEYS[1]) == ARGV[1] then
+  return redis.call('DEL', KEYS[1])
+end
+return 0
+"""
 
 
 class RedisDao:
@@ -161,40 +203,7 @@ class RedisDao:
             logger.warning("Redis client init failed: %s", e)
             return None
 
-    # ---------- interaction reply 多 worker（run_active + reply list）----------
-
-    def set_interaction_run_active(self, session_id: str) -> bool:
-        """标记该会话当前有活跃 run。未配置 Redis 或失败返回 False。"""
-        client = self.get_command_client()
-        if not client:
-            return False
-        try:
-            client.set(
-                _run_active_key(session_id),
-                "1",
-                ex=INTERACTION_RUN_ACTIVE_TTL_SEC,
-            )
-            return True
-        except Exception as e:
-            logger.warning(
-                "Redis set run_active failed session_id=%s: %s", session_id, e
-            )
-            return False
-
-    def delete_interaction_run_active(self, session_id: str) -> None:
-        """清除 run 活跃标记与 run_context。"""
-        client = self.get_command_client()
-        if not client:
-            return
-        try:
-            client.delete(_run_active_key(session_id))
-            client.delete(_run_context_key(session_id))
-        except Exception as e:
-            logger.warning(
-                "Redis delete run_active/run_context failed session_id=%s: %s",
-                session_id,
-                e,
-            )
+    # ---------- interaction 多 worker（run_context + per-request reply）----------
 
     def set_interaction_run_context(
         self, session_id: str, task_id: str, invocation_id: str
@@ -235,60 +244,178 @@ class RedisDao:
             )
             return None
 
-    def is_interaction_run_active(self, session_id: str) -> bool:
-        """是否配置了 Redis 且该会话在 Redis 中有活跃 run。"""
-        client = self.get_command_client()
-        if not client:
-            return False
-        try:
-            return client.exists(_run_active_key(session_id)) > 0
-        except Exception:
-            return False
-
-    def delete_interaction_reply_list(self, session_id: str) -> None:
-        """清空该会话的回复列表（新 run 开始时调用）。"""
+    def delete_interaction_run_context(self, session_id: str) -> None:
+        """清除该会话当前 run 的 task_id / invocation_id。"""
         client = self.get_command_client()
         if not client:
             return
         try:
-            client.delete(_reply_list_key(session_id))
+            client.delete(_run_context_key(session_id))
         except Exception as e:
             logger.warning(
-                "Redis clear reply list failed session_id=%s: %s", session_id, e
-            )
-
-    def rpush_interaction_reply(self, session_id: str, value: str) -> None:
-        """向该会话回复列表尾部推入一条（内容或取消占位）。"""
-        client = self.get_command_client()
-        if not client:
-            return
-        try:
-            client.rpush(_reply_list_key(session_id), value)
-        except Exception as e:
-            logger.warning(
-                "Redis RPUSH interaction_reply failed session_id=%s: %s",
+                "Redis delete run_context failed session_id=%s: %s",
                 session_id,
                 e,
             )
 
-    def blpop_interaction_reply(self, session_id: str, timeout_sec: int) -> str | None:
-        """从该会话回复列表左侧阻塞弹出一条。超时返回 None；否则返回字符串（可能为取消占位）。"""
+    def write_pending_interaction(
+        self, request_id: str, record: dict, ttl: int
+    ) -> None:
+        """写 pending registry（hash + TTL）。"""
+        client = self.get_command_client()
+        if not client:
+            return
+        key = _human_interaction_key(request_id)
+        try:
+            client.hset(
+                key,
+                mapping={k: ("" if v is None else str(v)) for k, v in record.items()},
+            )
+            client.expire(key, ttl)
+        except Exception as e:
+            logger.warning("write_pending_interaction failed: %s", e)
+
+    def read_pending_interaction(self, request_id: str) -> dict | None:
+        """读 pending registry；不存在返回 None。"""
+        client = self.get_command_client()
+        if not client:
+            return None
+        try:
+            data = client.hgetall(_human_interaction_key(request_id))
+        except Exception as e:
+            logger.warning("read_pending_interaction failed: %s", e)
+            return None
+        if not data:
+            return None
+        return {
+            (k.decode() if isinstance(k, bytes) else k): (
+                v.decode() if isinstance(v, bytes) else v
+            )
+            for k, v in data.items()
+        }
+
+    def blpop_interaction_reply(self, request_id: str, timeout_sec: int) -> str | None:
+        """阻塞等待 per-request reply key；超时返回 None。"""
         client = self.create_client()
         if not client:
             return None
         try:
-            result = client.blpop(_reply_list_key(session_id), timeout=timeout_sec)
-        except Exception as e:
-            logger.warning(
-                "Redis BLPOP interaction_reply failed session_id=%s: %s",
-                session_id,
-                e,
+            result = client.blpop(
+                _interaction_reply_key(request_id), timeout=timeout_sec
             )
+        except Exception as e:
+            logger.warning("blpop_interaction_reply failed: %s", e)
             return None
         if result is None:
             return None
         _, value = result
-        return value
+        return value.decode() if isinstance(value, bytes) else value
+
+    def rpush_interaction_cancel(self, request_id: str) -> None:
+        """向 per-request reply key 投取消哨兵，唤醒 BLPOP。"""
+        client = self.get_command_client()
+        if not client:
+            return
+        key = _interaction_reply_key(request_id)
+        try:
+            client.rpush(key, INTERACTION_CANCEL_VALUE)
+            client.expire(key, INTERACTION_REPLY_BUFFER)
+        except Exception as e:
+            logger.warning("rpush_interaction_cancel failed: %s", e)
+
+    def delete_interaction_reply(self, request_id: str) -> None:
+        """cleanup per-request reply key（worker 正常结束路径）。"""
+        client = self.get_command_client()
+        if not client:
+            return
+        try:
+            client.delete(_interaction_reply_key(request_id))
+        except Exception as e:
+            logger.warning("delete_interaction_reply failed: %s", e)
+
+    def answer_pending_interaction(self, request_id: str, envelope: str) -> str:
+        """原子校验 pending、写 answered 并 RPUSH reply envelope。"""
+        client = self.get_command_client()
+        if not client:
+            return "not_found"
+        try:
+            code = client.eval(
+                _ANSWER_PENDING_LUA,
+                2,
+                _human_interaction_key(request_id),
+                _interaction_reply_key(request_id),
+                envelope,
+                str(INTERACTION_TERMINAL_TTL),
+                str(INTERACTION_REPLY_BUFFER),
+            )
+        except Exception as e:
+            logger.warning("answer_pending_interaction failed: %s", e)
+            return "not_found"
+        return {0: "not_found", 1: "not_pending", 2: "ok"}.get(int(code), "not_found")
+
+    def finalize_interaction(self, request_id: str, state: str) -> bool:
+        """仅当 pending 时改 terminal=state；幂等返回本次是否改成。"""
+        client = self.get_command_client()
+        if not client:
+            return False
+        try:
+            changed = client.eval(
+                _FINALIZE_INTERACTION_LUA,
+                1,
+                _human_interaction_key(request_id),
+                state,
+                str(INTERACTION_TERMINAL_TTL),
+            )
+        except Exception as e:
+            logger.warning("finalize_interaction failed: %s", e)
+            return False
+        return int(changed) == 1
+
+    def acquire_active_interaction(self, session_id: str, request_id: str) -> bool:
+        """SETNX active 守卫；占用中返回 False。TTL 兜底防泄漏。"""
+        client = self.get_command_client()
+        if not client:
+            return False
+        try:
+            ok = client.set(
+                _human_interaction_active_key(session_id),
+                request_id,
+                nx=True,
+                ex=3600,
+            )
+        except Exception as e:
+            logger.warning("acquire_active_interaction failed: %s", e)
+            return False
+        return bool(ok)
+
+    def release_active_interaction(self, session_id: str, request_id: str) -> None:
+        """compare-and-delete：仅当当前 active==request_id 时释放。"""
+        client = self.get_command_client()
+        if not client:
+            return
+        try:
+            client.eval(
+                _RELEASE_ACTIVE_LUA,
+                1,
+                _human_interaction_active_key(session_id),
+                request_id,
+            )
+        except Exception as e:
+            logger.warning("release_active_interaction failed: %s", e)
+
+    def get_active_interaction(self, session_id: str) -> str | None:
+        """取当前 active request_id（供 stop 定位）；无则 None。"""
+        client = self.get_command_client()
+        if not client:
+            return None
+        try:
+            value = client.get(_human_interaction_active_key(session_id))
+        except Exception as e:
+            logger.warning("get_active_interaction failed: %s", e)
+            return None
+        if value is None:
+            return None
+        return value.decode() if isinstance(value, bytes) else value
 
     # ---------- agent run 队列（API 入队，Worker BLPOP）----------
 

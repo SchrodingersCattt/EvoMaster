@@ -13,8 +13,10 @@ def test_publish_reply_event_publishes_redis() -> None:
 
     payload = {
         "source": "User",
-        "type": "ask_question_reply",
-        "content": {"request_id": "aq_1", "answers": {}, "annotations": {}},
+        "type": "interaction_reply",
+        "kind": "ask_question",
+        "request_id": "aq_1",
+        "payload": {"answers": {}, "annotations": {}},
         "session_id": "sess-1",
     }
 

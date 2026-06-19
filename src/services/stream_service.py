@@ -34,7 +34,6 @@ from src.services.stream_queue_forwarder import (
     start_subscription_before_history_replay,
     subscribe_enqueue_and_forward,
 )
-from src.services.stream_reply_queue import RedisReplyQueue
 from src.services.stream_sse_filter import (
     REPLAY_DISCARDED_EVENT_TYPES,
     _dedupe_replayed_terminal_events,
@@ -872,8 +871,6 @@ class ChatStreamService:
         if isinstance(handle, Busy):
             return None
 
-        dao = get_redis_dao()
-        dao.delete_interaction_reply_list(sid)
         return SendStreamContext(
             task_id=handle.task_id,
             invocation_id=handle.invocation_id,
@@ -881,14 +878,6 @@ class ChatStreamService:
             user_msg=handle.event,
             job=handle.job,
         )
-
-    def get_reply_queue(self, session_id: str) -> RedisReplyQueue | None:
-        """供 POST /ask_question_reply 写入使用；无活跃 run 时返回 None。仅 Worker 队列模式，由 Redis run_active 判定。"""
-        if not REDIS_URL:
-            return None
-        if get_redis_dao().is_interaction_run_active(session_id):
-            return RedisReplyQueue(session_id)
-        return None
 
     def get_run_context(self, session_id: str) -> dict | None:
         """当前 run 的 task_id / invocation_id。仅 Worker 队列模式，从 Redis 取。供写入历史等用。"""

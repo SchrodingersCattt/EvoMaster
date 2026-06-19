@@ -367,26 +367,26 @@ def _public_content_for_event(
     if event_type == 'cancelled':
         return {'reason': payload.get('reason', '')}
 
-    if event_type == 'ask_question':
+    if event_type == 'interaction_request':
         return {
+            'kind': payload.get('kind'),
             'request_id': payload.get('request_id'),
-            'questions': payload.get('questions') or [],
-            'metadata': payload.get('metadata') or {},
-            'origin': payload.get('origin'),
-            'preview_format': payload.get('preview_format', 'markdown'),
+            'task_id': payload.get('task_id'),
+            'expires_at': payload.get('expires_at'),
+            'payload': payload.get('payload') or {},
         }
 
-    if event_type == 'ask_question_reply':
+    if event_type == 'interaction_reply':
         return {
+            'kind': payload.get('kind'),
             'request_id': payload.get('request_id'),
-            'answers': payload.get('answers') or {},
-            'annotations': payload.get('annotations') or {},
+            'payload': payload.get('payload') or {},
         }
 
-    if event_type == 'ask_question_timeout':
+    if event_type == 'interaction_timeout':
         return {
+            'kind': payload.get('kind'),
             'request_id': payload.get('request_id'),
-            'questions': payload.get('questions') or [],
             'reason': payload.get('reason', 'timeout'),
         }
 

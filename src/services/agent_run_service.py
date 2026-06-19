@@ -51,7 +51,6 @@ from src.services.history_checkpoint_service import HistoryCheckpointService
 from src.services.image_input_service import get_image_input_service
 from src.services.quota_service import check_quota_status
 from src.services.sessions_service import get_sessions_service
-from src.services.stream_reply_queue import RedisReplyQueue
 from src.services.user_turn_context_service import (
     write_user_turn_context_event as _persist_utc_event,
 )
@@ -501,16 +500,18 @@ class AgentRunService:
                     spawn_id=spawn_id,
                 )
 
-            # -- Stage 4b: AskQuestion bridge --
-            from matmaster.integration.interaction_bridge import AskQuestionBridge
+            # -- Stage 4b: interaction bridge --
+            from matmaster.integration.interaction_bridge import InteractionBridge
 
             async def _interaction_event_sink(event: BusEvent) -> None:
                 await fanout.dispatch(event)
 
-            bridge = AskQuestionBridge(
+            bridge = InteractionBridge(
                 session_id=session_id,
+                task_id=task_id,
+                invocation_id=invocation_id or "",
                 event_sink=_interaction_event_sink,
-                reply_queue=RedisReplyQueue(session_id),
+                dao=get_redis_dao(),
                 timeout_seconds=1800,
             )
             # -- Stage 5: History --
