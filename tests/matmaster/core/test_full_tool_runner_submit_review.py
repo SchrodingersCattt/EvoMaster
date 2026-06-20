@@ -398,3 +398,186 @@ class TestSubmitReviewGate:
         assert len(capture.calls) == 4
         for idx in range(4):
             assert results[idx][1].status == "success"
+
+    @pytest.mark.asyncio
+    async def test_truncated_submit_not_armed_into_guard(self) -> None:
+        gate = _MultiGate(
+            {
+                "s1": SubmitReviewDecision(
+                    user_decision="submit",
+                    review_outcome="approved",
+                    final_arguments=None,
+                ),
+                "s2": SubmitReviewDecision(
+                    user_decision="submit",
+                    review_outcome="approved",
+                    final_arguments={
+                        "action": "submit",
+                        "input_dir": "/share/c",
+                        "image": "img",
+                        "cmd": "edited > log 2>&1",
+                        "machine": "c32_m128_cpu",
+                        "job_name": "matmaster-job",
+                        "disk_size": 50,
+                    },
+                ),
+            }
+        )
+        runner, _capture, state = _make_submit_runner(gate)
+
+        await runner.execute_batch(
+            [
+                _submit_call(call_id="s1", cmd="alpha"),
+                _submit_call(call_id="s2", cmd="beta"),
+                _submit_call(call_id="s3", cmd="gamma"),
+            ],
+            _make_ctx(),
+        )
+
+        assert not state.get(RESUBMIT_SIGNATURES_KEY)
+
+        gate2 = _MultiGate(
+            {
+                "s3": SubmitReviewDecision(
+                    user_decision="submit",
+                    review_outcome="approved",
+                    final_arguments=None,
+                )
+            }
+        )
+        state.set(SUBMIT_APPROVAL_GATE_KEY, gate2)
+
+        results2 = await runner.execute_batch(
+            [_submit_call(call_id="s3", cmd="gamma")],
+            _make_ctx(),
+        )
+
+        assert gate2.reviewed == ["s3"]
+        assert results2[0][1].status == "success"
+
+    @pytest.mark.asyncio
+    async def test_truncation_only_blocks_submits_not_other_tools(self) -> None:
+        gate = _MultiGate(
+            {
+                "s1": SubmitReviewDecision(
+                    user_decision="submit",
+                    review_outcome="approved",
+                    final_arguments={
+                        "action": "submit",
+                        "input_dir": "/share/c",
+                        "image": "img",
+                        "cmd": "edited > log 2>&1",
+                        "machine": "c32_m128_cpu",
+                        "job_name": "matmaster-job",
+                        "disk_size": 50,
+                    },
+                ),
+            }
+        )
+        runner, capture, _state = _make_submit_runner(gate)
+
+        results = await runner.execute_batch(
+            [
+                _submit_call(call_id="s1", cmd="beta"),
+                _make_tc("Bohrium", call_id="q1", action="query", note="ping"),
+                _submit_call(call_id="s2", cmd="gamma"),
+            ],
+            _make_ctx(),
+        )
+
+        assert gate.reviewed == ["s1"]
+        assert any(c.get("action") == "query" for c in capture.calls)
+        assert results[2][1].status == "blocked"
+        assert json.loads(results[2][1].content)["status"] == ("SupersededByPriorEdit")
+
+    @pytest.mark.asyncio
+    async def test_normalization_only_does_not_truncate(self) -> None:
+        provider = BohriumSubmitReviewProvider()
+        s1_canonical = provider.build_review_draft(
+            {
+                "action": "submit",
+                "input_dir": "/share/c",
+                "image": "img",
+                "cmd": "alpha",
+                "job_name": "matmaster-job",
+            }
+        ).review_draft_arguments
+        s1_final = dict(s1_canonical)
+        s1_final["disk_size"] = str(s1_final["disk_size"])
+        gate = _MultiGate(
+            {
+                "s1": SubmitReviewDecision(
+                    user_decision="submit",
+                    review_outcome="approved",
+                    final_arguments=s1_final,
+                ),
+                "s2": SubmitReviewDecision(
+                    user_decision="submit",
+                    review_outcome="approved",
+                    final_arguments=None,
+                ),
+            }
+        )
+        runner, capture, _state = _make_submit_runner(gate)
+
+        results = await runner.execute_batch(
+            [
+                _submit_call(call_id="s1", cmd="alpha"),
+                _submit_call(call_id="s2", cmd="beta"),
+            ],
+            _make_ctx(),
+        )
+
+        assert gate.reviewed == ["s1", "s2"]
+        assert len(capture.calls) == 2
+        assert results[1][1].status == "success"
+
+    @pytest.mark.asyncio
+    async def test_reported_file_change_truncates_following(self) -> None:
+        gate = _MultiGate(
+            {
+                "s1": SubmitReviewDecision(
+                    user_decision="submit",
+                    review_outcome="approved",
+                    final_arguments=None,
+                    reported_input_file_changes=[
+                        {"relative_path": "input.in", "lines": "1-5"}
+                    ],
+                ),
+            }
+        )
+        runner, capture, _state = _make_submit_runner(gate)
+
+        results = await runner.execute_batch(
+            [
+                _submit_call(call_id="s1", cmd="alpha"),
+                _submit_call(call_id="s2", cmd="beta"),
+            ],
+            _make_ctx(),
+        )
+
+        assert gate.reviewed == ["s1"]
+        assert len(capture.calls) == 1
+        assert capture.calls[0]["cmd"] == "alpha > log 2>&1"
+        tr = results[1][1]
+        assert tr.status == "blocked"
+        assert json.loads(tr.content)["status"] == "SupersededByPriorEdit"
+        assert tr.meta["superseded_by"] == "s1"
+        assert tr.meta["changed_fields"] == ["input_files"]
+
+    @pytest.mark.asyncio
+    async def test_optout_batch_unaffected_when_gate_absent(self) -> None:
+        runner, capture, _state = _make_submit_runner(gate=None)
+
+        results = await runner.execute_batch(
+            [
+                _submit_call(call_id="s1", cmd="alpha"),
+                _submit_call(call_id="s2", cmd="beta"),
+                _submit_call(call_id="s3", cmd="gamma"),
+            ],
+            _make_ctx(),
+        )
+
+        assert len(capture.calls) == 3
+        for idx in range(3):
+            assert results[idx][1].status == "success"
