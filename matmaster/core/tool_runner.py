@@ -278,6 +278,11 @@ class FullToolRunner:
                 ),
             }
 
+        # Batch-local truncation flag: set when a user edit supersedes the
+        # rest of this batch's submits. Local to this execute_batch call, so it
+        # never accumulates across turns.
+        superseding_edit: tuple[str, list[str]] | None = None
+
         # ── Serial validation ──────────────────────────────
         for idx, tc in enumerate(tool_calls):
             # 1. Catalog lookup
@@ -367,6 +372,22 @@ class FullToolRunner:
                     continue
 
                 if draft is not None:
+                    if superseding_edit is not None:
+                        editor_id, changed_fields = superseding_edit
+                        tr = _gate_block_result(
+                            "SupersededByPriorEdit",
+                            "The user modified the parameters or input files "
+                            "of another submit in the same batch. This submit "
+                            "was not executed; please refer to those changes "
+                            "and re-evaluate before resubmitting.",
+                        )
+                        tr.meta["superseded_by"] = editor_id
+                        tr.meta["changed_fields"] = changed_fields
+                        results[idx] = (tc, tr)
+                        if on_result:
+                            await on_result(tc, tr)
+                        continue
+
                     run_identity = self._state.get(RUN_IDENTITY_KEY)
                     session_id = getattr(run_identity, "session_id", "")
                     task_id = getattr(run_identity, "task_id", "")
@@ -508,6 +529,14 @@ class FullToolRunner:
                         self._state.set(SUBMIT_REVIEW_RECORDS_KEY, records)
                     records[tc.id] = record
                     base_args = execution.arguments
+                    canonical_changes = compute_parameter_changes(
+                        draft.review_draft_arguments, execution.arguments
+                    )
+                    if canonical_changes or reported:
+                        changed_fields = list(canonical_changes.keys())
+                        if reported:
+                            changed_fields.append("input_files")
+                        superseding_edit = (tc.id, changed_fields)
 
             # 2. StructuralValidation (Layer A)
             decision = self._validation.validate(

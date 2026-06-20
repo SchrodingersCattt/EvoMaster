@@ -41,12 +41,26 @@ class _SubmitGate:
         return self.decision
 
 
+class _MultiGate:
+    """Return decisions by tool_call_id and record review order."""
+
+    def __init__(self, decisions: dict[str, SubmitReviewDecision]) -> None:
+        self.decisions = decisions
+        self.reviewed: list[str] = []
+
+    async def review(self, request):
+        self.reviewed.append(request.tool_call_id)
+        return self.decisions[request.tool_call_id]
+
+
 class _SubmitCapture:
     def __init__(self) -> None:
         self.last: dict[str, Any] | None = None
+        self.calls: list[dict[str, Any]] = []
 
     async def __call__(self, args: dict[str, Any], exec_ctx: Any) -> ToolResult:
         self.last = dict(args)
+        self.calls.append(dict(args))
         return ToolResult(
             status="success",
             content=json.dumps({"success": True, "job_id": "job-123"}),
@@ -303,3 +317,84 @@ class TestSubmitReviewGate:
         assert "review" in json.loads(result.content)
         assert result.payload["bohrium_submit_review"]["review_outcome"] == "approved"
         assert capture.last is None
+
+    @pytest.mark.asyncio
+    async def test_edit_truncates_following_submits(self) -> None:
+        gate = _MultiGate(
+            {
+                "s1": SubmitReviewDecision(
+                    user_decision="submit",
+                    review_outcome="approved",
+                    final_arguments=None,
+                ),
+                "s2": SubmitReviewDecision(
+                    user_decision="submit",
+                    review_outcome="approved",
+                    final_arguments={
+                        "action": "submit",
+                        "input_dir": "/share/c",
+                        "image": "img",
+                        "cmd": "edited --x > log 2>&1",
+                        "machine": "c32_m128_cpu",
+                        "job_name": "matmaster-job",
+                        "disk_size": 50,
+                    },
+                ),
+            }
+        )
+        runner, capture, _state = _make_submit_runner(gate)
+
+        results = await runner.execute_batch(
+            [
+                _submit_call(call_id="s1", cmd="alpha"),
+                _submit_call(call_id="s2", cmd="beta"),
+                _submit_call(call_id="s3", cmd="gamma"),
+                _submit_call(call_id="s4", cmd="delta"),
+            ],
+            _make_ctx(),
+        )
+
+        assert gate.reviewed == ["s1", "s2"]
+        assert len(capture.calls) == 2
+        assert {c["cmd"] for c in capture.calls} == {
+            "alpha > log 2>&1",
+            "edited --x > log 2>&1",
+        }
+        for idx in (2, 3):
+            tr = results[idx][1]
+            assert tr.status == "blocked"
+            body = json.loads(tr.content)
+            assert body["status"] == "SupersededByPriorEdit"
+            assert tr.meta["block_reason"] == "SupersededByPriorEdit"
+            assert tr.meta["layer"] == "submit_approval_gate"
+            assert tr.meta["superseded_by"] == "s2"
+            assert tr.meta["changed_fields"] == ["cmd"]
+
+    @pytest.mark.asyncio
+    async def test_no_edit_all_submits_confirmed(self) -> None:
+        gate = _MultiGate(
+            {
+                cid: SubmitReviewDecision(
+                    user_decision="submit",
+                    review_outcome="approved",
+                    final_arguments=None,
+                )
+                for cid in ("s1", "s2", "s3", "s4")
+            }
+        )
+        runner, capture, _state = _make_submit_runner(gate)
+
+        results = await runner.execute_batch(
+            [
+                _submit_call(call_id="s1", cmd="a"),
+                _submit_call(call_id="s2", cmd="b"),
+                _submit_call(call_id="s3", cmd="c"),
+                _submit_call(call_id="s4", cmd="d"),
+            ],
+            _make_ctx(),
+        )
+
+        assert gate.reviewed == ["s1", "s2", "s3", "s4"]
+        assert len(capture.calls) == 4
+        for idx in range(4):
+            assert results[idx][1].status == "success"
