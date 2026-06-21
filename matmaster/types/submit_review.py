@@ -55,13 +55,15 @@ class SubmitReviewDecision:
 
 @runtime_checkable
 class SubmitReviewProvider(Protocol):
-    """工具侧提交语义知识：draft + 幂等严格规范化。"""
+    """工具侧提交语义知识：draft、agent-facing 阻断反馈、幂等严格规范化。"""
 
     def build_review_draft(
         self, model_args: dict[str, Any]
     ) -> SubmitReviewDraft | None: ...
 
     def normalize_execution_args(self, args: dict[str, Any]) -> SubmitExecutionArgs: ...
+
+    def blocked_message(self, status: str) -> str: ...
 
 
 @runtime_checkable

@@ -63,20 +63,6 @@ _OUTCOME_STATUS = {
     "timeout": "ReviewTimeout",
     "busy": "ReviewBusy",
 }
-_OUTCOME_MESSAGE = {
-    "rejected": (
-        "用户拒绝了本次 Bohrium 提交。请不要重新提交本作业，可总结当前进展、"
-        "转去做其它工作，或结束本轮等待用户继续反馈。"
-    ),
-    "timeout": (
-        "本次提交未在限定时间内获得用户确认，未提交。请不要重新提交本作业，"
-        "可总结进展或转做其它工作。"
-    ),
-    "busy": (
-        "当前已有待处理的人机交互，本次提交未发起确认，未提交。"
-        "请稍后由用户处理后再继续，不要重复提交。"
-    ),
-}
 
 
 def _gate_block_result(
@@ -379,12 +365,12 @@ class FullToolRunner:
                 if draft is not None:
                     if superseding_edit is not None:
                         editor_id, changed_fields = superseding_edit
+                        block_status = "SupersededByPriorEdit"
                         tr = _gate_block_result(
-                            "SupersededByPriorEdit",
-                            "The user modified the parameters or input files "
-                            "of another submit in the same batch. This submit "
-                            "was not executed; please refer to those changes "
-                            "and re-evaluate before resubmitting.",
+                            block_status,
+                            instance.submit_review_provider.blocked_message(
+                                block_status
+                            ),
                         )
                         tr.meta["superseded_by"] = editor_id
                         tr.meta["changed_fields"] = changed_fields
@@ -403,10 +389,12 @@ class FullToolRunner:
 
                     model_sig = submit_signature(draft.model_arguments)
                     if model_sig in guard:
+                        block_status = "ResubmitBlocked"
                         tr = _gate_block_result(
-                            "ResubmitBlocked",
-                            "本作业已被拒绝/未获确认，请勿重复提交；"
-                            "可总结进展或转做其它工作。",
+                            block_status,
+                            instance.submit_review_provider.blocked_message(
+                                block_status
+                            ),
                         )
                         results[idx] = (tc, tr)
                         if on_result:
@@ -450,6 +438,7 @@ class FullToolRunner:
                     reported = decision.reported_input_file_changes or []
 
                     if outcome in _OUTCOME_STATUS:
+                        block_status = _OUTCOME_STATUS[outcome]
                         guard.add(model_sig)
                         guard.add(submit_signature(final_args))
                         record = _review_record(
@@ -469,13 +458,16 @@ class FullToolRunner:
                             reported=reported,
                         )
                         tr0 = _gate_block_result(
-                            _OUTCOME_STATUS[outcome], _OUTCOME_MESSAGE[outcome]
+                            block_status,
+                            instance.submit_review_provider.blocked_message(
+                                block_status
+                            ),
                         )
                         tr = attach_submit_review_record(
                             tr0,
                             record["review_content"],
                             record["audit_baseline"],
-                            block_reason=_OUTCOME_STATUS[outcome],
+                            block_reason=block_status,
                         )
                         results[idx] = (tc, tr)
                         if on_result:

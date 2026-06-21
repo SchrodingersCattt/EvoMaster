@@ -52,6 +52,9 @@ def test_protocols_are_runtime_checkable():
         def normalize_execution_args(self, args):
             return SubmitExecutionArgs({}, {})
 
+        def blocked_message(self, status):
+            return status
+
     assert isinstance(_P(), SubmitReviewProvider)
 
     class _G:

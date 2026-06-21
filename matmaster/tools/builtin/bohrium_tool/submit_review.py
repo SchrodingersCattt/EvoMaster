@@ -29,6 +29,28 @@ _MAX_LEN = {
     "job_name": 256,
     "input_dir": 2048,
 }
+_BLOCK_MESSAGES = {
+    "UserRejected": (
+        "用户拒绝了本次 Bohrium 提交。请不要重新提交本作业，总结当前进展、并结束本轮等待用户反馈。"
+    ),
+    "ReviewTimeout": (
+        "本次提交未在限定时间内获得用户确认，未提交。请不要重新提交本作业，"
+        "可总结进展或转做其它工作。"
+    ),
+    "ReviewBusy": (
+        "当前已有待处理的交互，本次提交未发起确认，未提交。"
+        "请稍后由用户处理后再继续，不要重复提交。"
+    ),
+    "SupersededByPriorEdit": (
+        "The user modified the parameters or input files "
+        "of another submit in the same batch. This submit "
+        "was not executed; please refer to those changes "
+        "and re-evaluate before resubmitting."
+    ),
+    "ResubmitBlocked": (
+        "本作业已被拒绝/未获确认，请勿重复提交；" "可总结进展或转做其它工作。"
+    ),
+}
 
 
 def oversized_submit_fields(args: Any) -> list[str]:
@@ -142,3 +164,6 @@ class BohriumSubmitReviewProvider:
 
     def normalize_execution_args(self, args: dict[str, Any]) -> SubmitExecutionArgs:
         return normalize_execution_args(args)
+
+    def blocked_message(self, status: str) -> str:
+        return _BLOCK_MESSAGES[status]
