@@ -140,6 +140,7 @@ def _session_bohrium_submit_confirmation_data_from_row(
     return BohriumSubmitConfirmationData(
         session_id=session_id,
         required=None if raw is None else bool(raw),
+        source="session" if raw is not None else "default",
     )
 
 

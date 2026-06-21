@@ -357,6 +357,10 @@ class BohriumSubmitConfirmationData(BaseModel):
         default=None,
         description="会话级 Bohrium 提交确认覆盖值；null 表示未设置/继承",
     )
+    source: Literal["session", "user", "default"] = Field(
+        default="default",
+        description="覆盖来源：session=会话级覆盖；user=用户全局占位；default=无覆盖",
+    )
 
 
 class BohriumSubmitConfirmationApiResponse(BaseResponse[BohriumSubmitConfirmationData]):
