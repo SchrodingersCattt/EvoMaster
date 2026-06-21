@@ -572,6 +572,14 @@ async def interaction_reply(
     if result == "not_pending":
         raise ConflictErrorResponse(msg="交互已 answered/timeout/cancelled")
 
+    if (
+        req.kind == "submit_review"
+        and req.payload.get("decision") == "submit"
+        and req.payload.get("disable_future_confirmation") is True
+        and not chat_svc.set_bohrium_submit_confirmation(sid, user_id, False)
+    ):
+        logger.warning("disable future submit confirmation failed: session_id=%s", sid)
+
     reply_event = {
         "source": "User",
         "type": "interaction_reply",

@@ -17,11 +17,19 @@ from src.utils.exceptions import (
 
 
 class _ChatSvc:
-    def __init__(self, allowed: bool = True) -> None:
+    def __init__(self, allowed: bool = True, set_result: bool = True) -> None:
         self.allowed = allowed
+        self.set_result = set_result
+        self.set_calls: list[tuple[str, str | None, bool | None]] = []
 
     def can_access_session(self, session_id: str, user_id: str | None) -> bool:
         return self.allowed
+
+    def set_bohrium_submit_confirmation(
+        self, session_id: str, user_id: str | None, required: bool | None
+    ) -> bool:
+        self.set_calls.append((session_id, user_id, required))
+        return self.set_result
 
 
 class _StreamSvc:
@@ -89,6 +97,40 @@ def _reply_req(kind: str = "ask_question") -> InteractionReplyRequest:
             "annotations": {"Q1": {"freeform": "notes"}},
         },
     )
+
+
+def _submit_reply(
+    *, decision: str = "submit", disable: bool | None = False
+) -> InteractionReplyRequest:
+    payload: dict = {
+        "decision": decision,
+        "submit_arguments": {"action": "submit", "cmd": "run > log 2>&1"},
+        "reported_input_file_changes": [],
+    }
+    if disable is not None:
+        payload["disable_future_confirmation"] = disable
+    return InteractionReplyRequest(kind="submit_review", payload=payload)
+
+
+def _run_reply(
+    dao: _RedisDao,
+    chat: _ChatSvc,
+    req: InteractionReplyRequest,
+    *,
+    request_id: str = "sr_1",
+):
+    with patch("src.apis.chat_api.get_redis_dao", return_value=dao):
+        return asyncio.run(
+            interaction_reply(
+                session_id="sess-1",
+                request_id=request_id,
+                req=req,
+                user_id="user-1",
+                chat_svc=chat,
+                stream_svc=_StreamSvc(),
+                events_svc=_EventsSvc(),
+            )
+        )
 
 
 def test_interaction_reply_publishes_structured_event_and_reply_envelope() -> None:
@@ -224,3 +266,68 @@ def test_legacy_reply_route_is_removed() -> None:
 
     assert removed_path not in paths
     assert "/{session_id}/interactions/{request_id}/reply" in paths
+
+
+def test_reply_submit_disable_persists_confirmation_off() -> None:
+    dao = _RedisDao()
+    dao.records["sr_1"] = _pending_record(kind="submit_review")
+    chat = _ChatSvc()
+
+    _run_reply(dao, chat, _submit_reply(decision="submit", disable=True))
+
+    assert chat.set_calls == [("sess-1", "user-1", False)]
+
+
+def test_reply_submit_without_disable_does_not_persist() -> None:
+    dao = _RedisDao()
+    dao.records["sr_1"] = _pending_record(kind="submit_review")
+    chat = _ChatSvc()
+
+    _run_reply(dao, chat, _submit_reply(decision="submit", disable=False))
+
+    assert chat.set_calls == []
+
+
+def test_reply_submit_missing_disable_does_not_persist() -> None:
+    dao = _RedisDao()
+    dao.records["sr_1"] = _pending_record(kind="submit_review")
+    chat = _ChatSvc()
+
+    _run_reply(dao, chat, _submit_reply(decision="submit", disable=None))
+
+    assert chat.set_calls == []
+
+
+def test_reply_reject_with_disable_does_not_persist() -> None:
+    dao = _RedisDao()
+    dao.records["sr_1"] = _pending_record(kind="submit_review")
+    chat = _ChatSvc()
+
+    _run_reply(dao, chat, _submit_reply(decision="reject", disable=True))
+
+    assert chat.set_calls == []
+
+
+def test_reply_ask_question_with_disable_does_not_persist() -> None:
+    dao = _RedisDao()
+    dao.records["aq_1"] = _pending_record(kind="ask_question")
+    chat = _ChatSvc()
+    req = InteractionReplyRequest(
+        kind="ask_question",
+        payload={"decision": "submit", "disable_future_confirmation": True},
+    )
+
+    _run_reply(dao, chat, req, request_id="aq_1")
+
+    assert chat.set_calls == []
+
+
+def test_reply_submit_disable_set_failure_still_returns_ok() -> None:
+    dao = _RedisDao()
+    dao.records["sr_1"] = _pending_record(kind="submit_review")
+    chat = _ChatSvc(set_result=False)
+
+    result = _run_reply(dao, chat, _submit_reply(decision="submit", disable=True))
+
+    assert result.msg == "ok"
+    assert chat.set_calls == [("sess-1", "user-1", False)]
