@@ -10,6 +10,7 @@ from matmaster.core.submit_review_support import (
     RESUBMIT_SIGNATURES_KEY,
     RUN_IDENTITY_KEY,
     SUBMIT_APPROVAL_GATE_KEY,
+    SUBMIT_REVIEW_SKIP_CONFIRMATION_KEY,
 )
 from matmaster.tools.builtin.bohrium_tool.submit_review import (
     BohriumSubmitReviewProvider,
@@ -581,3 +582,142 @@ class TestSubmitReviewGate:
         assert len(capture.calls) == 3
         for idx in range(3):
             assert results[idx][1].status == "success"
+
+    @pytest.mark.asyncio
+    async def test_disable_future_confirmation_skips_following_submits(
+        self,
+    ) -> None:
+        gate = _MultiGate(
+            {
+                "s1": SubmitReviewDecision(
+                    user_decision="submit",
+                    review_outcome="approved",
+                    final_arguments=None,
+                    disable_future_confirmation=True,
+                ),
+            }
+        )
+        runner, capture, state = _make_submit_runner(gate)
+
+        results = await runner.execute_batch(
+            [
+                _submit_call(call_id="s1", cmd="alpha"),
+                _submit_call(call_id="s2", cmd="beta"),
+                _submit_call(call_id="s3", cmd="gamma"),
+            ],
+            _make_ctx(),
+        )
+
+        assert gate.reviewed == ["s1"]
+        assert state.get(SUBMIT_REVIEW_SKIP_CONFIRMATION_KEY) is True
+        assert len(capture.calls) == 3
+        for idx in range(3):
+            assert results[idx][1].status == "success"
+
+    @pytest.mark.asyncio
+    async def test_skip_flag_persists_across_batches_in_run(self) -> None:
+        gate = _MultiGate(
+            {
+                "s1": SubmitReviewDecision(
+                    user_decision="submit",
+                    review_outcome="approved",
+                    final_arguments=None,
+                    disable_future_confirmation=True,
+                ),
+            }
+        )
+        runner, capture, _state = _make_submit_runner(gate)
+
+        await runner.execute_batch(
+            [_submit_call(call_id="s1", cmd="alpha")], _make_ctx()
+        )
+        assert gate.reviewed == ["s1"]
+
+        results2 = await runner.execute_batch(
+            [_submit_call(call_id="s2", cmd="beta")],
+            _make_ctx(),
+        )
+
+        assert gate.reviewed == ["s1"]
+        assert results2[0][1].status == "success"
+        assert len(capture.calls) == 2
+
+    @pytest.mark.asyncio
+    async def test_edit_truncation_takes_priority_over_skip(self) -> None:
+        gate = _MultiGate(
+            {
+                "s1": SubmitReviewDecision(
+                    user_decision="submit",
+                    review_outcome="approved",
+                    final_arguments=None,
+                ),
+                "s2": SubmitReviewDecision(
+                    user_decision="submit",
+                    review_outcome="approved",
+                    final_arguments={
+                        "action": "submit",
+                        "input_dir": "/share/c",
+                        "image": "img",
+                        "cmd": "edited --x > log 2>&1",
+                        "machine": "c32_m128_cpu",
+                        "job_name": "matmaster-job",
+                        "disk_size": 50,
+                    },
+                    disable_future_confirmation=True,
+                ),
+            }
+        )
+        runner, _capture, state = _make_submit_runner(gate)
+
+        results = await runner.execute_batch(
+            [
+                _submit_call(call_id="s1", cmd="alpha"),
+                _submit_call(call_id="s2", cmd="beta"),
+                _submit_call(call_id="s3", cmd="gamma"),
+                _submit_call(call_id="s4", cmd="delta"),
+            ],
+            _make_ctx(),
+        )
+
+        assert gate.reviewed == ["s1", "s2"]
+        assert state.get(SUBMIT_REVIEW_SKIP_CONFIRMATION_KEY) is True
+        for idx in (2, 3):
+            tr = results[idx][1]
+            assert tr.status == "blocked"
+            assert json.loads(tr.content)["status"] == "SupersededByPriorEdit"
+            assert tr.meta["superseded_by"] == "s2"
+
+    @pytest.mark.asyncio
+    async def test_resubmit_guard_takes_priority_over_skip(self) -> None:
+        gate = _MultiGate(
+            {
+                "s1": SubmitReviewDecision(
+                    user_decision="reject",
+                    review_outcome="rejected",
+                    final_arguments=None,
+                ),
+                "s2": SubmitReviewDecision(
+                    user_decision="submit",
+                    review_outcome="approved",
+                    final_arguments=None,
+                    disable_future_confirmation=True,
+                ),
+            }
+        )
+        runner, capture, state = _make_submit_runner(gate)
+
+        results = await runner.execute_batch(
+            [
+                _submit_call(call_id="s1", cmd="alpha"),
+                _submit_call(call_id="s2", cmd="beta"),
+                _submit_call(call_id="s3", cmd="alpha"),
+            ],
+            _make_ctx(),
+        )
+
+        assert gate.reviewed == ["s1", "s2"]
+        assert state.get(SUBMIT_REVIEW_SKIP_CONFIRMATION_KEY) is True
+        assert results[2][1].status == "blocked"
+        assert json.loads(results[2][1].content)["status"] == "ResubmitBlocked"
+        assert len(capture.calls) == 1
+        assert capture.calls[0]["cmd"].startswith("beta")

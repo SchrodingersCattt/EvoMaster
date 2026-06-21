@@ -33,6 +33,7 @@ from matmaster.core.submit_review_support import (
     RUN_IDENTITY_KEY,
     SUBMIT_APPROVAL_GATE_KEY,
     SUBMIT_REVIEW_RECORDS_KEY,
+    SUBMIT_REVIEW_SKIP_CONFIRMATION_KEY,
     attach_submit_review_record,
     build_audit_payload,
     build_review_content,
@@ -44,7 +45,11 @@ from matmaster.tools.tool_catalog import ToolCatalog
 from matmaster.tools.tool_result import ToolResult, normalize_tool_result
 from matmaster.types.cancellation import CancellationToken
 from matmaster.types.messages import ToolCallData
-from matmaster.types.submit_review import SubmitReviewArgumentError, SubmitReviewRequest
+from matmaster.types.submit_review import (
+    SubmitReviewArgumentError,
+    SubmitReviewDecision,
+    SubmitReviewRequest,
+)
 from matmaster.types.tool_runner_state import ToolRunnerState
 from matmaster.types.tool_spec import ToolExecutionContext as _ExecCtx
 from matmaster.types.tool_spec import ToolInstance
@@ -409,16 +414,23 @@ class FullToolRunner:
                         continue
 
                     request_id = "sr_" + uuid4().hex[:12]
-                    decision = await gate.review(
-                        SubmitReviewRequest(
-                            request_id=request_id,
-                            tool_name=tc.name,
-                            tool_call_id=tc.id,
-                            task_id=task_id,
-                            session_id=session_id,
-                            draft=draft,
+                    if self._state.get(SUBMIT_REVIEW_SKIP_CONFIRMATION_KEY):
+                        decision = SubmitReviewDecision(
+                            user_decision="submit",
+                            review_outcome="approved",
+                            final_arguments=draft.review_draft_arguments,
                         )
-                    )
+                    else:
+                        decision = await gate.review(
+                            SubmitReviewRequest(
+                                request_id=request_id,
+                                tool_name=tc.name,
+                                tool_call_id=tc.id,
+                                task_id=task_id,
+                                session_id=session_id,
+                                draft=draft,
+                            )
+                        )
                     outcome = decision.review_outcome
 
                     if outcome == "cancelled":
@@ -529,6 +541,8 @@ class FullToolRunner:
                         self._state.set(SUBMIT_REVIEW_RECORDS_KEY, records)
                     records[tc.id] = record
                     base_args = execution.arguments
+                    if decision.disable_future_confirmation:
+                        self._state.set(SUBMIT_REVIEW_SKIP_CONFIRMATION_KEY, True)
                     canonical_changes = compute_parameter_changes(
                         draft.review_draft_arguments, execution.arguments
                     )

@@ -10,6 +10,7 @@ SUBMIT_APPROVAL_GATE_KEY = "submit_approval_gate"
 RUN_IDENTITY_KEY = "run_identity"
 RESUBMIT_SIGNATURES_KEY = "bohrium_submit_resubmit_signatures"
 SUBMIT_REVIEW_RECORDS_KEY = "submit_review_records"
+SUBMIT_REVIEW_SKIP_CONFIRMATION_KEY = "bohrium_submit_skip_confirmation"
 
 MAX_CONTENT_FILE_CHANGES = 20
 MAX_PAYLOAD_FILE_CHANGES = 200
