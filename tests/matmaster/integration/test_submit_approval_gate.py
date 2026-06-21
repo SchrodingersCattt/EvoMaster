@@ -108,3 +108,58 @@ async def test_busy_timeout_cancel_mapping():
     cancelled_gate = BridgeSubmitApprovalGate(_FakeBridge(exc=asyncio.CancelledError()))
     cancelled = await cancelled_gate.review(_req())
     assert cancelled.review_outcome == "cancelled"
+
+
+@pytest.mark.asyncio
+async def test_disable_future_confirmation_parsing():
+    gate = BridgeSubmitApprovalGate(
+        _FakeBridge(
+            reply={
+                "decision": "submit",
+                "submit_arguments": {"action": "submit", "cmd": "run > log 2>&1"},
+                "disable_future_confirmation": True,
+            }
+        )
+    )
+    decision = await gate.review(_req())
+    assert decision.disable_future_confirmation is True
+
+    gate_false = BridgeSubmitApprovalGate(
+        _FakeBridge(
+            reply={
+                "decision": "submit",
+                "submit_arguments": {"action": "submit"},
+                "disable_future_confirmation": False,
+            }
+        )
+    )
+    assert (await gate_false.review(_req())).disable_future_confirmation is False
+
+    gate_missing = BridgeSubmitApprovalGate(
+        _FakeBridge(
+            reply={"decision": "submit", "submit_arguments": {"action": "submit"}}
+        )
+    )
+    assert (await gate_missing.review(_req())).disable_future_confirmation is False
+
+    gate_reject = BridgeSubmitApprovalGate(
+        _FakeBridge(
+            reply={
+                "decision": "reject",
+                "submit_arguments": {},
+                "disable_future_confirmation": True,
+            }
+        )
+    )
+    assert (await gate_reject.review(_req())).disable_future_confirmation is False
+
+    gate_truthy = BridgeSubmitApprovalGate(
+        _FakeBridge(
+            reply={
+                "decision": "submit",
+                "submit_arguments": {"action": "submit"},
+                "disable_future_confirmation": "yes",
+            }
+        )
+    )
+    assert (await gate_truthy.review(_req())).disable_future_confirmation is True

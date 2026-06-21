@@ -50,6 +50,7 @@ class SubmitReviewDecision:
     review_outcome: str
     final_arguments: dict[str, Any] | None = None
     reported_input_file_changes: list[dict[str, Any]] | None = None
+    disable_future_confirmation: bool = False
 
 
 @runtime_checkable

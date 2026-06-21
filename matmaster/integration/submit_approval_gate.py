@@ -44,6 +44,9 @@ def _reply_to_decision(reply: dict[str, Any]) -> SubmitReviewDecision:
         review_outcome=outcome,
         final_arguments=reply.get("submit_arguments"),
         reported_input_file_changes=reply.get("reported_input_file_changes"),
+        disable_future_confirmation=(
+            decision == "submit" and bool(reply.get("disable_future_confirmation"))
+        ),
     )
 
 
