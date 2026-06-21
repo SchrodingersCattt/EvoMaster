@@ -8,6 +8,8 @@ from fastapi import APIRouter, Body, Depends, Header, Path, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from matmaster.config.loader import load_llm_config
+from matmaster.integration.event_payloads import build_public_sse_payload_from_bus_dump
+from matmaster.types.events import InteractionReplyEvent
 from src.apis.sse_compression import gzip_sse_stream, should_gzip_sse
 from src.base.base_res import BaseResponse
 from src.dao.redis_dao import get_redis_dao
@@ -580,18 +582,21 @@ async def interaction_reply(
     ):
         logger.warning("disable future submit confirmation failed: session_id=%s", sid)
 
-    reply_event = {
-        "source": "User",
-        "type": "interaction_reply",
-        "kind": req.kind,
-        "request_id": request_id,
-        "payload": req.payload,
-        "session_id": sid,
-        "task_id": record.get("task_id"),
-        "invocation_id": record.get("invocation_id"),
-    }
-    stream_svc.publish_reply_event(sid, reply_event)
-    events_svc.add_history_event(sid, reply_event, user_id=user_id)
+    reply = InteractionReplyEvent(
+        source="User",
+        kind=req.kind,
+        request_id=request_id,
+        payload=req.payload,
+    )
+    public = build_public_sse_payload_from_bus_dump(
+        reply.model_dump(mode="json"),
+        session_id=sid,
+        task_id=record.get("task_id"),
+        invocation_id=record.get("invocation_id"),
+        spawn_id=None,
+    )
+    stream_svc.publish_reply_event(sid, public)
+    events_svc.add_history_event(sid, public, user_id=user_id)
     return BaseResponse(msg="ok")
 
 

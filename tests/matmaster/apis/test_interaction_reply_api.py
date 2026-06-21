@@ -154,11 +154,15 @@ def test_interaction_reply_publishes_structured_event_and_reply_envelope() -> No
 
     payload = stream.published[0][1]
     assert payload["type"] == "interaction_reply"
-    assert payload["kind"] == "ask_question"
-    assert payload["request_id"] == "aq_1"
-    assert payload["payload"] == _reply_req().payload
+    assert payload["source"] == "User"
+    assert payload["content"]["kind"] == "ask_question"
+    assert payload["content"]["request_id"] == "aq_1"
+    assert payload["content"]["payload"] == _reply_req().payload
     assert payload["task_id"] == "task-1"
     assert payload["invocation_id"] == "inv-1"
+    assert "kind" not in payload
+    assert "request_id" not in payload
+    assert "payload" not in payload
     assert json.loads(dao.envelopes[0][1]) == {
         "kind": "ask_question",
         "request_id": "aq_1",
