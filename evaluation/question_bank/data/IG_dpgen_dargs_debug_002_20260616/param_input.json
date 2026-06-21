@@ -18,12 +18,12 @@
     "/path/to/water/init/deepmd"
   ],
   "mass_map": [
-    15.999,
-    1.008
+    "15.999",
+    "1.008"
   ],
   "model_devi_dt": 0.001,
   "model_devi_f_trust_hi": 0.15,
-  "model_devi_f_trust_lo": 0.05,
+  "model_devi_f_trust_lo": "0.05",
   "model_devi_jobs": [
     {
       "ensemble": "nvt",
@@ -41,12 +41,7 @@
   ],
   "model_devi_skip": 0,
   "sys_configs": [
-    [
-      "/path/to/water/configs/*.vasp"
-    ]
+    "/path/to/water/configs/*.vasp"
   ],
-  "type_map": [
-    "O",
-    "H"
-  ]
+  "type_map": "O, H"
 }
