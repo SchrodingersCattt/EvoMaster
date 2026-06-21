@@ -1,0 +1,28 @@
+{
+  "source": "MatMaster",
+  "type": "interaction_request",
+  "content": {
+    "kind": "submit_review",
+    "request_id": "sr_1",
+    "task_id": "t1",
+    "expires_at": "2026-06-21T11:00:00+00:00",
+    "payload": {
+      "tool_name": "Bohrium",
+      "tool_call_id": "call_1",
+      "review_draft_arguments": {
+        "input_dir": "/share/c",
+        "cmd": "sleep 180 > log 2>&1"
+      },
+      "editable_fields": [
+        "input_dir",
+        "cmd"
+      ],
+      "input_dir": "/share/c"
+    }
+  },
+  "session_id": "s1",
+  "task_id": "t1",
+  "invocation_id": "inv1",
+  "spawn_id": null,
+  "timestamp": "2026-06-21T10:15:30.123456"
+}

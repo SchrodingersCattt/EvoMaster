@@ -1,0 +1,14 @@
+{
+  "source": "MatMaster",
+  "type": "interaction_timeout",
+  "content": {
+    "kind": "submit_review",
+    "request_id": "sr_1",
+    "reason": "timeout"
+  },
+  "session_id": "s1",
+  "task_id": "t1",
+  "invocation_id": "inv1",
+  "spawn_id": null,
+  "timestamp": "2026-06-21T10:15:30.123456"
+}

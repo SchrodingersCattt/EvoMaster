@@ -9,6 +9,8 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from pydantic import BaseModel, ConfigDict
+
 logger = logging.getLogger(__name__)
 
 
@@ -229,6 +231,21 @@ def build_public_sse_payload_from_bus_dump(
 
     _carry_top_level_fields(out, raw, event_type, content)
     return normalize_response_sse_payload(out)
+
+
+class PublicInteractionSseEnvelope(BaseModel):
+    """interaction_request / interaction_reply / interaction_timeout wire envelope."""
+
+    model_config = ConfigDict(extra='forbid')
+
+    source: str
+    type: str
+    content: dict[str, Any]
+    session_id: str
+    task_id: str
+    invocation_id: str | None = None
+    spawn_id: str | None = None
+    timestamp: str | None = None
 
 
 def _public_content_for_event(
