@@ -98,15 +98,13 @@ questions:
   capability: input_generation
   domain: agnostic
   intent: Debug and minimally repair DP-GEN param and machine JSON files so both outputs pass official dargs schema validation.
-  human_prompt_seed: 'DP-GEN 检查报错了，请按 `dpgen_error.log` 最小修改这两个输入，路径占位先保留。只输出修好的 `param_output.json` 和 `machine_output.json`。
+  human_prompt_seed: '这两个 DP-GEN 输入文件现在不能通过官方 dargs/schema 校验。请在不替换占位路径的前提下做最小修改，只输出修好的 `param_output.json` 和 `machine_output.json`。
 
     输入文件：
 
     - `param_input.json`: `data/IG_dpgen_dargs_debug_002_20260616/param_input.json`
 
-    - `machine_input.json`: `data/IG_dpgen_dargs_debug_002_20260616/machine_input.json`
-
-    - `dpgen_error.log`: `data/IG_dpgen_dargs_debug_002_20260616/dpgen_error.log`'
+    - `machine_input.json`: `data/IG_dpgen_dargs_debug_002_20260616/machine_input.json`'
   tags:
   - code_mlip
   - eng_lammps
@@ -115,15 +113,11 @@ questions:
   - key: param_input
     path: data/IG_dpgen_dargs_debug_002_20260616/param_input.json
     oss_url: ''
-    description: DP-GEN param input missing the required top-level numb_models key.
+    description: DP-GEN param input with a controlled schema issue.
   - key: machine_input
     path: data/IG_dpgen_dargs_debug_002_20260616/machine_input.json
     oss_url: ''
-    description: DP-GEN machine input with a string group_size that should be an integer.
-  - key: error_log
-    path: data/IG_dpgen_dargs_debug_002_20260616/dpgen_error.log
-    oss_url: ''
-    description: DP-GEN/dargs error excerpt for the controlled schema/type failures.
+    description: DP-GEN machine input with a controlled schema/type issue.
   reference_answers:
   - key: param_output_artifact
     value: param_output.json
@@ -143,13 +137,13 @@ questions:
       check: schema
       kind: machine
       strict: false
-  - key: numb_models_fixed
+  - key: param_schema_repaired
     value:
       filename: param_output.json
       key: numb_models
       expected: 4
       tolerance: 0
-  - key: group_size_fixed
+  - key: machine_type_repaired
     value:
       filename: machine_output.json
       key: model_devi.resources.group_size
@@ -180,12 +174,12 @@ questions:
     criterion: Repaired machine_output.json passes DP-GEN official dargs schema validation.
     axis: correctness
     verify: dpgen_dargs_check
-  - id: numb_models_fixed
-    criterion: param_output.json restores numb_models as integer 4.
+  - id: param_schema_repaired
+    criterion: param_output.json repairs the controlled param schema issue.
     axis: correctness
     verify: json_file_numeric_range
-  - id: group_size_fixed
-    criterion: machine_output.json fixes model_devi.resources.group_size to integer 16.
+  - id: machine_type_repaired
+    criterion: machine_output.json repairs the controlled machine type issue.
     axis: correctness
     verify: json_file_numeric_range
   - id: placeholders_preserved

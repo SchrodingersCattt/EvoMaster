@@ -158,10 +158,6 @@ banks:
   capability: workflow_orchestration
   domain: agnostic
   questions: 68
-- path: workflow_orchestration/wo_agnostic_dpgen.yaml
-  capability: workflow_orchestration
-  domain: agnostic
-  questions: 1
 - path: workflow_orchestration/wo_agnostic_gpumd_nep_clean.yaml
   capability: workflow_orchestration
   domain: agnostic
