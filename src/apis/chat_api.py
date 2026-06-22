@@ -10,6 +10,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from matmaster.config.loader import load_llm_config
 from matmaster.integration.event_payloads import build_public_sse_payload_from_bus_dump
 from matmaster.types.events import InteractionReplyEvent
+from src.apis.model_profile_errors import invalid_model_profile_error
 from src.apis.sse_compression import gzip_sse_stream, should_gzip_sse
 from src.base.base_res import BaseResponse
 from src.dao.redis_dao import get_redis_dao
@@ -47,6 +48,10 @@ from src.models.chat import (
 from src.services.agent_run_service import _get_agent_default_llm
 from src.services.events_service import ChatEventsService, get_events_service
 from src.services.image_input_service import ImageInputError, get_image_input_service
+from src.services.llm_profile_validation import (
+    InvalidModelProfileError,
+    validate_platform_model_profile,
+)
 from src.services.quota_service import check_quota_status
 from src.services.session_directory_service import (
     SessionDirectoryError,
@@ -459,6 +464,11 @@ async def chat_stream(
         user_id,
         bool(org_id),
     )
+    if not (req.byok_credential_id or "").strip():
+        try:
+            validate_platform_model_profile(req.model)
+        except InvalidModelProfileError as exc:
+            raise invalid_model_profile_error(exc) from exc
     if req.images:
         image_service = get_image_input_service()
         try:
@@ -484,6 +494,8 @@ async def chat_stream(
         )
     try:
         ctx = stream_svc.prepare_send_message(sid, req, user_id, org_id=org_id)
+    except InvalidModelProfileError as exc:
+        raise invalid_model_profile_error(exc) from exc
     except SessionDirectoryError as exc:
         raise _session_directory_error(exc) from exc
     if ctx is None:

@@ -12,11 +12,7 @@ from functools import lru_cache
 
 from matmaster.config.exp import DEFAULT_MODE, SUPPORTED_MODES
 from matmaster.context.sources.turn_input import TurnInput, TurnInstructionTag
-from src.dao.redis_dao import (
-    STREAM_CHANNEL_PREFIX,
-    get_redis_dao,
-    user_wakeup_channel,
-)
+from src.dao.redis_dao import STREAM_CHANNEL_PREFIX, get_redis_dao, user_wakeup_channel
 from src.models.chat import ChatSendRequest, DeliverySpec
 from src.services.chat_history import ChatHistoryConverter
 from src.services.deploy_state_service import (
@@ -24,6 +20,10 @@ from src.services.deploy_state_service import (
     get_deploy_state_service,
 )
 from src.services.events_service import ChatEventsService, get_events_service
+from src.services.llm_profile_validation import (
+    resolve_trigger_model_profile,
+    validate_platform_model_profile,
+)
 from src.services.session_directory_service import (
     SessionDirectoryResolver,
     normalize_remote_workspace_path,
@@ -442,8 +442,14 @@ class ChatStreamService:
 
         resolved_mode = self._resolve_mode(mode)
         model_val = (model or '').strip() or None
+        inherited_model = None
         if model_val is None:
-            model_val = self._events_service.get_last_resolved_model_profile(sid)
+            inherited_model = self._events_service.get_last_resolved_model_profile(sid)
+        model_val, invalid_explicit_model = resolve_trigger_model_profile(
+            model_val, inherited_model, sid, logger
+        )
+        if invalid_explicit_model:
+            return TriggerResult(status="error", reason="invalid_model_profile")
         delivery_payload = delivery.model_dump() if delivery is not None else None
 
         def _system_event_writer(task_id: str, invocation_id: str) -> dict:
@@ -816,6 +822,8 @@ class ChatStreamService:
             req.model or ''
         ).strip() or None  # 本轮模型名，如 matmaster/qwen3.7-max / claude-sonnet-4-6
         byok_credential_id = (req.byok_credential_id or '').strip() or None
+        if byok_credential_id is None:
+            model = validate_platform_model_profile(model)
 
         org_id_val = org_id.strip() if org_id else None
         try:
