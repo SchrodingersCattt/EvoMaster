@@ -8,7 +8,6 @@ from pathlib import Path
 
 from evaluation.validators.dpgen_dargs import check_dpgen_dargs
 
-
 BASE_PARAM: dict = {
     "default_training_param": {
         "learning_rate": {},

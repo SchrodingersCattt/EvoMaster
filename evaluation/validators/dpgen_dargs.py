@@ -75,13 +75,19 @@ def _machine_task_payload(
     section: str,
 ) -> tuple[dict[str, Any] | None, str | None]:
     if section not in data:
-        return None, f"machine runtime validation: missing top-level section '{section}'"
+        return (
+            None,
+            f"machine runtime validation: missing top-level section '{section}'",
+        )
     value = data[section]
     if isinstance(value, dict):
         task = value
     elif isinstance(value, list):
         if not value:
-            return None, f"machine runtime validation: section '{section}' list is empty"
+            return (
+                None,
+                f"machine runtime validation: section '{section}' list is empty",
+            )
         if not isinstance(value[0], dict):
             return None, (
                 f"machine runtime validation: section '{section}' first list item "
@@ -105,7 +111,10 @@ def _machine_task_payload(
         return None, f"machine runtime validation: {section}.machine must be an object"
     resources = task.get("resources")
     if not isinstance(resources, dict):
-        return None, f"machine runtime validation: {section}.resources must be an object"
+        return (
+            None,
+            f"machine runtime validation: {section}.resources must be an object",
+        )
     return task, None
 
 
@@ -120,7 +129,9 @@ def _check_machine_runtime(data: Any, *, filename: str) -> tuple[bool, str]:
             return False, f"{filename} failed DP-GEN machine runtime validation: {err}"
 
     try:
-        from dpgen.remote.decide_machine import convert_mdata  # type: ignore[import-not-found]
+        from dpgen.remote.decide_machine import (
+            convert_mdata,  # type: ignore[import-not-found]
+        )
     except ImportError as exc:  # pragma: no cover - depends on optional extra
         raise RuntimeError(
             "dpgen_dargs_check runtime mode requires the optional DP-GEN dependency; "
@@ -184,7 +195,10 @@ def check_dpgen_dargs(
     if check not in {"schema", "dargs", "runtime"}:
         return False, "dpgen_dargs_check: check must be 'schema', 'dargs', or 'runtime'"
     if check == "runtime" and kind != "machine":
-        return False, "dpgen_dargs_check: check 'runtime' is only supported for kind 'machine'"
+        return (
+            False,
+            "dpgen_dargs_check: check 'runtime' is only supported for kind 'machine'",
+        )
     try:
         strict_bool = _coerce_bool(strict, name="strict")
     except ValueError as exc:
