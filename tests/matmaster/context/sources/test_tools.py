@@ -83,8 +83,8 @@ def test_session_tools_source_to_sections() -> None:
     assert len(sections) == 1
     section = sections[0]
     assert isinstance(section, ContextSection)
-    assert section.key == "session_tools"
-    assert section.tag == "active_tools"
+    assert section.key == "session-tools"
+    assert section.tag == "active-tools"
     assert section.order == SectionOrder.SESSION_TOOLS
     assert ContextView.RUNTIME in section.views
     assert ContextView.CHECKPOINT in section.views

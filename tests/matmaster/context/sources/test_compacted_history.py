@@ -13,8 +13,8 @@ def test_compacted_history_source_returns_checkpoint_visible_section() -> None:
         summary="Earlier turns mention FeO."
     ).to_sections()[0]
 
-    assert section.key == "compacted_history"
-    assert section.tag == "compacted_history"
+    assert section.key == "compacted-history"
+    assert section.tag == "compacted-history"
     assert section.content == "Earlier turns mention FeO."
     assert section.order == SectionOrder.COMPACTED_HISTORY
     assert section.views == frozenset({ContextView.RUNTIME, ContextView.CHECKPOINT})

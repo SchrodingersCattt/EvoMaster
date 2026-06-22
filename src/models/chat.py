@@ -3,7 +3,7 @@
 ag-ui 协议（前后端约定）：
 - 服务端 -> 客户端：SSE，event 固定为 "ag-ui"，data 为 JSON 字符串，字段：
   source: "System"|"User"|"MatMaster", type: 事件类型, content: 内容, session_id: 会话 id
-  事件类型示例: session_status, status, query, thought, response, response_figures, tool_call, tool_result, run_result, error, cancelled, run_interrupted, ask_question, ask_question_reply, ask_question_timeout, planner_reply, exp_run, log_line, workspace_uploaded, workspace_upload_error, bohrium_node 等。
+  事件类型示例: session_status, status, query, thought, response, response_figures, tool_call, tool_result, run_result, error, cancelled, run_interrupted, interaction_request, interaction_reply, interaction_timeout, planner_reply, exp_run, log_line, workspace_uploaded, workspace_upload_error, bohrium_node 等。
   thought：仅表示 reasoning / thinking 内容；若为流式思考分片，则仍使用 type='thought'，并在 payload 顶层附带 stream_state='start'|'streaming'|'end'，以及可选 stream_id/context/token_count。
   response：assistant 对用户可见的正文内容；流式分片同样在 payload 顶层附带 stream_state / stream_id，非流式 response 用于持久化与历史回放。
   response_figures：回答级图片绑定事件；content.figures 为已上传图片列表，顶层仍带 session_id、task_id、invocation_id、spawn_id。该事件用于侧边栏等图像展示，不会把图片写回正文文本。该事件可以在同一 invocation_id 下出现多次，每次都是当前已知完整图片组快照；合法顺序包括早于第一段 response、位于多个 response chunk 之间、或位于 run_result 之前的 final flush。前端应按 invocation_id eager upsert，且不从 tool_result.payload.figures 反推正式回答级图片。
@@ -13,11 +13,11 @@ ag-ui 协议（前后端约定）：
 - 客户端 -> 服务端：REST
   POST /chat/sessions/{session_id}/stream  Body 可选：不传或 content 为空→仅历史+ping；有 content→发送并返回本次 SSE 流
   POST /chat/sessions/{session_id}/stop  终止当前运行
-  POST /chat/sessions/{session_id}/ask_question_reply Body: ChatAskQuestionReplyRequest（结构化问答回复）
+  POST /chat/sessions/{session_id}/interactions/{request_id}/reply Body: InteractionReplyRequest（通用交互回复）
 - 统一流接口：POST /stream，要发消息就带 content，仅订阅就省略 body 或 content 为空。
 """
 
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -357,6 +357,10 @@ class BohriumSubmitConfirmationData(BaseModel):
         default=None,
         description="会话级 Bohrium 提交确认覆盖值；null 表示未设置/继承",
     )
+    source: Literal["session", "user", "default"] = Field(
+        default="default",
+        description="覆盖来源：session=会话级覆盖；user=用户全局占位；default=无覆盖",
+    )
 
 
 class BohriumSubmitConfirmationApiResponse(BaseResponse[BohriumSubmitConfirmationData]):
@@ -582,20 +586,17 @@ class ChatSendRequest(BaseModel):
     )
 
 
-class ChatAskQuestionReplyRequest(BaseModel):
-    """POST /chat/sessions/{session_id}/ask_question_reply 结构化用户回答。"""
+class InteractionReplyRequest(BaseModel):
+    """POST /chat/sessions/{session_id}/interactions/{request_id}/reply 通用回复体。"""
 
-    request_id: str
-    answers: dict[str, str] = Field(default_factory=dict)
-    annotations: dict[str, dict[str, str]] = Field(default_factory=dict)
+    kind: str
+    payload: dict[str, Any] = Field(default_factory=dict)
 
     @model_validator(mode="after")
-    def validate_reply(self) -> "ChatAskQuestionReplyRequest":
-        self.request_id = self.request_id.strip()
-        if not self.request_id:
-            raise ValueError("request_id must not be empty")
-        if not self.answers and not self.annotations:
-            raise ValueError("answers or annotations must be provided")
+    def validate_reply(self) -> "InteractionReplyRequest":
+        self.kind = self.kind.strip()
+        if not self.kind:
+            raise ValueError("kind must not be empty")
         return self
 
 

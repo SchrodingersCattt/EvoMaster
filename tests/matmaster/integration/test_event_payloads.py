@@ -637,53 +637,6 @@ class TestToolResultPayloadMapping:
         assert result['info'] == {'exit_code': 0, 'signal': None}
 
 
-class TestAskQuestionPayloadMapping:
-    """AskQuestion event family SSE payload mapping."""
-
-    def test_ask_question_maps_all_fields(self) -> None:
-        result = _public_content_for_event(
-            'ask_question',
-            {
-                'type': 'ask_question',
-                'request_id': 'aq_1',
-                'questions': [{'question': 'Which?', 'header': 'H', 'options': []}],
-                'metadata': {'source': 'tool'},
-                'origin': 'tool:AskQuestion',
-                'preview_format': 'markdown',
-            },
-        )
-        assert result['request_id'] == 'aq_1'
-        assert len(result['questions']) == 1
-        assert result['origin'] == 'tool:AskQuestion'
-        assert result['preview_format'] == 'markdown'
-
-    def test_ask_question_reply_maps_answers(self) -> None:
-        result = _public_content_for_event(
-            'ask_question_reply',
-            {
-                'type': 'ask_question_reply',
-                'request_id': 'aq_1',
-                'answers': {'Q1': 'A1'},
-                'annotations': {'Q1': {'notes': 'extra'}},
-            },
-        )
-        assert result['answers'] == {'Q1': 'A1'}
-        assert result['annotations'] == {'Q1': {'notes': 'extra'}}
-
-    def test_ask_question_timeout_maps_reason(self) -> None:
-        result = _public_content_for_event(
-            'ask_question_timeout',
-            {
-                'type': 'ask_question_timeout',
-                'request_id': 'aq_1',
-                'questions': [],
-                'reason': 'timeout',
-            },
-        )
-        assert result['request_id'] == 'aq_1'
-        assert result['reason'] == 'timeout'
-
-
 class TestSourceNormalization:
     """ESIN-06: Source normalization for generator events."""
 

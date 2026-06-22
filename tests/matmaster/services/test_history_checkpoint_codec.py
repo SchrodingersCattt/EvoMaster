@@ -20,7 +20,7 @@ def _compact_user_message() -> UserMessage:
     return UserMessage(
         content=(
             "以下是先前对话的压缩摘要，作为历史背景。"
-            "\n\n<previous_session_summary>\nsummary\n</previous_session_summary>"
+            "\n\n<previous-session-summary>\nsummary\n</previous-session-summary>"
         )
     )
 
@@ -74,8 +74,8 @@ def test_validate_base_messages_accepts_compacted_history_marker() -> None:
         [
             UserMessage(
                 content=(
-                    "<user_instructions>\nUse SI units.\n</user_instructions>"
-                    "\n\n<compacted_history>\nsummary\n</compacted_history>"
+                    "<user-instructions>\nUse SI units.\n</user-instructions>"
+                    "\n\n<compacted-history>\nsummary\n</compacted-history>"
                 )
             )
         ]

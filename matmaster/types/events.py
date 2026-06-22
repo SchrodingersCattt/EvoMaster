@@ -203,32 +203,32 @@ class ToolProgressEvent(EventBase):
 # ── SystemEvent: service-layer events ───────────────────
 
 
-class AskQuestionEvent(EventBase):
-    """Structured multi-choice question event sent to user."""
+class InteractionRequestEvent(EventBase):
+    """Generic interaction request event sent to user."""
 
-    type: Literal["ask_question"] = "ask_question"
+    type: Literal["interaction_request"] = "interaction_request"
+    kind: str
     request_id: str
-    questions: list[dict[str, Any]]
-    metadata: dict[str, Any] = Field(default_factory=dict)
-    origin: str | None = None
-    preview_format: str = "markdown"
+    task_id: str
+    expires_at: str | None = None
+    payload: dict[str, Any] = Field(default_factory=dict)
 
 
-class AskQuestionReplyEvent(EventBase):
-    """User reply to a structured question."""
+class InteractionReplyEvent(EventBase):
+    """User reply to a generic interaction request."""
 
-    type: Literal["ask_question_reply"] = "ask_question_reply"
+    type: Literal["interaction_reply"] = "interaction_reply"
+    kind: str
     request_id: str
-    answers: dict[str, str]
-    annotations: dict[str, dict[str, str]] = Field(default_factory=dict)
+    payload: dict[str, Any] = Field(default_factory=dict)
 
 
-class AskQuestionTimeoutEvent(EventBase):
-    """Structured question timeout event."""
+class InteractionTimeoutEvent(EventBase):
+    """Generic interaction timeout event."""
 
-    type: Literal["ask_question_timeout"] = "ask_question_timeout"
+    type: Literal["interaction_timeout"] = "interaction_timeout"
+    kind: str
     request_id: str
-    questions: list[dict[str, Any]]
     reason: str = "timeout"
 
 
@@ -344,9 +344,9 @@ AgentEvent = Annotated[
 
 SystemEvent = Annotated[
     Union[
-        AskQuestionEvent,
-        AskQuestionReplyEvent,
-        AskQuestionTimeoutEvent,
+        InteractionRequestEvent,
+        InteractionReplyEvent,
+        InteractionTimeoutEvent,
         CompactionEvent,
         ExpRunEvent,
         CancelledEvent,
@@ -375,9 +375,9 @@ BusEvent = Annotated[
         SkillHitEvent,
         ToolProgressEvent,
         # SystemEvent types
-        AskQuestionEvent,
-        AskQuestionReplyEvent,
-        AskQuestionTimeoutEvent,
+        InteractionRequestEvent,
+        InteractionReplyEvent,
+        InteractionTimeoutEvent,
         CompactionEvent,
         ExpRunEvent,
         CancelledEvent,

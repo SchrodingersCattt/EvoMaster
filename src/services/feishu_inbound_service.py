@@ -94,6 +94,9 @@ async def _run_agent_and_reply_feishu(
         mode="direct",
         bohrium_project_id=runtime_pref.project_id,
         model=runtime_pref.model,
+        bohrium_submit_confirmation_required=(
+            runtime_pref.user_bohrium_submit_confirmation_required
+        ),
     )
     try:
         quota_status = await check_quota_status(user_id)

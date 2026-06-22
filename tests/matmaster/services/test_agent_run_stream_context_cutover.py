@@ -116,9 +116,9 @@ async def test_phase2c_base_prompt_delta_from_phase1_renderer_is_explicit() -> N
     assert "Treat it as user-level preferences." in old_content
     assert old_content.endswith("calculate lattice parameter")
     assert new_content == (
-        "<user_instructions>\nUse SI units.\n</user_instructions>"
+        "<user-instructions>\nUse SI units.\n</user-instructions>"
         "\n\n"
-        "<current_instruction>\ncalculate lattice parameter\n</current_instruction>"
+        "<current-instruction>\ncalculate lattice parameter\n</current-instruction>"
     )
 
 
@@ -160,10 +160,10 @@ async def test_current_attachment_prompt_shape_delta_is_explicit_before_cutover(
         "inspect this file\n\n[Available attachments]\nfile_1 a.txt /tmp/a.txt"
     )
     assert new_content == (
-        "<user_instructions>\nBe precise.\n</user_instructions>"
+        "<user-instructions>\nBe precise.\n</user-instructions>"
         "\n\n"
-        "<current_instruction>\ninspect this file\n\n"
-        "[Current attachments]\nfile_1 a.txt /tmp/a.txt\n</current_instruction>"
+        "<current-instruction>\ninspect this file\n\n"
+        "[Current attachments]\nfile_1 a.txt /tmp/a.txt\n</current-instruction>"
     )
 
 
@@ -188,9 +188,9 @@ async def test_anchor_turn_renders_instructions_and_current_instruction_block() 
 
     runtime = result.user_turn_context.to_message(ContextView.RUNTIME)
     assert runtime.content == (
-        "<user_instructions>\nUse SI units.\n</user_instructions>"
+        "<user-instructions>\nUse SI units.\n</user-instructions>"
         "\n\n"
-        "<current_instruction>\nhello, world\n</current_instruction>"
+        "<current-instruction>\nhello, world\n</current-instruction>"
     )
     assert result.user_instructions_hash == bundle.hash
     assert result.used_composition == "anchor"
@@ -217,7 +217,7 @@ async def test_continuation_turn_emits_only_current_instruction_block() -> None:
 
     runtime = result.user_turn_context.to_message(ContextView.RUNTIME)
     assert runtime.content == (
-        "<current_instruction>\nfollow-up\n</current_instruction>"
+        "<current-instruction>\nfollow-up\n</current-instruction>"
     )
     assert result.used_composition == "continuation"
     assert port.calls == []
@@ -247,17 +247,17 @@ async def test_anchor_turn_with_attachments_merges_into_current_instruction() ->
 
     runtime = result.user_turn_context.to_message(ContextView.RUNTIME)
     assert runtime.content == (
-        "<user_instructions>\nBe concise.\n</user_instructions>"
+        "<user-instructions>\nBe concise.\n</user-instructions>"
         "\n\n"
-        "<current_instruction>\ncheck files\n\n"
+        "<current-instruction>\ncheck files\n\n"
         "[Current attachments]\n"
         "file_1 a.txt /tmp/a.txt\n"
         "workspace_1 /workspace/note.md\n"
         "image_1 b.png /tmp/b.png\n"
-        "</current_instruction>"
+        "</current-instruction>"
     )
     assert [image.url for image in runtime.images] == ["/tmp/b.png"]
-    assert "<turn_attachments>" not in runtime.content
+    assert "<turn-attachments>" not in runtime.content
 
 
 @pytest.mark.asyncio
@@ -279,8 +279,8 @@ async def test_anchor_turn_with_empty_instructions_omits_wrapper() -> None:
     )
 
     runtime = result.user_turn_context.to_message(ContextView.RUNTIME)
-    assert "<user_instructions>" not in runtime.content
-    assert runtime.content == "<current_instruction>\njust text\n</current_instruction>"
+    assert "<user-instructions>" not in runtime.content
+    assert runtime.content == "<current-instruction>\njust text\n</current-instruction>"
 
 
 @pytest.mark.asyncio
@@ -383,9 +383,9 @@ async def test_anchor_turn_with_session_factory_renders_tools_and_attachments() 
     )
 
     runtime = result.user_turn_context.render(ContextView.RUNTIME)
-    assert "<loaded_skills>" in runtime
+    assert "<loaded-skills>" in runtime
     assert "- pxrd: PXRD helper (mcp_server=mat_xrd)" in runtime
-    assert "<active_tools>" in runtime
+    assert "<active-tools>" in runtime
     assert "  - mat_xrd_read" in runtime
     assert "<attachments>" in runtime
     assert "file_1 a.csv https://oss.example.com/a.csv" in runtime
@@ -506,7 +506,7 @@ async def test_anchor_continuation_anchor_sequence_kind_flow() -> None:
     )
     assert r2.used_composition == "continuation"
     assert r2.user_turn_context.to_message(ContextView.RUNTIME).content == (
-        "<current_instruction>\nturn2\n</current_instruction>"
+        "<current-instruction>\nturn2\n</current-instruction>"
     )
 
     bundle_v2 = _bundle("v2 different")

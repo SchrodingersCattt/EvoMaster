@@ -1,6 +1,6 @@
 # Electric Field, Dipole Correction, and Electrostatic Potential
 
-## Dipole Correction Only (no finite field)
+## Dipole Correction (asymmetric slab only)
 ```
 INPUT_PARAMETERS
 efield_flag 1
@@ -12,7 +12,7 @@ efield_amp 0.0
 ```
 - `efield_flag 1` + `dip_cor_flag 1` + `efield_amp 0.0` = pure dipole correction.
 - `efield_dir`: 0=x, 1=y, 2=z. Set to vacuum direction.
-- `efield_pos_max`, `efield_pos_dec`: position and decay (fractional coords) of sawtooth correction in vacuum.
+- `efield_pos_max`: fractional coord of the sawtooth discontinuity — **must sit at the CENTER of the vacuum gap, far from every atom**. Derive it from the atom z-range in STRU (atoms at z=0.25–0.55 → vacuum center ≈ 0.0/1.0; atoms at z=0.0–0.4 → center ≈ 0.7). Never copy a constant like `0.95` from a finite-field example — if the discontinuity lands on non-zero charge density the dipole is mis-estimated and the vacuum potential becomes a slope. `efield_pos_dec`: decay width.
 
 ## Finite External Electric Field
 ```

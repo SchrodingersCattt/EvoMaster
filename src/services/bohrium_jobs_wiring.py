@@ -10,14 +10,19 @@ from typing import Any
 from matmaster.bohrium.status import to_ledger_status
 from matmaster.context.ports import (
     WorkspaceJobs,
+    WorkspaceJobsExport,
     WorkspaceJobsExportError,
     WorkspaceJobsPort,
     WorkspaceJobsQuery,
 )
 from matmaster.context.workspace_jobs_compute import (
+    PREVIEW_COLUMNS,
+    PREVIEW_FIELD_CHAR_LIMIT,
     compute_inline_chars,
     compute_summary,
-    select_priority_samples,
+    select_delivery_preview_rows,
+    select_observation_preview_rows,
+    trim_preview_rows_to_char_limit,
 )
 from src.dao.bohrium_jobs_table import BohriumJobsTable, get_bohrium_jobs_table
 from src.services.bohrium_delivery_ack import DeliverySnapshot
@@ -148,13 +153,15 @@ class _BohriumJobLedger:
             sandbox=bool(sandbox),
             job_id=str(job_id),
         )
+        if self._observed_terminal is not None:
+            self._observed_terminal.add((bool(sandbox), str(job_id)))
 
 
 class _SessionWorkspaceDeliveryJobsPort:
     """delivery：只围绕本 session 的 snapshot.rows，只用 row 阈值。
 
-    未超阈值返回含完整 pending_terminal_jobs 的 WorkspaceJobs；超阈值仅选
-    action 样本并导出 pending CSV；导出失败时写 snapshot.export_failure。
+    未超阈值返回含完整 unhandled_terminal_jobs 的 WorkspaceJobs；超阈值仅选
+    action preview 并导出 CSV；导出失败时写 snapshot.export_failure。
     """
 
     def __init__(
@@ -163,70 +170,58 @@ class _SessionWorkspaceDeliveryJobsPort:
         workspace: str,
         snapshot: DeliverySnapshot | None,
         exporter: WorkspaceJobsCsvExporter,
-        row_limit: int,
-        action_sample_limit: int,
+        prompt_preview_limit: int,
     ) -> None:
         self._workspace = workspace
         self._snapshot = snapshot
         self._exporter = exporter
-        self._row_limit = row_limit
-        self._action_sample_limit = action_sample_limit
+        self._prompt_preview_limit = prompt_preview_limit
 
     async def load_workspace_jobs(self, query: WorkspaceJobsQuery) -> WorkspaceJobs:
         pending: tuple[dict[str, Any], ...] = (
             self._snapshot.rows if self._snapshot is not None else ()
         )
         summary = compute_summary((), pending, ())
-        if len(pending) <= self._row_limit:
+        if len(pending) <= self._prompt_preview_limit:
             return WorkspaceJobs(
                 workspace=self._workspace,
-                pending_terminal_jobs=pending,
+                unhandled_terminal_jobs=pending,
                 summary=summary,
                 mode="session_workspace_delivery",
             )
-        samples = select_priority_samples(
-            (),
-            pending,
-            (),
-            action_limit=self._action_sample_limit,
-            fill_limit=0,
+        preview_rows = select_delivery_preview_rows(
+            pending, limit=self._prompt_preview_limit
         )
         export_input = WorkspaceJobs(
             workspace=self._workspace,
-            pending_terminal_jobs=pending,
+            unhandled_terminal_jobs=pending,
         )
         result = self._exporter.export(export_input, reason="row_limit")
+        export: WorkspaceJobsExport | None
+        export_error: WorkspaceJobsExportError | None
         if isinstance(result, WorkspaceJobsExportError):
             self._record_export_failure(result)
-            return WorkspaceJobs(
-                workspace=self._workspace,
-                summary=summary,
-                priority_samples=samples,
-                export_error=result,
-                mode="session_workspace_delivery",
-            )
+            export, export_error = None, result
+        else:
+            export, export_error = result, None
         return WorkspaceJobs(
             workspace=self._workspace,
             summary=summary,
-            priority_samples=samples,
-            export=result,
+            preview_limit=self._prompt_preview_limit,
+            preview_rows=preview_rows,
+            export=export,
+            export_error=export_error,
             mode="session_workspace_delivery",
         )
 
     def _record_export_failure(self, err: WorkspaceJobsExportError) -> None:
         if self._snapshot is None:
             return
-        self._snapshot.export_failure.update(
-            {
-                "reason": err.reason,
-                "rows": err.rows,
-                "target_path": err.target_path,
-            }
-        )
+        self._snapshot.export_failure.update(err.as_meta())
 
 
 class _WorkspaceObservationJobsPort:
-    """observation：跨 session 完整快照，row+char 双阈值。"""
+    """observation：跨 session required/reference 三 bucket，row+char 双阈值。"""
 
     def __init__(
         self,
@@ -237,11 +232,10 @@ class _WorkspaceObservationJobsPort:
         workspace: str,
         exporter: WorkspaceJobsCsvExporter,
         snapshot: DeliverySnapshot | None,
-        row_limit: int,
+        required_fetch_limit: int,
+        handled_recent_limit: int,
+        prompt_preview_limit: int,
         char_limit: int,
-        action_sample_limit: int,
-        priority_sample_limit: int,
-        max_rows: int,
     ) -> None:
         self._table_ref = table_ref
         self._user_id = user_id
@@ -249,102 +243,150 @@ class _WorkspaceObservationJobsPort:
         self._workspace = workspace
         self._exporter = exporter
         self._snapshot = snapshot
-        self._row_limit = row_limit
+        self._required_fetch_limit = required_fetch_limit
+        self._handled_recent_limit = handled_recent_limit
+        self._prompt_preview_limit = prompt_preview_limit
         self._char_limit = char_limit
-        self._action_sample_limit = action_sample_limit
-        self._priority_sample_limit = priority_sample_limit
-        self._max_rows = max_rows
 
     async def load_workspace_jobs(self, query: WorkspaceJobsQuery) -> WorkspaceJobs:
         try:
             table = self._table_ref.get()
-            active, pending, recent = await asyncio.gather(
-                asyncio.to_thread(
-                    table.query_workspace_active,
-                    user_id=self._user_id,
-                    org_id=self._org_id,
-                    workspace=self._workspace,
-                ),
-                asyncio.to_thread(
-                    table.query_workspace_pending_terminal,
-                    user_id=self._user_id,
-                    org_id=self._org_id,
-                    workspace=self._workspace,
-                    limit=self._max_rows,
-                ),
-                asyncio.to_thread(
-                    table.query_workspace_recent_terminal,
-                    user_id=self._user_id,
-                    org_id=self._org_id,
-                    workspace=self._workspace,
-                    limit=self._max_rows,
-                ),
-            )
-        except Exception:  # noqa: BLE001
+        except Exception as exc:  # noqa: BLE001
+            return self._required_unavailable(exc)
+        active_res, unhandled_res, handled_res = await asyncio.gather(
+            asyncio.to_thread(
+                table.query_workspace_active,
+                user_id=self._user_id,
+                org_id=self._org_id,
+                workspace=self._workspace,
+                limit=self._required_fetch_limit + 1,
+            ),
+            asyncio.to_thread(
+                table.query_workspace_unhandled_terminal,
+                user_id=self._user_id,
+                org_id=self._org_id,
+                workspace=self._workspace,
+                limit=self._required_fetch_limit + 1,
+            ),
+            asyncio.to_thread(
+                table.query_workspace_handled_recent_terminal,
+                user_id=self._user_id,
+                org_id=self._org_id,
+                workspace=self._workspace,
+                limit=self._handled_recent_limit + 1,
+            ),
+            return_exceptions=True,
+        )
+        if isinstance(active_res, BaseException):
+            return self._required_unavailable(active_res)
+        if isinstance(unhandled_res, BaseException):
+            return self._required_unavailable(unhandled_res)
+        active_raw, unhandled_raw = active_res, unhandled_res
+        if isinstance(handled_res, BaseException):
             logger.warning(
-                "load_workspace_jobs(observation) failed workspace=%s",
+                "load_workspace_jobs(observation handled_recent) failed workspace=%s",
                 self._workspace,
-                exc_info=True,
+                exc_info=handled_res,
             )
-            return WorkspaceJobs.empty()
-        active_t = tuple(active)
-        pending_t = tuple(pending)
-        recent_t = tuple(recent)
-        truncated = len(pending_t) >= self._max_rows or len(recent_t) >= self._max_rows
-        summary = compute_summary(active_t, pending_t, recent_t)
+            handled_recent_raw: list[dict[str, Any]] = []
+            handled_recent_unavailable = True
+        else:
+            handled_recent_raw = handled_res
+            handled_recent_unavailable = False
+
+        active = tuple(active_raw[: self._required_fetch_limit])
+        unhandled = tuple(unhandled_raw[: self._required_fetch_limit])
+        handled_recent = tuple(handled_recent_raw[: self._handled_recent_limit])
+        active_truncated = len(active_raw) > self._required_fetch_limit
+        unhandled_truncated = len(unhandled_raw) > self._required_fetch_limit
+        required_truncated = active_truncated or unhandled_truncated
+        handled_recent_has_more = len(handled_recent_raw) > self._handled_recent_limit
+        if required_truncated:
+            self._write_required_block(
+                reason="required_truncated",
+                active_truncated=active_truncated,
+                unhandled_terminal_truncated=unhandled_truncated,
+            )
+
+        summary = compute_summary(active, unhandled, handled_recent)
         full = WorkspaceJobs(
             workspace=self._workspace,
-            active_jobs=active_t,
-            pending_terminal_jobs=pending_t,
-            recent_terminal_jobs=recent_t,
+            active_jobs=active,
+            unhandled_terminal_jobs=unhandled,
+            handled_recent_terminal_jobs=handled_recent,
             summary=summary,
             mode="workspace_observation",
-            snapshot_truncated=truncated,
+            required_truncated=required_truncated,
+            handled_recent_has_more=handled_recent_has_more,
+            handled_recent_unavailable=handled_recent_unavailable,
         )
+        snapshot_total = len(active) + len(unhandled) + len(handled_recent)
         if (
-            summary.total <= self._row_limit
+            snapshot_total <= self._prompt_preview_limit
             and compute_inline_chars(full) <= self._char_limit
         ):
             return full
-        samples = select_priority_samples(
-            active_t,
-            pending_t,
-            recent_t,
-            action_limit=self._action_sample_limit,
-            fill_limit=self._priority_sample_limit,
+        preview_rows = select_observation_preview_rows(
+            active=active,
+            unhandled_terminal=unhandled,
+            handled_recent_terminal=handled_recent,
+            limit=self._prompt_preview_limit,
         )
-        reason = "row_limit" if summary.total > self._row_limit else "char_limit"
+        preview_rows = trim_preview_rows_to_char_limit(
+            preview_rows,
+            columns=PREVIEW_COLUMNS,
+            char_limit=self._char_limit,
+        )
+        reason = (
+            "row_limit" if snapshot_total > self._prompt_preview_limit else "char_limit"
+        )
         result = self._exporter.export(full, reason=reason)
+        export: WorkspaceJobsExport | None
+        export_error: WorkspaceJobsExportError | None
         if isinstance(result, WorkspaceJobsExportError):
             self._record_export_failure(result)
-            return WorkspaceJobs(
-                workspace=self._workspace,
-                summary=summary,
-                priority_samples=samples,
-                export_error=result,
-                mode="workspace_observation",
-                snapshot_truncated=truncated,
+            export, export_error, omitted = None, result, None
+        else:
+            export, export_error, omitted = (
+                result,
+                None,
+                snapshot_total - len(preview_rows),
             )
         return WorkspaceJobs(
             workspace=self._workspace,
             summary=summary,
-            priority_samples=samples,
-            export=result,
-            omitted_count=summary.total - len(samples),
+            preview_limit=self._prompt_preview_limit,
+            preview_rows=preview_rows,
+            export=export,
+            export_error=export_error,
+            omitted_count=omitted,
             mode="workspace_observation",
-            snapshot_truncated=truncated,
+            required_truncated=required_truncated,
+            handled_recent_has_more=handled_recent_has_more,
+            handled_recent_unavailable=handled_recent_unavailable,
         )
+
+    def _required_unavailable(self, exc: BaseException) -> WorkspaceJobs:
+        logger.warning(
+            "load_workspace_jobs(observation required) failed workspace=%s",
+            self._workspace,
+            exc_info=exc,
+        )
+        self._write_required_block(reason="query_failed")
+        return WorkspaceJobs(
+            workspace=self._workspace,
+            mode="workspace_observation",
+            required_error={"reason": "query_failed"},
+        )
+
+    def _write_required_block(self, *, reason: str, **extra: Any) -> None:
+        if self._snapshot is not None:
+            self._snapshot.required_block.update({"reason": reason, **extra})
 
     def _record_export_failure(self, err: WorkspaceJobsExportError) -> None:
         if self._snapshot is None:
             return
-        self._snapshot.export_failure.update(
-            {
-                "reason": err.reason,
-                "rows": err.rows,
-                "target_path": err.target_path,
-            }
-        )
+        self._snapshot.export_failure.update(err.as_meta())
 
 
 class _EmptyWorkspaceJobsPort:
@@ -369,11 +411,10 @@ def build_bohrium_jobs_ports(
     """构造写 port 与读 port（共享同一个 DAO 实例）。"""
     table_ref = _BohriumJobsTableRef(table=table, table_factory=table_factory)
     normalized_workspace = _normalize_ledger_workspace(workspace)
-    row_limit = env_int("BOHRIUM_WORKSPACE_JOBS_INLINE_ROW_LIMIT", 50)
-    action_sample_limit = env_int("BOHRIUM_WORKSPACE_JOBS_ACTION_SAMPLE_LIMIT", 200)
-    char_limit = env_int("BOHRIUM_WORKSPACE_JOBS_INLINE_CHAR_LIMIT", 12000)
-    priority_sample_limit = env_int("BOHRIUM_WORKSPACE_JOBS_PRIORITY_SAMPLE_LIMIT", 20)
-    max_rows = env_int("BOHRIUM_WORKSPACE_JOBS_OBSERVATION_MAX_ROWS", 2000)
+    required_fetch_limit = env_int("BOHRIUM_WORKSPACE_JOBS_REQUIRED_FETCH_LIMIT", 2000)
+    handled_recent_limit = env_int("BOHRIUM_WORKSPACE_JOBS_HANDLED_RECENT_LIMIT", 20)
+    prompt_preview_limit = env_int("BOHRIUM_WORKSPACE_JOBS_PROMPT_PREVIEW_LIMIT", 50)
+    char_limit = min(prompt_preview_limit * PREVIEW_FIELD_CHAR_LIMIT, 24000)
     ledger = (
         _BohriumJobLedger(
             table_ref=table_ref,
@@ -402,19 +443,17 @@ def build_bohrium_jobs_ports(
             workspace=normalized_workspace,
             exporter=exporter,
             snapshot=delivery_snapshot,
-            row_limit=row_limit,
+            required_fetch_limit=required_fetch_limit,
+            handled_recent_limit=handled_recent_limit,
+            prompt_preview_limit=prompt_preview_limit,
             char_limit=char_limit,
-            action_sample_limit=action_sample_limit,
-            priority_sample_limit=priority_sample_limit,
-            max_rows=max_rows,
         )
     elif job_context_mode == "session_workspace_delivery":
         jobs = _SessionWorkspaceDeliveryJobsPort(
             workspace=normalized_workspace,
             snapshot=delivery_snapshot,
             exporter=exporter,
-            row_limit=row_limit,
-            action_sample_limit=action_sample_limit,
+            prompt_preview_limit=prompt_preview_limit,
         )
     else:
         jobs = _EmptyWorkspaceJobsPort()

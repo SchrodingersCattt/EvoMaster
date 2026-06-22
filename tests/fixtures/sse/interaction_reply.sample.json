@@ -1,0 +1,17 @@
+{
+  "content": {
+    "kind": "submit_review",
+    "payload": {
+      "decision": "submit",
+      "disable_future_confirmation": true
+    },
+    "request_id": "sr_1"
+  },
+  "invocation_id": "inv1",
+  "session_id": "s1",
+  "source": "User",
+  "spawn_id": null,
+  "task_id": "t1",
+  "timestamp": "2026-06-21T10:15:30.123456",
+  "type": "interaction_reply"
+}

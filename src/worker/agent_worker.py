@@ -348,6 +348,9 @@ def _run_worker_loop() -> None:
         )
         turn_input = TurnInput.from_payload(payload.get('turn_input'))
         bohrium_required = bool(payload.get('bohrium_required'))
+        submit_confirmation_enabled = bool(
+            payload.get('bohrium_submit_confirmation_required')
+        )
         raw_workspace = payload.get('workspace')
         workspace = (
             raw_workspace.strip() or None if isinstance(raw_workspace, str) else None
@@ -370,7 +373,6 @@ def _run_worker_loop() -> None:
         user_info_display = (
             f"{user_info['user_id']} | {user_info['nickname']} | {user_info['email']}"
         )
-        redis_dao.delete_interaction_reply_list(session_id)
         # 清除可能残留的上一轮 stop key（含 session 级），避免上一轮 finally 中 delete 失败导致本轮一启动即被误判为已请求停止
         logger.info(
             'Agent worker: clear stop keys before run session_id=%s task_id=%s',
@@ -378,7 +380,6 @@ def _run_worker_loop() -> None:
             task_id,
         )
         redis_dao.delete_stop_requested(session_id, task_id)
-        redis_dao.set_interaction_run_active(session_id)
         redis_dao.set_interaction_run_context(session_id, task_id, invocation_id or '')
 
         def send_cb(p: dict, _sid: str = session_id) -> None:
@@ -414,7 +415,7 @@ def _run_worker_loop() -> None:
                     task_id,
                     fail_reason or 'unknown',
                 )
-                redis_dao.delete_interaction_run_active(session_id)
+                redis_dao.delete_interaction_run_context(session_id)
                 LogContext.clear()
                 continue
 
@@ -467,6 +468,7 @@ def _run_worker_loop() -> None:
                     "turn_input": turn_input,
                     "workspace": workspace,
                     "bohrium_required": bohrium_required,
+                    "submit_confirmation_enabled": submit_confirmation_enabled,
                     "delivery_snapshot": delivery_snapshot,
                     "job_context_mode": job_context_mode,
                 }
@@ -530,7 +532,7 @@ def _run_worker_loop() -> None:
             if acquired:
                 _current_session_id = None
                 LogContext.clear()
-            redis_dao.delete_interaction_run_active(session_id)
+            redis_dao.delete_interaction_run_context(session_id)
             redis_dao.delete_stop_requested(session_id, task_id)
             if acquired:
                 if run_success and delivery_snapshot is not None:

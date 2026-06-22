@@ -93,8 +93,8 @@ class SessionToolsSource:
             return ()
         return (
             ContextSection(
-                key="session_tools",
-                tag="active_tools",
+                key="session-tools",
+                tag="active-tools",
                 content=text,
                 order=SectionOrder.SESSION_TOOLS,
                 views=ALL_VIEWS,

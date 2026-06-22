@@ -6,11 +6,11 @@ from matmaster.bohrium.status import LEDGER_FAILURE_STATUSES
 from matmaster.context.ports import WorkspaceJobs
 from matmaster.context.sections import ALL_VIEWS, ContextSection, SectionOrder
 from matmaster.context.workspace_jobs_compute import (
-    SUMMARY_COLUMNS,
+    PREVIEW_COLUMNS,
     render_csv_block,
+    render_head_lines,
     render_inline_lines,
     render_job_json,
-    summary_to_dict,
 )
 
 _DELIVERY_FAILED_HEADER = "以下作业失败："
@@ -38,10 +38,8 @@ _DELIVERY_READ_HINT = (
     "需要某个作业的 input_dir / result_dir 等，用 Read 或 Bash 读取该 CSV。"
 )
 _DELIVERY_EXPORT_FAILED_TEXT = "完整明细导出失败，被省略的作业未必已交付。"
-_SNAPSHOT_TRUNCATED_HINT = (
-    "Workspace snapshot hit the row cap and may be incomplete; some jobs are "
-    "absent from both this summary and the exported CSV."
-)
+_PREVIEW_POLICY = "unhandled_action > active > unhandled_other > handled_recent"
+_CSV_CONTAINS = "active + unhandled_terminal + handled_recent_terminal_limited"
 
 
 @dataclass(frozen=True)
@@ -78,16 +76,16 @@ class WorkspaceJobsSource:
 
     @classmethod
     def _delivery_full_text(cls, jobs: WorkspaceJobs) -> str:
-        if not jobs.pending_terminal_jobs:
+        if not jobs.unhandled_terminal_jobs:
             return ""
         failed = tuple(
             job
-            for job in jobs.pending_terminal_jobs
+            for job in jobs.unhandled_terminal_jobs
             if str(job.get("status")) in _DELIVERY_FAILURE_STATUSES
         )
         succeeded = tuple(
             job
-            for job in jobs.pending_terminal_jobs
+            for job in jobs.unhandled_terminal_jobs
             if str(job.get("status")) == _DELIVERY_SUCCESS_STATUS
         )
         if not (failed or succeeded):
@@ -109,7 +107,7 @@ class WorkspaceJobsSource:
             else 0
         )
         lines = (
-            *cls._render_delivery_table(_DELIVERY_FAILED_HEADER, jobs.priority_samples),
+            *cls._render_delivery_table(_DELIVERY_FAILED_HEADER, jobs.preview_rows),
             "",
             _DELIVERY_SUCCEEDED_COUNT_TEMPLATE.format(count=finished),
             "",
@@ -121,28 +119,15 @@ class WorkspaceJobsSource:
     @classmethod
     def _delivery_export_failed_text(cls, jobs: WorkspaceJobs) -> str:
         lines = (
-            *cls._render_delivery_table(_DELIVERY_FAILED_HEADER, jobs.priority_samples),
+            *cls._render_delivery_table(_DELIVERY_FAILED_HEADER, jobs.preview_rows),
             "",
             _DELIVERY_EXPORT_FAILED_TEXT,
         )
         return "\n".join(lines)
 
-    @staticmethod
-    def _head_lines(jobs: WorkspaceJobs) -> list[str]:
-        lines: list[str] = []
-        if jobs.workspace:
-            lines.append(f"workspace {jobs.workspace}")
-        if jobs.mode:
-            lines.append(f"mode {jobs.mode}")
-        if jobs.summary is not None:
-            lines.append(f"summary {render_job_json(summary_to_dict(jobs.summary))}")
-        if jobs.snapshot_truncated:
-            lines.append(f'snapshot_truncated_hint "{_SNAPSHOT_TRUNCATED_HINT}"')
-        return lines
-
     @classmethod
     def _compact_lines(cls, jobs: WorkspaceJobs) -> tuple[str, ...]:
-        lines = cls._head_lines(jobs)
+        lines = render_head_lines(jobs)
         export = jobs.export
         assert export is not None
         lines.append(
@@ -157,54 +142,37 @@ class WorkspaceJobsSource:
                 }
             )
         )
+        lines.append(f"csv_contains {_CSV_CONTAINS}")
         lines.append(f'read_hint "{_READ_HINT}"')
-        if jobs.summary is not None and (
-            jobs.summary.failed or jobs.summary.lost or jobs.summary.stopped
-        ):
+        if jobs.summary is not None and jobs.summary.unhandled_action:
             lines.append(f'action_hint "{_ACTION_HINT}"')
-        if jobs.priority_samples:
-            lines.extend(
-                render_csv_block(
-                    "priority_samples",
-                    SUMMARY_COLUMNS,
-                    jobs.priority_samples,
-                )
+        lines.append(
+            "prompt_preview "
+            + render_job_json(
+                {
+                    "preview_limit": jobs.preview_limit,
+                    "preview_rows": len(jobs.preview_rows),
+                    "omitted_rows": jobs.omitted_count,
+                }
             )
-        if jobs.omitted_count is not None:
-            lines.append(
-                "omitted_from_prompt "
-                + render_job_json(
-                    {
-                        "count": jobs.omitted_count,
-                        "reason": "large job set exported to csv",
-                    }
-                )
+        )
+        lines.append(f"preview_policy {_PREVIEW_POLICY}")
+        if jobs.preview_rows:
+            lines.extend(
+                render_csv_block("preview_rows", PREVIEW_COLUMNS, jobs.preview_rows)
             )
         return tuple(lines)
 
     @classmethod
     def _error_lines(cls, jobs: WorkspaceJobs) -> tuple[str, ...]:
-        lines = cls._head_lines(jobs)
+        lines = render_head_lines(jobs)
         err = jobs.export_error
         assert err is not None
-        lines.append(
-            "workspace_jobs_export_error "
-            + render_job_json(
-                {
-                    "reason": err.reason,
-                    "rows": err.rows,
-                    "target_path": err.target_path,
-                }
-            )
-        )
+        lines.append("workspace_jobs_export_error " + render_job_json(err.as_meta()))
         lines.append(f'action_hint "{_EXPORT_ERROR_HINT}"')
-        if jobs.priority_samples:
+        if jobs.preview_rows:
             lines.extend(
-                render_csv_block(
-                    "priority_samples",
-                    SUMMARY_COLUMNS,
-                    jobs.priority_samples,
-                )
+                render_csv_block("preview_rows", PREVIEW_COLUMNS, jobs.preview_rows)
             )
         return tuple(lines)
 
@@ -238,8 +206,8 @@ class WorkspaceJobsSource:
             return ()
         return (
             ContextSection(
-                key="workspace_jobs",
-                tag="workspace_jobs",
+                key="workspace-jobs",
+                tag="workspace-jobs",
                 content="\n".join(self.lines),
                 order=SectionOrder.WORKSPACE_JOBS,
                 views=ALL_VIEWS,

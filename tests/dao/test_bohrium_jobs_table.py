@@ -142,7 +142,7 @@ def test_apply_poll_does_not_revert_terminal_to_active(jobs_table) -> None:
     assert row["poll_count"] == 2
 
 
-def test_apply_kill_sets_terminating_keeps_polling(jobs_table) -> None:
+def test_apply_kill_marks_job_stopped_terminal(jobs_table) -> None:
     jobs_table.insert_submitted(**_submit_kwargs())
     jobs_table.apply_kill(
         user_id="user-1", org_id="org-1", sandbox=True, job_id="12345"
@@ -150,9 +150,9 @@ def test_apply_kill_sets_terminating_keeps_polling(jobs_table) -> None:
     row = jobs_table.get_by_owner_job(
         user_id="user-1", org_id="org-1", sandbox=True, job_id="12345"
     )
-    assert row["status"] == "terminating"
-    assert row["next_poll_at"] is not None
-    assert row["terminal_at"] is None
+    assert row["status"] == "stopped"
+    assert row["next_poll_at"] is None
+    assert row["terminal_at"] is not None
 
 
 def test_query_session_active_returns_active_only_sorted(jobs_table) -> None:

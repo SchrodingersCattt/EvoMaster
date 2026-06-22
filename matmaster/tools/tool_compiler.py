@@ -67,10 +67,12 @@ class ToolCompiler:
         validator = None
         if hasattr(tool, "validate_input") and callable(tool.validate_input):
             validator = tool.validate_input
+        submit_review_provider = getattr(tool, "submit_review_provider", None)
 
         return ToolInstance(
             tool_spec=spec,
             tool_binding=binding,
             tool_executor=tool_executor,
             input_validator=validator,
+            submit_review_provider=submit_review_provider,
         )

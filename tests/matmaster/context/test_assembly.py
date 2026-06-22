@@ -58,8 +58,8 @@ def _session_builder(events, until_event_id, include_attachments):
     assert include_attachments is True
     return (
         ContextSection(
-            key="session_tools",
-            tag="session_tools",
+            key="session-tools",
+            tag="session-tools",
             content="VASP",
             order=SectionOrder.SESSION_TOOLS,
             views=frozenset({ContextView.RUNTIME, ContextView.CHECKPOINT}),
@@ -102,7 +102,7 @@ async def test_assemble_turn_anchor_loads_events_and_jobs() -> None:
     assert events_port.queries[0].until_event_id == 12
     assert len(jobs_port.queries) == 1
     assert (
-        result.user_turn_context.render(ContextView.RUNTIME).count("<session_tools>")
+        result.user_turn_context.render(ContextView.RUNTIME).count("<session-tools>")
         == 1
     )
 
@@ -127,7 +127,7 @@ async def test_assemble_turn_continuation_does_not_load_events() -> None:
 
     assert events_port.queries == []
     assert result.used_composition == "continuation"
-    assert "<user_instructions>" not in result.user_turn_context.render(
+    assert "<user-instructions>" not in result.user_turn_context.render(
         ContextView.RUNTIME
     )
 
@@ -151,9 +151,9 @@ async def test_assembler_render_options_default_to_merged_turn_attachments() -> 
     )
 
     runtime = result.user_turn_context.render(ContextView.RUNTIME)
-    assert "<current_instruction>" in runtime
+    assert "<current-instruction>" in runtime
     assert "[Current attachments]" in runtime
-    assert "<turn_attachments>" not in runtime
+    assert "<turn-attachments>" not in runtime
 
 
 @pytest.mark.asyncio
@@ -178,8 +178,8 @@ async def test_assembler_render_options_can_split_turn_attachments() -> None:
     )
 
     runtime = result.user_turn_context.render(ContextView.RUNTIME)
-    assert "<current_instruction>" in runtime
-    assert "<turn_attachments>" in runtime
+    assert "<current-instruction>" in runtime
+    assert "<turn-attachments>" in runtime
     assert "[Current attachments]" not in runtime
 
 
@@ -207,8 +207,8 @@ async def test_assemble_compaction_prefight_derives_covered_until_from_turn_inpu
     assert result.covered_until_event_id == 12
     runtime = result.user_turn_context.to_message(ContextView.RUNTIME)
     checkpoint = result.user_turn_context.to_message(ContextView.CHECKPOINT)
-    assert "<compacted_history>" in runtime.content
-    assert "<current_instruction>" not in checkpoint.content
+    assert "<compacted-history>" in runtime.content
+    assert "<current-instruction>" not in checkpoint.content
 
 
 @pytest.mark.asyncio
@@ -349,8 +349,8 @@ async def test_assemble_turn_anchor_uses_session_context_factory() -> None:
     )
 
     runtime = result.user_turn_context.render(ContextView.RUNTIME)
-    assert "<loaded_skills>" in runtime
-    assert "<active_tools>" in runtime
+    assert "<loaded-skills>" in runtime
+    assert "<active-tools>" in runtime
     assert "<attachments>" in runtime
     assert port.queries[0].until_event_id == 2
 
@@ -469,5 +469,5 @@ async def test_assembler_default_session_factory_returns_empty_sections() -> Non
     )
 
     runtime = result.user_turn_context.render(ContextView.RUNTIME)
-    assert "<loaded_skills>" not in runtime
-    assert "<active_tools>" not in runtime
+    assert "<loaded-skills>" not in runtime
+    assert "<active-tools>" not in runtime

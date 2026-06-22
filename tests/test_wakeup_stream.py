@@ -26,7 +26,7 @@ def _frames_from_chunk(chunk: str) -> list[dict]:
 
 async def test_snapshot_emits_one_wakeup_per_waiting_active_session():
     sessions = MagicMock()
-    sessions.list_waiting_or_active_session_ids.return_value = ["s1", "s2"]
+    sessions.list_live_run_session_ids.return_value = ["s1", "s2"]
     service = _make_service(sessions)
 
     frames: list[dict] = []
@@ -34,7 +34,7 @@ async def test_snapshot_emits_one_wakeup_per_waiting_active_session():
         async for chunk in service.generate_wakeup_stream("user-1"):
             frames.extend(_frames_from_chunk(chunk))
 
-    sessions.list_waiting_or_active_session_ids.assert_called_once_with("user-1")
+    sessions.list_live_run_session_ids.assert_called_once_with("user-1")
     assert [f["session_id"] for f in frames] == ["s1", "s2"]
     for f in frames:
         assert f["type"] == "session_wakeup"
@@ -45,7 +45,7 @@ async def test_snapshot_emits_one_wakeup_per_waiting_active_session():
 async def test_subscribes_before_snapshot_query():
     sessions = MagicMock()
     order: list[str] = []
-    sessions.list_waiting_or_active_session_ids.side_effect = lambda uid: (
+    sessions.list_live_run_session_ids.side_effect = lambda uid: (
         order.append("snapshot") or ["s1"]
     )
     service = _make_service(sessions)
@@ -75,7 +75,7 @@ async def test_subscribes_before_snapshot_query():
 
 async def test_forwards_live_wakeup_then_closes_on_client_disconnect():
     sessions = MagicMock()
-    sessions.list_waiting_or_active_session_ids.return_value = []
+    sessions.list_live_run_session_ids.return_value = []
     service = _make_service(sessions)
     live = {
         "source": "System",
