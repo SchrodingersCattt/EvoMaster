@@ -14,10 +14,10 @@ Use for DP-GEN `param.json` / `machine.json`, DeePMD training input setup, model
 ## Installing the checker
 
 ```bash
-pip install dpgen-lsp
+pip install -U "dpgen-lsp==0.1.1"
 ```
 
-This installs both the `dpgen-lsp` LSP server and the `dpgen-lsp-tool` CLI.  The package also ships 13 curated templates (12 param + 1 machine) and full documentation.
+This installs or upgrades to the known-good `dpgen-lsp` 0.1.1 release, including both the `dpgen-lsp` LSP server and the `dpgen-lsp-tool` CLI. The package also ships 13 curated templates (12 param + 1 machine) and full documentation.
 
 Useful inspection commands:
 

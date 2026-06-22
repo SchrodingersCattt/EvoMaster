@@ -10,6 +10,7 @@ Importing this module has the side effect of populating
 at module bottom; do not import this file from anywhere else.
 """
 
+from evaluation.validators.dpgen_dargs import check_dpgen_dargs
 from evaluation.validators.gpumd_run_in import check_gpumd_run_in
 from evaluation.validators.gromacs_top import check_gromacs_top
 from evaluation.validators.vasp_incar import check_vasp_incar
@@ -216,6 +217,12 @@ check_gromacs_top_from_evidence = _make_domain_check_handler(
     cfg_keys=("expected", "allowed"),
 )
 
+check_dpgen_dargs_from_evidence = _make_domain_check_handler(
+    "dpgen_dargs_check",
+    check_dpgen_dargs,
+    cfg_keys=("kind", "strict"),
+)
+
 
 def check_struct_file_planarity(*, evidence, ref):
     """Conjugated-core planarity check (lives in its own validator module to
@@ -291,6 +298,7 @@ for _name, _fn in [
     ("vasp_incar_check", check_vasp_incar_from_evidence),
     ("gpumd_run_in_check", check_gpumd_run_in_from_evidence),
     ("gromacs_top_check", check_gromacs_top_from_evidence),
+    ("dpgen_dargs_check", check_dpgen_dargs_from_evidence),
 ]:
     BinaryEvaluator._VERIFY_REGISTRY[_name] = (_evidence_ref_handler(_fn), True)
 
