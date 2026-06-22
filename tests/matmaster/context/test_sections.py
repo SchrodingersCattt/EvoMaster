@@ -7,14 +7,14 @@ from matmaster.context.sections import ContextSection, ContextView, SectionOrder
 
 def test_context_section_accepts_runtime_and_checkpoint_views() -> None:
     section = ContextSection(
-        key="user_instructions",
-        tag="user_instructions",
+        key="user-instructions",
+        tag="user-instructions",
         content="Use SI units.",
         order=SectionOrder.USER_INSTRUCTIONS,
         views=frozenset({ContextView.RUNTIME, ContextView.CHECKPOINT}),
     )
 
-    assert section.key == "user_instructions"
+    assert section.key == "user-instructions"
     assert section.order == SectionOrder.USER_INSTRUCTIONS
 
 
@@ -34,6 +34,7 @@ def test_context_section_rejects_checkpoint_without_runtime() -> None:
     [
         ("", "valid", "ContextSection.key must be non-empty"),
         ("valid", "", "ContextSection.tag must be non-empty"),
+        ("valid", "bad_tag", "ContextSection.tag must use hyphen separators"),
     ],
 )
 def test_context_section_rejects_empty_key_or_tag(

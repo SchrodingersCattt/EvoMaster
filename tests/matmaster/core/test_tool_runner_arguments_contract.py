@@ -80,7 +80,7 @@ def test_nested_mutation_stales_arguments_json_cache():
     cached_before = tc.arguments_json
     assert json.loads(cached_before) == {"q": "hello", "n": 5}
 
-    with pytest.raises(ValidationError):
+    with pytest.raises(ValidationError, match="frozen_instance"):
         tc.arguments = {"q": "rebind"}  # type: ignore[misc]
 
     tc.arguments["q"] = "MUTATED"

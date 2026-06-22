@@ -29,6 +29,14 @@ class LogContext:
         cls._session_id.set(None)
         cls._task_id.set(None)
 
+    @classmethod
+    def current(cls) -> tuple[str, str]:
+        """返回当前上下文，供日志外的观测系统复用同一关联键。"""
+        return (
+            cls._session_id.get(None) or '-',
+            cls._task_id.get(None) or '-',
+        )
+
     @staticmethod
     def session_id_from_path(path: str) -> str | None:
         """从 /api/v1/chat/sessions/<segment>/... 解析 session_id；list、run_status 等无 session 返回 None。"""
@@ -50,8 +58,7 @@ class LogContextFilter(logging.Filter):
     """将 contextvars 中的 session_id/task_id 注入到每条 LogRecord，便于检索。"""
 
     def filter(self, record: logging.LogRecord) -> bool:
-        record.session_id = LogContext._session_id.get(None) or '-'
-        record.task_id = LogContext._task_id.get(None) or '-'
+        record.session_id, record.task_id = LogContext.current()
         return True
 
 

@@ -12,8 +12,8 @@ def test_workspace_source_empty_returns_no_sections() -> None:
 def test_workspace_source_renders_checkpoint_visible_section() -> None:
     section = SessionWorkspaceSource(text="/share/result.xyz").to_sections()[0]
 
-    assert section.key == "session_workspace"
-    assert section.tag == "session_workspace"
+    assert section.key == "session-workspace"
+    assert section.tag == "session-workspace"
     assert section.order == SectionOrder.SESSION_WORKSPACE
     assert section.views == frozenset({ContextView.RUNTIME, ContextView.CHECKPOINT})
 
@@ -25,7 +25,7 @@ def test_artifacts_source_empty_returns_no_sections() -> None:
 def test_artifacts_source_renders_checkpoint_visible_section() -> None:
     section = SessionArtifactsSource(text="figure: /share/a.png").to_sections()[0]
 
-    assert section.key == "session_artifacts"
-    assert section.tag == "session_artifacts"
+    assert section.key == "session-artifacts"
+    assert section.tag == "session-artifacts"
     assert section.order == SectionOrder.SESSION_ARTIFACTS
     assert section.views == frozenset({ContextView.RUNTIME, ContextView.CHECKPOINT})

@@ -1,4 +1,4 @@
-"""BYOK 凭证下发客户端：向 matmaster-tools-server 取解密后的 {model, base_url, api_key}。
+"""BYOK 凭证下发客户端：向 matmaster-tools-server 取解密后的凭证。
 
 仅在运行时按 user_id + credential_id 拉取，凭证只在本次 run 内存使用、不落盘、不长缓存。
 鉴权用 Nacos byok.service_api_keys 对应的服务 Bearer（MATMASTER_TOOLS_BYOK_BEARER）。
@@ -81,3 +81,10 @@ async def fetch_byok_credential(*, user_id: str, credential_id: str) -> ByokCred
         context_limit=context_limit,
         extra_body=extra_body,
     )
+
+
+__all__ = [
+    "ByokCredential",
+    "ByokCredentialError",
+    "fetch_byok_credential",
+]

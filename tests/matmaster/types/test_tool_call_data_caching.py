@@ -42,7 +42,7 @@ def test_arguments_json_equivalent_to_direct_dumps():
 def test_tool_call_data_frozen_blocks_field_rebind():
     """frozen=True blocks rebinding the arguments field."""
     tc = ToolCallData(id="c1", name="search", arguments={"q": "x"})
-    with pytest.raises(ValidationError):
+    with pytest.raises(ValidationError, match="frozen_instance"):
         tc.arguments = {"q": "y"}  # type: ignore[misc]
 
 

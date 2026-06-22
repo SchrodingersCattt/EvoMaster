@@ -14,9 +14,11 @@ from __future__ import annotations
 
 import asyncio
 import copy
+import json
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
+from uuid import uuid4
 
 from matmaster.core.hooks import (
     HookEvent,
@@ -26,11 +28,28 @@ from matmaster.core.hooks import (
     PreToolCallContext,
 )
 from matmaster.core.structural_validation import StructuralValidation
+from matmaster.core.submit_review_support import (
+    RESUBMIT_SIGNATURES_KEY,
+    RUN_IDENTITY_KEY,
+    SUBMIT_APPROVAL_GATE_KEY,
+    SUBMIT_REVIEW_RECORDS_KEY,
+    SUBMIT_REVIEW_SKIP_CONFIRMATION_KEY,
+    attach_submit_review_record,
+    build_audit_payload,
+    build_review_content,
+    compute_parameter_changes,
+    submit_signature,
+)
 from matmaster.core.tool_scheduler import SchedulerTicket, ToolScheduler
 from matmaster.tools.tool_catalog import ToolCatalog
 from matmaster.tools.tool_result import ToolResult, normalize_tool_result
 from matmaster.types.cancellation import CancellationToken
 from matmaster.types.messages import ToolCallData
+from matmaster.types.submit_review import (
+    SubmitReviewArgumentError,
+    SubmitReviewDecision,
+    SubmitReviewRequest,
+)
 from matmaster.types.tool_runner_state import ToolRunnerState
 from matmaster.types.tool_spec import ToolExecutionContext as _ExecCtx
 from matmaster.types.tool_spec import ToolInstance
@@ -38,6 +57,25 @@ from matmaster.types.topology import RuntimeTopology
 
 if TYPE_CHECKING:
     from matmaster.core.capability_policy import CapabilityPolicy
+
+_OUTCOME_STATUS = {
+    "rejected": "UserRejected",
+    "timeout": "ReviewTimeout",
+    "busy": "ReviewBusy",
+}
+
+
+def _gate_block_result(
+    status: str, message: str, *, result_status: str = "blocked"
+) -> ToolResult:
+    return ToolResult(
+        status=result_status,
+        content=json.dumps(
+            {"success": False, "status": status, "message": message},
+            ensure_ascii=False,
+        ),
+        meta={"block_reason": status, "layer": "submit_approval_gate"},
+    )
 
 
 @dataclass
@@ -172,6 +210,70 @@ class FullToolRunner:
             []
         )
 
+        def _record_for(tool_call_id: str) -> dict[str, Any] | None:
+            records = self._state.get(SUBMIT_REVIEW_RECORDS_KEY) or {}
+            return records.get(tool_call_id)
+
+        def _attach_serial_review_record(
+            tc: ToolCallData,
+            tr: ToolResult,
+            *,
+            block_reason: str | None = None,
+        ) -> ToolResult:
+            record = _record_for(tc.id)
+            if record is None:
+                return tr
+            return attach_submit_review_record(
+                tr,
+                record["review_content"],
+                record["audit_baseline"],
+                block_reason=block_reason,
+            )
+
+        def _review_record(
+            *,
+            request_id: str,
+            session_id: str,
+            task_id: str,
+            tool_call_id: str,
+            review_outcome: str,
+            user_decision: str | None,
+            model_arguments: dict[str, Any],
+            review_draft_arguments: dict[str, Any],
+            final_arguments: dict[str, Any],
+            execution_args: dict[str, Any] | None,
+            normalization_changes: dict[str, Any],
+            user_changes: dict[str, Any],
+            execution_normalization_changes: dict[str, Any],
+            reported: list[dict[str, Any]],
+        ) -> dict[str, Any]:
+            return {
+                "review_content": build_review_content(user_changes, reported),
+                "audit_baseline": build_audit_payload(
+                    request_id=request_id,
+                    session_id=session_id,
+                    task_id=task_id,
+                    tool_call_id=tool_call_id,
+                    review_outcome=review_outcome,
+                    user_decision=user_decision,
+                    model_arguments=model_arguments,
+                    review_draft_arguments=review_draft_arguments,
+                    final_arguments=final_arguments,
+                    execution_arguments=execution_args,
+                    normalization_changes=normalization_changes,
+                    user_parameter_changes=user_changes,
+                    execution_normalization_changes=execution_normalization_changes,
+                    reported_input_file_changes=reported,
+                    reported_input_file_change_count=len(reported),
+                    execution_audit=None,
+                ),
+            }
+
+        # Batch-local truncation flag: set when a user edit supersedes the
+        # rest of this batch's submits. Local to this execute_batch call, so it
+        # never accumulates across turns.
+        superseding_edit: tuple[str, list[str]] | None = None
+
         # ── Serial validation ──────────────────────────────
         for idx, tc in enumerate(tool_calls):
             # 1. Catalog lookup
@@ -244,6 +346,204 @@ class FullToolRunner:
                     results[idx] = (tc, tr)
                     continue
 
+            gate = self._state.get(SUBMIT_APPROVAL_GATE_KEY)
+            if gate is not None and instance.submit_review_provider is not None:
+                try:
+                    draft = instance.submit_review_provider.build_review_draft(
+                        base_args
+                    )
+                except SubmitReviewArgumentError as exc:
+                    tr = ToolResult(
+                        status="error",
+                        content=f"Submit arguments rejected: {exc}",
+                    )
+                    results[idx] = (tc, tr)
+                    if on_result:
+                        await on_result(tc, tr)
+                    continue
+
+                if draft is not None:
+                    if superseding_edit is not None:
+                        editor_id, changed_fields = superseding_edit
+                        block_status = "SupersededByPriorEdit"
+                        tr = _gate_block_result(
+                            block_status,
+                            instance.submit_review_provider.blocked_message(
+                                block_status
+                            ),
+                        )
+                        tr.meta["superseded_by"] = editor_id
+                        tr.meta["changed_fields"] = changed_fields
+                        results[idx] = (tc, tr)
+                        if on_result:
+                            await on_result(tc, tr)
+                        continue
+
+                    run_identity = self._state.get(RUN_IDENTITY_KEY)
+                    session_id = getattr(run_identity, "session_id", "")
+                    task_id = getattr(run_identity, "task_id", "")
+                    guard = self._state.get(RESUBMIT_SIGNATURES_KEY)
+                    if guard is None:
+                        guard = set()
+                        self._state.set(RESUBMIT_SIGNATURES_KEY, guard)
+
+                    model_sig = submit_signature(draft.model_arguments)
+                    if model_sig in guard:
+                        block_status = "ResubmitBlocked"
+                        tr = _gate_block_result(
+                            block_status,
+                            instance.submit_review_provider.blocked_message(
+                                block_status
+                            ),
+                        )
+                        results[idx] = (tc, tr)
+                        if on_result:
+                            await on_result(tc, tr)
+                        continue
+
+                    request_id = "sr_" + uuid4().hex[:12]
+                    if self._state.get(SUBMIT_REVIEW_SKIP_CONFIRMATION_KEY):
+                        decision = SubmitReviewDecision(
+                            user_decision="submit",
+                            review_outcome="approved",
+                            final_arguments=draft.review_draft_arguments,
+                        )
+                    else:
+                        decision = await gate.review(
+                            SubmitReviewRequest(
+                                request_id=request_id,
+                                tool_name=tc.name,
+                                tool_call_id=tc.id,
+                                task_id=task_id,
+                                session_id=session_id,
+                                draft=draft,
+                            )
+                        )
+                    outcome = decision.review_outcome
+
+                    if outcome == "cancelled":
+                        tr = ToolResult(status="cancelled", content="Run cancelled.")
+                        results[idx] = (tc, tr)
+                        if on_result:
+                            await on_result(tc, tr)
+                        continue
+
+                    final_args = (
+                        decision.final_arguments or draft.review_draft_arguments
+                    )
+                    user_changes = compute_parameter_changes(
+                        draft.review_draft_arguments,
+                        final_args,
+                    )
+                    reported = decision.reported_input_file_changes or []
+
+                    if outcome in _OUTCOME_STATUS:
+                        block_status = _OUTCOME_STATUS[outcome]
+                        guard.add(model_sig)
+                        guard.add(submit_signature(final_args))
+                        record = _review_record(
+                            request_id=request_id,
+                            session_id=session_id,
+                            task_id=task_id,
+                            tool_call_id=tc.id,
+                            review_outcome=outcome,
+                            user_decision=decision.user_decision,
+                            model_arguments=draft.model_arguments,
+                            review_draft_arguments=draft.review_draft_arguments,
+                            final_arguments=final_args,
+                            execution_args=None,
+                            normalization_changes=draft.normalization_changes,
+                            user_changes=user_changes,
+                            execution_normalization_changes={},
+                            reported=reported,
+                        )
+                        tr0 = _gate_block_result(
+                            block_status,
+                            instance.submit_review_provider.blocked_message(
+                                block_status
+                            ),
+                        )
+                        tr = attach_submit_review_record(
+                            tr0,
+                            record["review_content"],
+                            record["audit_baseline"],
+                            block_reason=block_status,
+                        )
+                        results[idx] = (tc, tr)
+                        if on_result:
+                            await on_result(tc, tr)
+                        continue
+
+                    try:
+                        execution = (
+                            instance.submit_review_provider.normalize_execution_args(
+                                final_args
+                            )
+                        )
+                    except SubmitReviewArgumentError as exc:
+                        record = _review_record(
+                            request_id=request_id,
+                            session_id=session_id,
+                            task_id=task_id,
+                            tool_call_id=tc.id,
+                            review_outcome="approved",
+                            user_decision=decision.user_decision,
+                            model_arguments=draft.model_arguments,
+                            review_draft_arguments=draft.review_draft_arguments,
+                            final_arguments=final_args,
+                            execution_args=None,
+                            normalization_changes=draft.normalization_changes,
+                            user_changes=user_changes,
+                            execution_normalization_changes={},
+                            reported=reported,
+                        )
+                        tr0 = _gate_block_result(
+                            "InvalidFinalArguments", str(exc), result_status="error"
+                        )
+                        tr = attach_submit_review_record(
+                            tr0,
+                            record["review_content"],
+                            record["audit_baseline"],
+                            block_reason="InvalidFinalArguments",
+                        )
+                        results[idx] = (tc, tr)
+                        if on_result:
+                            await on_result(tc, tr)
+                        continue
+
+                    record = _review_record(
+                        request_id=request_id,
+                        session_id=session_id,
+                        task_id=task_id,
+                        tool_call_id=tc.id,
+                        review_outcome="approved",
+                        user_decision=decision.user_decision,
+                        model_arguments=draft.model_arguments,
+                        review_draft_arguments=draft.review_draft_arguments,
+                        final_arguments=final_args,
+                        execution_args=execution.arguments,
+                        normalization_changes=draft.normalization_changes,
+                        user_changes=user_changes,
+                        execution_normalization_changes=execution.normalization_changes,
+                        reported=reported,
+                    )
+                    records = self._state.get(SUBMIT_REVIEW_RECORDS_KEY)
+                    if records is None:
+                        records = {}
+                        self._state.set(SUBMIT_REVIEW_RECORDS_KEY, records)
+                    records[tc.id] = record
+                    base_args = execution.arguments
+                    if decision.disable_future_confirmation:
+                        self._state.set(SUBMIT_REVIEW_SKIP_CONFIRMATION_KEY, True)
+                    canonical_changes = compute_parameter_changes(
+                        draft.review_draft_arguments, execution.arguments
+                    )
+                    if canonical_changes or reported:
+                        changed_fields = list(canonical_changes.keys())
+                        if reported:
+                            changed_fields.append("input_files")
+                        superseding_edit = (tc.id, changed_fields)
+
             # 2. StructuralValidation (Layer A)
             decision = self._validation.validate(
                 self._topology,
@@ -256,6 +556,7 @@ class FullToolRunner:
                     content=decision.reason,
                     meta={"layer": "structural"},
                 )
+                tr = _attach_serial_review_record(tc, tr)
                 results[idx] = (tc, tr)
                 if on_result:
                     await on_result(tc, tr)
@@ -280,6 +581,7 @@ class FullToolRunner:
                         content=str(exc),
                         meta={"layer": "input_validation"},
                     )
+                    tr = _attach_serial_review_record(tc, tr)
                     results[idx] = (tc, tr)
                     if on_result:
                         await on_result(tc, tr)
@@ -290,6 +592,7 @@ class FullToolRunner:
                         content=iv_decision.reason,
                         meta={"layer": "input_validation"},
                     )
+                    tr = _attach_serial_review_record(tc, tr)
                     results[idx] = (tc, tr)
                     if on_result:
                         await on_result(tc, tr)
@@ -307,6 +610,7 @@ class FullToolRunner:
                     content=decision.reason,
                     meta={"layer": "policy", "guidance": decision.guidance},
                 )
+                tr = _attach_serial_review_record(tc, tr)
                 results[idx] = (tc, tr)
                 if on_result:
                     await on_result(tc, tr)

@@ -15,7 +15,7 @@ def _compact_user_message(summary: str) -> UserMessage:
     return UserMessage(
         content=(
             "以下是先前对话的压缩摘要，作为历史背景。\n\n"
-            f"<previous_session_summary>\n{summary}\n</previous_session_summary>"
+            f"<previous-session-summary>\n{summary}\n</previous-session-summary>"
         )
     )
 

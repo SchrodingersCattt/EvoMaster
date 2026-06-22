@@ -15,11 +15,12 @@ from matmaster.context.ports import (
     BohriumJobLedgerPort,
     SessionEvent,
     SessionEventQuery,
-    SessionJobsPort,
+    WorkspaceJobsPort,
 )
 from matmaster.types.events import BusEvent
 from matmaster.types.figures import FigureUploadConfig
 from matmaster.types.messages import Message
+from matmaster.types.submit_review import SubmitApprovalGate
 
 __all__ = [
     "AgentRunPorts",
@@ -36,6 +37,7 @@ __all__ = [
     "PlaygroundCompactionPort",
     "PreCompactionBarrier",
     "SessionEventHistoryPort",
+    "SubmitApprovalGate",
     "UserTurnContextWriteRequest",
     "UserTurnContextWriter",
 ]
@@ -179,7 +181,8 @@ class AgentRunPorts:
     interrupt_checker: InterruptChecker | None = None
     user_turn_context_writer: UserTurnContextWriter | None = None
     bohrium_job_ledger: BohriumJobLedgerPort | None = None
-    session_jobs: SessionJobsPort | None = None
+    workspace_jobs: WorkspaceJobsPort | None = None
+    submit_approval_gate: SubmitApprovalGate | None = None
 
 
 @dataclass(frozen=True)

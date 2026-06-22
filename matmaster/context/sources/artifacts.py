@@ -20,8 +20,8 @@ class SessionArtifactsSource:
 
     def to_sections(self) -> tuple[ContextSection, ...]:
         return single_section_or_empty(
-            key="session_artifacts",
-            tag="session_artifacts",
+            key="session-artifacts",
+            tag="session-artifacts",
             content=self.text,
             order=SectionOrder.SESSION_ARTIFACTS,
         )

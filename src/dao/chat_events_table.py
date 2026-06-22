@@ -631,6 +631,45 @@ class ChatEventsTable(BaseTable):
                 row = cursor.fetchone()
                 return self._row_to_event(row) if row else None
 
+    def get_last_resolved_model_profile(self, session_id: str) -> str | None:
+        """返回该会话最近一条父级 LLM 输出事件解析出的 model_profile。
+
+        仅看 spawn_id IS NULL 的 response / assistant_state 事件，按时间倒序取最近一条。
+        若该事件是 BYOK（model_profile == 'byok' 或 model_route 以 'byok:' 开头），
+        或 model_profile 字段缺失/为空，返回 None（由调用方落回默认模型链路）。
+        判别只看这一条，不向更早历史回溯。
+        """
+        with self.get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    f'''
+                    SELECT content
+                    FROM {self.table_name}
+                    WHERE session_id = %s
+                      AND spawn_id IS NULL
+                      AND type IN ('response', 'assistant_state')
+                    ORDER BY created_at DESC, id DESC
+                    LIMIT 1
+                    ''',
+                    (session_id,),
+                )
+                row = cursor.fetchone()
+                if not row:
+                    return None
+                try:
+                    content = json.loads(row['content'])
+                except (json.JSONDecodeError, TypeError):
+                    return None
+                if not isinstance(content, dict):
+                    return None
+                model_route = content.get('model_route') or ''
+                if isinstance(model_route, str) and model_route.startswith('byok:'):
+                    return None
+                profile = content.get('model_profile')
+                if not profile or profile == 'byok':
+                    return None
+                return profile
+
     def delete_events_from_id(self, session_id: str, from_event_id: int) -> int:
         """物理删除 session 中 id >= from_event_id 的所有事件，返回删除行数。"""
         with self.get_connection() as conn:

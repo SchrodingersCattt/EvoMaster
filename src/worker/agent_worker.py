@@ -37,6 +37,7 @@ from src.utils.feishu_notifier import (
 from src.utils.logger import LogContext, LoggingConfig, setup_logging
 from src.utils.support_notifier import send_session_complete_email_async
 from src.utils.worker_id import get_worker_id
+from utils.tracing import configure_tracing, shutdown_tracing
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -347,11 +348,20 @@ def _run_worker_loop() -> None:
         )
         turn_input = TurnInput.from_payload(payload.get('turn_input'))
         bohrium_required = bool(payload.get('bohrium_required'))
+        submit_confirmation_enabled = bool(
+            payload.get('bohrium_submit_confirmation_required')
+        )
         raw_workspace = payload.get('workspace')
         workspace = (
             raw_workspace.strip() or None if isinstance(raw_workspace, str) else None
         )
         delivery = payload.get('delivery')
+        origin = (payload.get('origin') or '').strip() or None
+        job_context_mode = (
+            'session_workspace_delivery'
+            if origin == 'bohrium_completion'
+            else 'workspace_observation'
+        )
 
         if not session_id:
             logger.warning('Agent worker: skip job with empty session_id')
@@ -363,7 +373,6 @@ def _run_worker_loop() -> None:
         user_info_display = (
             f"{user_info['user_id']} | {user_info['nickname']} | {user_info['email']}"
         )
-        redis_dao.delete_interaction_reply_list(session_id)
         # 清除可能残留的上一轮 stop key（含 session 级），避免上一轮 finally 中 delete 失败导致本轮一启动即被误判为已请求停止
         logger.info(
             'Agent worker: clear stop keys before run session_id=%s task_id=%s',
@@ -371,7 +380,6 @@ def _run_worker_loop() -> None:
             task_id,
         )
         redis_dao.delete_stop_requested(session_id, task_id)
-        redis_dao.set_interaction_run_active(session_id)
         redis_dao.set_interaction_run_context(session_id, task_id, invocation_id or '')
 
         def send_cb(p: dict, _sid: str = session_id) -> None:
@@ -407,14 +415,16 @@ def _run_worker_loop() -> None:
                     task_id,
                     fail_reason or 'unknown',
                 )
-                redis_dao.delete_interaction_run_active(session_id)
+                redis_dao.delete_interaction_run_context(session_id)
                 LogContext.clear()
                 continue
 
             acquired = True
             _current_session_id = session_id
             # run 起点固化本轮交付边界；查询失败返回 None 不阻断 run
-            delivery_snapshot = bohrium_delivery_ack.snapshot(session_id)
+            delivery_snapshot = bohrium_delivery_ack.snapshot(
+                session_id, workspace=workspace
+            )
             run_start_time = time.monotonic()
             queue_len = redis_dao.llen_agent_run_queue()
             active_count = get_worker_registry_service().count_active_runs()
@@ -458,7 +468,9 @@ def _run_worker_loop() -> None:
                     "turn_input": turn_input,
                     "workspace": workspace,
                     "bohrium_required": bohrium_required,
+                    "submit_confirmation_enabled": submit_confirmation_enabled,
                     "delivery_snapshot": delivery_snapshot,
+                    "job_context_mode": job_context_mode,
                 }
                 result = asyncio.run(agent_run_service.run_agent(**run_agent_kwargs))
                 run_result = result
@@ -520,7 +532,7 @@ def _run_worker_loop() -> None:
             if acquired:
                 _current_session_id = None
                 LogContext.clear()
-            redis_dao.delete_interaction_run_active(session_id)
+            redis_dao.delete_interaction_run_context(session_id)
             redis_dao.delete_stop_requested(session_id, task_id)
             if acquired:
                 if run_success and delivery_snapshot is not None:
@@ -611,6 +623,7 @@ def _run_worker_loop() -> None:
 
 def main() -> None:
     setup_logging(**LoggingConfig.get_worker_config())
+    configure_tracing("matmaster-evo-worker")
 
     def _on_sigterm(_signum: int, _frame: object) -> None:
         global _drain_requested
@@ -643,7 +656,10 @@ def main() -> None:
     logger.info(
         'Agent worker: starting BLPOP loop queue_key=%s', 'chat:agent_run_queue'
     )
-    _run_worker_loop()
+    try:
+        _run_worker_loop()
+    finally:
+        shutdown_tracing()
 
 
 if __name__ == '__main__':

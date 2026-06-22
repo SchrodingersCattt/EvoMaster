@@ -9,12 +9,15 @@ CREATE TABLE IF NOT EXISTS `evo_chat_sessions` (
     `last_task_id` VARCHAR(255) NULL COMMENT '最后一个任务ID',
     `status` VARCHAR(32) NOT NULL DEFAULT 'idle' COMMENT '会话状态：idle=空闲/已结束，active=运行中（用于限流与前端展示）',
     `is_shared` TINYINT(1) NOT NULL DEFAULT 0 COMMENT '是否已分享：0=否，1=是（分享后 stream 等可不鉴权）',
+    `deleted_at` DATETIME NULL COMMENT '软删除时间；NULL 表示未删除',
+    `deleted_by` VARCHAR(255) NULL COMMENT '执行软删除的用户ID',
     `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     INDEX `idx_created_at` (`created_at`),
     INDEX `idx_user_id` (`user_id`),
     INDEX `idx_session_id` (`session_id`),
-    INDEX `idx_status` (`status`)
+    INDEX `idx_status` (`status`),
+    INDEX `idx_deleted_at` (`deleted_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='聊天会话表';
 
 -- 2. 聊天事件表
@@ -22,7 +25,7 @@ CREATE TABLE IF NOT EXISTS `evo_chat_events` (
     `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY COMMENT '事件ID',
     `session_id` VARCHAR(255) NOT NULL COMMENT '会话ID',
     `source` VARCHAR(50) NOT NULL COMMENT '事件来源：System|User|MatMaster',
-    `type` VARCHAR(50) NOT NULL COMMENT '事件类型：status|query|thought|response|tool_call|tool_result|run_result|error|cancelled|ask_question|ask_question_reply|ask_question_timeout|run_interrupted|planner_reply|exp_run|log_line等',
+    `type` VARCHAR(50) NOT NULL COMMENT '事件类型：status|query|thought|response|tool_call|tool_result|run_result|error|cancelled|interaction_request|interaction_reply|interaction_timeout|run_interrupted|planner_reply|exp_run|log_line等',
     `content` JSON NOT NULL COMMENT '事件内容（JSON格式）',
     `task_id` VARCHAR(255) NULL COMMENT '关联的任务ID',
     `invocation_id` VARCHAR(64) NULL COMMENT '本轮调用唯一标识，前端区分轮次',

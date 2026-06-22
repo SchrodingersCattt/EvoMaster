@@ -82,13 +82,9 @@ async def run_compaction_plan(
             turn_input=turn_input,
         )
     except Exception as exc:
-        if plan.phase == "preflight":
-            logger.warning(
-                "Preflight compaction summary failed; aborting", exc_info=True
-            )
-            raise
         logger.warning(
-            "Compaction #%d summary failed; falling back",
+            "%s compaction #%d summary failed; falling back",
+            plan.phase.capitalize(),
             plan.compaction_count,
             exc_info=True,
         )

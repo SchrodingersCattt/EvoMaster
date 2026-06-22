@@ -117,6 +117,21 @@ class ChatEventsService:
         """返回最后一条 User/query 事件的完整行（含 id），用于 replace_last_turn。"""
         return self.table.get_last_user_query_event(session_id)
 
+    def get_last_resolved_model_profile(self, session_id: str) -> str | None:
+        """返回该会话最近一条父级 LLM 输出事件的 model_profile（程序化 trigger 继承用）。
+
+        查询失败时记 warning 并返回 None，不抛出，不阻断调用方（trigger 入队）。
+        """
+        try:
+            return self.table.get_last_resolved_model_profile(session_id)
+        except Exception:
+            logger.warning(
+                'get_last_resolved_model_profile failed session_id=%s',
+                session_id,
+                exc_info=True,
+            )
+            return None
+
     def delete_events_from_id(self, session_id: str, from_event_id: int) -> int:
         """物理删除 session 中 id >= from_event_id 的所有事件。"""
         return self.table.delete_events_from_id(session_id, from_event_id)

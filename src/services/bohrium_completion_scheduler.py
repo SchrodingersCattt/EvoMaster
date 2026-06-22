@@ -7,7 +7,9 @@ bohrium_jobs 当前聚合快照推导（无 now、无持久调度态、enqueued 
 
 非 final 自动唤醒上界（per-invocation）= 1(first_failure) + N(progress_segments)，
 与作业数无关：progress 阈值 step=ceil(total/N) 随 total 缩放，每次成功 progress
-经 worker ack 至少消化 step 个 pending。
+经 worker ack 至少消化 step 个 pending。STALLED 是常态上界外的异常态兜底：仅当
+剩余活跃作业全部失联（unknown）且最老 pending 熟化超阈值时触发，每次触发须有
+新终态出现并再次熟化，病态接口间歇恢复下至多每作业一次、间隔 ≥ 阈值。
 """
 
 from __future__ import annotations
@@ -24,18 +26,14 @@ logger = logging.getLogger(__name__)
 
 _RESERVATION_KEY_PREFIX = "bohrium_delivery:"
 
-_DELIVERY_SCOPE_SUFFIX = (
-    "本轮交付为 session 级：context 中全部 pending_terminal 详情行与"
-    "溢出 job_ids 均在本次确认范围内，请一并查看处理。"
-)
-
 
 class Reason(enum.IntEnum):
     """唤醒原因；数值即优先级，session 合并时取最高。"""
 
     PROGRESS = 1
-    FIRST_FAILURE = 2
-    FINAL = 3
+    STALLED = 2
+    FIRST_FAILURE = 3
+    FINAL = 4
 
 
 @dataclass(frozen=True)
@@ -43,6 +41,7 @@ class SchedulerConfig:
     progress_segments: int = 3
     reservation_ttl: int = 60
     scan_limit: int = 200
+    stalled_after_seconds: int = 900
 
     @classmethod
     def from_env(cls) -> SchedulerConfig:
@@ -50,15 +49,20 @@ class SchedulerConfig:
             progress_segments=env_int("BOHRIUM_DELIVERY_PROGRESS_SEGMENTS", 3),
             reservation_ttl=env_int("BOHRIUM_DELIVERY_RESERVATION_TTL", 60),
             scan_limit=env_int("BOHRIUM_DELIVERY_SCAN_LIMIT", 200),
+            stalled_after_seconds=env_int(
+                "BOHRIUM_DELIVERY_STALLED_AFTER_SECONDS", 900
+            ),
         )
 
 
 def decide(unit: dict[str, Any], cfg: SchedulerConfig) -> Reason | None:
-    """无状态判定单个 (session, invocation) 聚合单元，三条全 ledger 推导。
+    """无状态判定单个 (session, invocation) 聚合单元，全部从 ledger 推导。
 
-    优先级 final > first_failure > progress；不重复发无需记账：final 经 ack
-    pending→0、first_failure 经 ack failed_handled>0、progress 经 ack 回落到
-    step 之下。
+    优先级 final > first_failure > progress > stalled；不重复发无需记账：final
+    经 ack pending→0、first_failure 经 ack failed_handled>0、progress 经 ack
+    回落到 step 之下、stalled 经 ack pending→0 且再触发须新终态重新熟化。
+    STALLED 取全部失联（unknown_count==active）而非存在失联：还有作业真实
+    运行时等 step/FINAL 是批量节奏的设计本意。
     """
     if unit["pending_terminal"] == 0:
         return None
@@ -69,38 +73,22 @@ def decide(unit: dict[str, Any], cfg: SchedulerConfig) -> Reason | None:
     step = (unit["total"] + cfg.progress_segments - 1) // cfg.progress_segments
     if unit["pending_terminal"] >= step:
         return Reason.PROGRESS
+    if (
+        unit["unknown_count"] == unit["active"]
+        and unit["oldest_pending_age_seconds"] >= cfg.stalled_after_seconds
+    ):
+        return Reason.STALLED
     return None
 
 
-def render_prompt(
-    reason: Reason,
-    counts: dict[str, int],
-    first_failed: dict[str, Any] | None = None,
-) -> str:
-    """渲染唤醒 prompt；counts 为 session 级合计（tick 时刻聚合，run 实际执行时
-    可能已漂移——context 行才是权威，文案不做绝对化承诺）。"""
-    if reason is Reason.FINAL:
-        body = (
-            "触发批次的全部 Bohrium 作业已结束："
-            f"成功 {counts['succeeded']}/{counts['total']}，"
-            f"失败 {counts['failed_total']}。请汇总结果并给出下一步。"
-        )
-    elif reason is Reason.FIRST_FAILURE:
-        info = first_failed or {}
-        job_id = info.get("job_id") or "unknown"
-        job_name = info.get("job_name") or "-"
-        status = info.get("status") or "failed"
-        body = (
-            f"Bohrium 作业 {job_id}（{job_name}）首次失败（{status}），"
-            f"另有 {counts['active']} 个作业仍在运行。"
-        )
-    else:
-        terminal = counts["total"] - counts["active"]
-        body = (
-            f"本会话又有 Bohrium 作业完成（已终态 {terminal}/{counts['total']}，"
-            f"仍在运行 {counts['active']}）。请汇报进度。"
-        )
-    return body + _DELIVERY_SCOPE_SUFFIX
+def render_prompt(reason: Reason) -> str:
+    """渲染唤醒原因头；具体 job 清单与处理指令由 delivery context 承载。"""
+    return {
+        Reason.FINAL: "本会话的 Bohrium 作业已全部到达终态。",
+        Reason.PROGRESS: "本会话有 Bohrium 作业到达终态、结果待处理，仍有作业在运行。",
+        Reason.FIRST_FAILURE: "本会话出现失败的 Bohrium 作业，仍有作业在运行。",
+        Reason.STALLED: "本会话有 Bohrium 作业结果待处理，另有作业长时间无法查询状态。",
+    }[reason]
 
 
 class BohriumCompletionScheduler:
@@ -162,18 +150,24 @@ class BohriumCompletionScheduler:
             return summary
         summary["scanned"] = len(units)
 
-        groups: dict[tuple[str, str, str], list[dict[str, Any]]] = {}
+        groups: dict[tuple[str, str, str, str], list[dict[str, Any]]] = {}
         for unit in units:
-            key = (unit["user_id"], unit["org_id"], unit["session_id"])
+            key = (
+                unit["user_id"],
+                unit["org_id"],
+                unit["session_id"],
+                unit["workspace"],
+            )
             groups.setdefault(key, []).append(unit)
 
         failed_sessions: list[str] = []
-        for (user_id, org_id, session_id), session_units in groups.items():
+        for (user_id, org_id, session_id, workspace), session_units in groups.items():
             try:
                 self._process_session(
                     user_id,
                     org_id,
                     session_id,
+                    workspace,
                     session_units,
                     summary,
                     failed_sessions,
@@ -205,6 +199,7 @@ class BohriumCompletionScheduler:
         user_id: str,
         org_id: str,
         session_id: str,
+        workspace: str,
         session_units: list[dict[str, Any]],
         summary: dict[str, int],
         failed_sessions: list[str],
@@ -245,7 +240,10 @@ class BohriumCompletionScheduler:
         # (c) NX 原子占位（fail-closed）：同 tick 多实例竞态的防御纵深。
         # row-id 高水位避免秒级 terminal_at 碰撞压住新完成作业；短 TTL 无需释放。
         max_row_id = max(u["max_pending_terminal_id"] for u in session_units)
-        key = f"{_RESERVATION_KEY_PREFIX}{user_id}:{org_id}:{session_id}:{max_row_id}"
+        key = (
+            f"{_RESERVATION_KEY_PREFIX}{user_id}:{org_id}:{session_id}:"
+            f"{workspace}:{max_row_id}"
+        )
         reserved = self._redis.try_reserve_nx(
             key, "1", ttl_sec=self._cfg.reservation_ttl
         )
@@ -258,29 +256,15 @@ class BohriumCompletionScheduler:
             summary["skipped_busy"] += 1
             return
 
-        primary_reason, primary_unit = max(eligible, key=lambda e: e[0])
-        counts = {
-            "total": sum(u["total"] for u in session_units),
-            "active": sum(u["active"] for u in session_units),
-            "succeeded": sum(u["succeeded"] for u in session_units),
-            "failed_total": sum(u["failed_total"] for u in session_units),
-        }
-        first_failed = None
-        if primary_reason is Reason.FIRST_FAILURE:
-            first_failed = self._jobs_table.get_first_pending_failed(
-                user_id=user_id,
-                org_id=org_id,
-                session_id=session_id,
-                invocation_key=primary_unit["invocation_key"],
-            )
-        prompt = render_prompt(primary_reason, counts, first_failed)
+        primary_reason, _ = max(eligible, key=lambda e: e[0])
+        prompt = render_prompt(primary_reason)
         # 不传 dedup_key：占位已由 NX 接管。多 invocation 不同 workspace 合并时
         # 只取 primary 的（已知限制，作业级信息仍在 context 行内可见）。
         res = self._stream_service.trigger_run(
             session_id,
             prompt,
             origin="bohrium_completion",
-            workspace=primary_unit["workspace"],
+            workspace=workspace,
             delivery=DeliverySpec(notify=primary_reason is Reason.FINAL),
         )
         if res.status == "enqueued":

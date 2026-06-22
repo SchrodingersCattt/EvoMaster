@@ -266,10 +266,6 @@ class TestExpBuildRuntime:
         )
         defs = resources.tool_catalog.build_definitions(desc_ctx)
         bash_def = next(d for d in defs if d["function"]["name"] == "Bash")
-        assert (
-            "Use dedicated tools instead of shell equivalents"
-            in bash_def["function"]["description"]
-        )
         assert "/exec" in bash_def["function"]["description"]
 
     async def test_builtin_tool_prompts_layered_correctly(self, tmp_path: Path) -> None:

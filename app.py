@@ -24,9 +24,11 @@ from src.utils.constant import DB_CONFIG, SERVICE_ENV
 from src.utils.exceptions import BaseErrorResponse
 from src.utils.logger import LogContext, LoggingConfig, setup_logging
 from src.utils.worker_id import get_worker_id
+from utils.tracing import configure_tracing, shutdown_tracing
 
 log_config = LoggingConfig.get_main_app_config()
 setup_logging(**log_config)
+configure_tracing("matmaster-evo-api")
 logger = logging.getLogger(__name__)
 logger.info('SERVICE_ENV=%s', SERVICE_ENV)
 
@@ -97,6 +99,7 @@ async def lifespan(app: FastAPI):
         worker_id,
         get_build_version(),
     )
+    shutdown_tracing()
     logger.info('Lifespan shutdown finished worker_id=%s', worker_id)
 
 

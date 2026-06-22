@@ -51,10 +51,10 @@ from src.services.history_checkpoint_service import HistoryCheckpointService
 from src.services.image_input_service import get_image_input_service
 from src.services.quota_service import check_quota_status
 from src.services.sessions_service import get_sessions_service
-from src.services.stream_reply_queue import RedisReplyQueue
 from src.services.user_turn_context_service import (
     write_user_turn_context_event as _persist_utc_event,
 )
+from src.services.workspace_jobs_export import WorkspaceJobsCsvExporter
 from utils.env import COST_GUARD_GRACE_RATIO
 
 logger = logging.getLogger(__name__)
@@ -150,27 +150,27 @@ def _build_run_usage_summary(event: RunResultEvent) -> dict[str, Any] | None:
     if not usage and not last_turn_usage:
         return None
 
-    prompt = int(usage.get('prompt_tokens') or 0)
-    completion = int(usage.get('completion_tokens') or 0)
-    total = int(usage.get('total_tokens') or 0) or (prompt + completion)
-    cache_read = int(usage.get('cache_read_tokens') or 0)
-    cache_write = int(usage.get('cache_write_tokens') or 0)
-    reasoning = int(usage.get('reasoning_tokens') or 0)
+    prompt = int(usage.get("prompt_tokens") or 0)
+    completion = int(usage.get("completion_tokens") or 0)
+    total = int(usage.get("total_tokens") or 0) or (prompt + completion)
+    cache_read = int(usage.get("cache_read_tokens") or 0)
+    cache_write = int(usage.get("cache_write_tokens") or 0)
+    reasoning = int(usage.get("reasoning_tokens") or 0)
 
     summary: dict[str, Any] = {
-        'num_turns': int(event.num_turns or 0),
-        'prompt_tokens': prompt,
-        'completion_tokens': completion,
-        'total_tokens': total,
+        "num_turns": int(event.num_turns or 0),
+        "prompt_tokens": prompt,
+        "completion_tokens": completion,
+        "total_tokens": total,
     }
     if cache_read:
-        summary['cache_read_tokens'] = cache_read
+        summary["cache_read_tokens"] = cache_read
     if cache_write:
-        summary['cache_write_tokens'] = cache_write
+        summary["cache_write_tokens"] = cache_write
     if reasoning:
-        summary['reasoning_tokens'] = reasoning
+        summary["reasoning_tokens"] = reasoning
     if last_turn_usage:
-        summary['last_turn_usage'] = dict(last_turn_usage)
+        summary["last_turn_usage"] = dict(last_turn_usage)
     return summary
 
 
@@ -192,7 +192,7 @@ async def _attach_run_cost(
     if not cost:
         return usage_summary
     enriched = dict(usage_summary or {})
-    enriched['cost'] = cost
+    enriched["cost"] = cost
     return enriched
 
 
@@ -265,7 +265,9 @@ class AgentRunService:
         bohrium_required: bool = False,
         workspace: str | None = None,
         delivery_snapshot: DeliverySnapshot | None = None,
+        job_context_mode: str = "workspace_observation",
         cancel_controller: CancellationController | None = None,
+        submit_confirmation_enabled: bool = False,
     ) -> tuple[bool | tuple[bool, str], int, dict[str, Any] | None]:
         """Execute agent pipeline using generator event stream with fanout dispatch.
 
@@ -392,11 +394,11 @@ class AgentRunService:
             byok_id = (byok_credential_id or "").strip() or None
             if byok_id:
                 # BYOK：凭证由 tools-server 下发，绕开 llm_config / routes，用户自付不扣额度。
-                from matmaster.providers.llm_factory import build_byok_provider_bundle
-                from src.services.llm_credential_client import (
+                from clients.llm_credential_client import (
                     ByokCredentialError,
                     fetch_byok_credential,
                 )
+                from matmaster.providers.llm_factory import build_byok_provider_bundle
 
                 try:
                     cred = await fetch_byok_credential(
@@ -499,17 +501,28 @@ class AgentRunService:
                     spawn_id=spawn_id,
                 )
 
-            # -- Stage 4b: AskQuestion bridge --
-            from matmaster.integration.interaction_bridge import AskQuestionBridge
+            # -- Stage 4b: interaction bridge --
+            from matmaster.integration.interaction_bridge import InteractionBridge
 
             async def _interaction_event_sink(event: BusEvent) -> None:
                 await fanout.dispatch(event)
 
-            bridge = AskQuestionBridge(
+            bridge = InteractionBridge(
                 session_id=session_id,
+                task_id=task_id,
+                invocation_id=invocation_id or "",
                 event_sink=_interaction_event_sink,
-                reply_queue=RedisReplyQueue(session_id),
+                dao=get_redis_dao(),
                 timeout_seconds=1800,
+            )
+            from matmaster.integration.submit_approval_gate import (
+                BridgeSubmitApprovalGate,
+            )
+
+            submit_approval_gate = (
+                BridgeSubmitApprovalGate(bridge)
+                if submit_confirmation_enabled
+                else None
             )
             # -- Stage 5: History --
             wiring = build_history_wiring(
@@ -539,12 +552,21 @@ class AgentRunService:
                 user_id=user_id,
                 sessions_source=self._sessions_service,
             )
+            workspace_jobs_exporter = WorkspaceJobsCsvExporter(
+                session=environment.session,
+                execution_workdir=environment.execution_workdir,
+                session_id=session_id,
+                invocation_id=invocation_id,
+                task_id=task_id,
+            )
             bohrium_ledger_port, bohrium_jobs_port = build_bohrium_jobs_ports(
                 session_id=session_id,
                 invocation_id=invocation_id,
                 user_id=_ledger_user_id,
                 org_id=_ledger_org_id,
                 workspace=stage_result.workspace,
+                exporter=workspace_jobs_exporter,
+                job_context_mode=job_context_mode,
                 delivery_snapshot=delivery_snapshot,
             )
             agent_run_ctx = AgentRunContext(
@@ -573,7 +595,8 @@ class AgentRunService:
                             session_id=session_id,
                         ),
                         bohrium_job_ledger=bohrium_ledger_port,
-                        session_jobs=bohrium_jobs_port,
+                        workspace_jobs=bohrium_jobs_port,
+                        submit_approval_gate=submit_approval_gate,
                     ),
                 ),
             )

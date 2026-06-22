@@ -8,17 +8,25 @@ from fastapi import APIRouter, Body, Depends, Header, Path, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from matmaster.config.loader import load_llm_config
+from matmaster.integration.event_payloads import build_public_sse_payload_from_bus_dump
+from matmaster.types.events import InteractionReplyEvent
 from src.apis.sse_compression import gzip_sse_stream, should_gzip_sse
 from src.base.base_res import BaseResponse
 from src.dao.redis_dao import get_redis_dao
 from src.models.chat import (
-    ChatAskQuestionReplyRequest,
+    BohriumSubmitConfirmationApiResponse,
+    BohriumSubmitConfirmationData,
+    BohriumSubmitConfirmationSetRequest,
     ChatSendRequest,
     ErrorApiResponse,
+    InteractionReplyRequest,
     RunStatusApiResponse,
     RunStatusData,
     SessionDirectoryApiResponse,
     SessionDirectoryData,
+    SessionDirectoryDeleteApiResponse,
+    SessionDirectoryDeleteData,
+    SessionDirectoryDeleteQuery,
     SessionDirectorySetRequest,
     SessionListApiResponse,
     SessionListMoreApiResponse,
@@ -28,7 +36,10 @@ from src.models.chat import (
     SessionListResponse,
     SessionTitleApiResponse,
     SessionTitleData,
+    SessionTitlesApiResponse,
+    SessionTitlesData,
     SessionTitleSetRequest,
+    SessionTitlesQueryRequest,
     ShareSetRequest,
     ShareStatusApiResponse,
     ShareStatusData,
@@ -41,9 +52,14 @@ from src.services.session_directory_service import (
     SessionDirectoryError,
     normalize_session_directory_for_storage,
 )
-from src.services.sessions_service import ChatSessionsService, get_sessions_service
+from src.services.sessions_service import (
+    DELETE_BLOCKED_STATUSES,
+    ChatSessionsService,
+    get_sessions_service,
+)
 from src.services.stream_service import (
     ChatStreamService,
+    TriggerStreamContext,
     get_stream_service,
 )
 from src.services.user_service import UserService
@@ -67,6 +83,7 @@ COMMON_ERROR_RESPONSES = {
 
 
 router = APIRouter(tags=["Chat Sessions"])
+_MAX_REPLY_PAYLOAD_BYTES = 256 * 1024
 
 SSE_HEADERS = {
     "Cache-Control": "no-cache",
@@ -117,6 +134,18 @@ def _session_workspace_data_from_row(row: dict) -> SessionDirectoryData:
     return SessionDirectoryData(directory=directory, mode=mode)
 
 
+def _session_bohrium_submit_confirmation_data_from_row(
+    session_id: str,
+    row: dict,
+) -> BohriumSubmitConfirmationData:
+    raw = row.get("bohrium_submit_confirmation_required")
+    return BohriumSubmitConfirmationData(
+        session_id=session_id,
+        required=None if raw is None else bool(raw),
+        source="session" if raw is not None else "default",
+    )
+
+
 def _session_directory_error(exc: SessionDirectoryError) -> BaseErrorResponse:
     return BaseErrorResponse(
         http_status=exc.http_status,
@@ -151,9 +180,9 @@ async def _handle_internal_trigger(
         raise BaseErrorResponse(
             http_status=503, code=503, msg="队列服务不可用，请检查 REDIS_URL 配置"
         )
-    # trigger_run 是同步函数（多次 DB/Redis 往返 + 阻塞通知），放线程池避免卡事件循环
-    result = await asyncio.to_thread(
-        stream_svc.trigger_run,
+    # prepare 是同步函数（多次 DB/Redis 往返），放线程池避免卡事件循环。
+    prep = await asyncio.to_thread(
+        stream_svc.prepare_internal_trigger_run,
         sid,
         prompt,
         origin=(req.origin or "external_tool"),
@@ -162,20 +191,20 @@ async def _handle_internal_trigger(
         mode=req.mode,
         model=req.model,
     )
-    if result.status == "enqueued":
+    if isinstance(prep, TriggerStreamContext):
         return _sse_streaming_response(
-            request, stream_svc.generate_subscribe_stream(sid)
+            request, stream_svc.generate_internal_trigger_stream(sid, prep)
         )
     return JSONResponse(
         status_code=200,
         content={
             "code": 200,
-            "msg": result.status,
+            "msg": prep.status,
             "data": {
-                "status": result.status,
-                "task_id": result.task_id,
-                "invocation_id": result.invocation_id,
-                "reason": result.reason,
+                "status": prep.status,
+                "task_id": prep.task_id,
+                "invocation_id": prep.invocation_id,
+                "reason": prep.reason,
             },
         },
     )
@@ -238,6 +267,29 @@ def list_sessions(
     return SessionListApiResponse(
         data=SessionListResponse.model_validate(raw),
     )
+
+
+@router.post(
+    "/titles",
+    response_model=SessionTitlesApiResponse,
+    summary="批量查询会话标题",
+    description="按 sessionId 批量获取当前登录用户自己的会话标题（含 first_user_message 供前端回退）。"
+    " 仅返回归属当前用户且未删除的会话，其余 id 静默忽略；单次最多 200 个。"
+    " 用于任务列表等场景按 sessionId 展示会话名称，避免逐条查询。",
+    operation_id="getChatSessionTitles",
+    responses={
+        400: COMMON_ERROR_RESPONSES[400],
+        401: COMMON_ERROR_RESPONSES[401],
+    },
+)
+def get_session_titles(
+    body: SessionTitlesQueryRequest = Body(...),
+    user_id: str = Depends(UserService.require_user_id),
+    chat_svc: ChatSessionsService = Depends(get_sessions_service),
+):
+    """按 sessionId 批量取标题（owner 范围，未命中静默忽略）。"""
+    items = chat_svc.get_session_titles_by_ids(user_id, body.session_ids)
+    return SessionTitlesApiResponse(data=SessionTitlesData(sessions=items))
 
 
 @router.get(
@@ -459,69 +511,37 @@ def stop_session(
     session_id: str = Path(..., description="会话 ID", examples=["session-001"]),
     user_id: str | None = Depends(UserService.optional_user_id),
     chat_svc: ChatSessionsService = Depends(get_sessions_service),
-    stream_svc: ChatStreamService = Depends(get_stream_service),
 ):
     """终止该会话当前正在运行的任务。有权限访问即可调用；多 worker 时通过 Redis 广播，始终返回 200。
-    若当前正在等待用户交互回复，会向回复队列投递取消哨兵以立即唤醒阻塞线程。"""
+    若当前正在等待用户交互回复，会向 per-request reply key 投递取消哨兵以立即唤醒阻塞线程。"""
     sid = session_id.strip()
     if not chat_svc.can_access_session(sid, user_id):
         raise ForbiddenErrorResponse(msg="无权限访问该会话")
-    reply_queue = stream_svc.get_reply_queue(sid)
-    if reply_queue is not None:
-        try:
-            reply_queue.put_cancel()
-        except Exception:
-            pass
+    dao = get_redis_dao()
+    active_request_id = dao.get_active_interaction(sid)
+    if active_request_id:
+        dao.finalize_interaction(active_request_id, "cancelled")
+        dao.rpush_interaction_cancel(active_request_id)
     chat_svc.stop_session_run(sid)
     return BaseResponse(msg="ok")
 
 
-def _submit_interaction_reply(
-    *,
-    sid: str,
-    event_type: str,
-    content: str | dict,
-    queue_value: str,
-    stream_svc: ChatStreamService,
-    events_svc: ChatEventsService,
-    user_id: str | None,
-) -> None:
-    reply_queue = stream_svc.get_reply_queue(sid)
-    if reply_queue is None:
-        raise ConflictErrorResponse(
-            msg="当前无活跃任务，或任务已结束",
-        )
-
-    payload = {
-        "source": "User",
-        "type": event_type,
-        "content": content,
-        "session_id": sid,
-    }
-    run_ctx = stream_svc.get_run_context(sid)
-    if run_ctx:
-        payload["task_id"] = run_ctx.get("task_id")
-        payload["invocation_id"] = run_ctx.get("invocation_id")
-
-    stream_svc.publish_reply_event(sid, payload)
-    reply_queue.put_content(queue_value)
-    events_svc.add_history_event(sid, payload, user_id=user_id)
-
-
 @router.post(
-    "/{session_id}/ask_question_reply",
+    "/{session_id}/interactions/{request_id}/reply",
     response_model=BaseResponse,
-    summary="提交结构化问答回复",
-    description="当会话流返回 ask_question 时，调用本接口提交结构化答案，Agent 会继续执行。",
-    operation_id="replyChatSessionAskQuestion",
+    summary="提交交互回复",
+    description="对 interaction_request 提交回复，Agent 会继续执行。",
+    operation_id="replyChatSessionInteraction",
     responses={
         403: COMMON_ERROR_RESPONSES[403],
+        404: COMMON_ERROR_RESPONSES[404],
         409: COMMON_ERROR_RESPONSES[409],
     },
 )
-async def ask_question_reply(
+async def interaction_reply(
     session_id: str = Path(..., description="会话 ID", examples=["session-001"]),
-    req: ChatAskQuestionReplyRequest = Body(...),
+    request_id: str = Path(..., description="交互请求 ID", examples=["aq_xxx"]),
+    req: InteractionReplyRequest = Body(...),
     user_id: str | None = Depends(UserService.optional_user_id),
     chat_svc: ChatSessionsService = Depends(get_sessions_service),
     stream_svc: ChatStreamService = Depends(get_stream_service),
@@ -530,20 +550,53 @@ async def ask_question_reply(
     sid = session_id.strip()
     if not chat_svc.can_access_session(sid, user_id):
         raise ForbiddenErrorResponse(msg="无权限访问该会话")
-    content = {
-        "request_id": req.request_id,
-        "answers": req.answers,
-        "annotations": req.annotations,
-    }
-    _submit_interaction_reply(
-        sid=sid,
-        event_type="ask_question_reply",
-        content=content,
-        queue_value=json.dumps({"payload": content}, ensure_ascii=False),
-        stream_svc=stream_svc,
-        events_svc=events_svc,
-        user_id=user_id,
+    dao = get_redis_dao()
+    record = dao.read_pending_interaction(request_id)
+    if record is None:
+        raise NotFoundErrorResponse(msg="交互请求不存在或已过期")
+    if record.get("session_id") != sid:
+        raise NotFoundErrorResponse(msg="交互请求不存在或已过期")
+    if record.get("kind") != req.kind:
+        raise ConflictErrorResponse(msg="交互类型不匹配")
+    if (
+        len(json.dumps(req.payload, ensure_ascii=False).encode())
+        > _MAX_REPLY_PAYLOAD_BYTES
+    ):
+        raise ConflictErrorResponse(msg="回复内容过大")
+
+    envelope = json.dumps(
+        {"kind": req.kind, "request_id": request_id, "payload": req.payload},
+        ensure_ascii=False,
     )
+    result = dao.answer_pending_interaction(request_id, envelope)
+    if result == "not_found":
+        raise NotFoundErrorResponse(msg="交互请求不存在或已过期")
+    if result == "not_pending":
+        raise ConflictErrorResponse(msg="交互已 answered/timeout/cancelled")
+
+    if (
+        req.kind == "submit_review"
+        and req.payload.get("decision") == "submit"
+        and req.payload.get("disable_future_confirmation") is True
+        and not chat_svc.set_bohrium_submit_confirmation(sid, user_id, False)
+    ):
+        logger.warning("disable future submit confirmation failed: session_id=%s", sid)
+
+    reply = InteractionReplyEvent(
+        source="User",
+        kind=req.kind,
+        request_id=request_id,
+        payload=req.payload,
+    )
+    public = build_public_sse_payload_from_bus_dump(
+        reply.model_dump(mode="json"),
+        session_id=sid,
+        task_id=record.get("task_id"),
+        invocation_id=record.get("invocation_id"),
+        spawn_id=None,
+    )
+    stream_svc.publish_reply_event(sid, public)
+    events_svc.add_history_event(sid, public, user_id=user_id)
     return BaseResponse(msg="ok")
 
 
@@ -687,6 +740,63 @@ def set_session_directory(
     return SessionDirectoryApiResponse(data=_session_workspace_data_from_row(row))
 
 
+@router.get(
+    "/{session_id}/bohrium-submit-confirmation",
+    response_model=BohriumSubmitConfirmationApiResponse,
+    summary="查询会话级 Bohrium 任务提交确认偏好",
+    description="仅返回会话级覆盖值；required 为 null 表示当前会话未设置，是否继承/默认由后续消费链路处理。",
+    operation_id="getChatSessionBohriumSubmitConfirmation",
+    responses={
+        403: COMMON_ERROR_RESPONSES[403],
+        404: COMMON_ERROR_RESPONSES[404],
+    },
+)
+def get_bohrium_submit_confirmation(
+    session_id: str = Path(..., description="会话 ID", examples=["session-001"]),
+    user_id: str | None = Depends(UserService.optional_user_id),
+    chat_svc: ChatSessionsService = Depends(get_sessions_service),
+):
+    sid = session_id.strip()
+    row = chat_svc.get_session(sid)
+    if not row:
+        raise NotFoundErrorResponse(msg="Session not found")
+    if not chat_svc.can_access_session(sid, user_id, allow_admin_read=True):
+        raise ForbiddenErrorResponse(msg="无权限访问该会话")
+    return BohriumSubmitConfirmationApiResponse(
+        data=_session_bohrium_submit_confirmation_data_from_row(sid, row)
+    )
+
+
+@router.put(
+    "/{session_id}/bohrium-submit-confirmation",
+    response_model=BohriumSubmitConfirmationApiResponse,
+    summary="设置会话级 Bohrium 任务提交确认偏好",
+    description="仅会话所有者可写；required=true/false 设置会话级覆盖，required=null 清除覆盖。",
+    operation_id="setChatSessionBohriumSubmitConfirmation",
+    responses={
+        401: COMMON_ERROR_RESPONSES[401],
+        404: COMMON_ERROR_RESPONSES[404],
+    },
+)
+def set_bohrium_submit_confirmation(
+    session_id: str = Path(..., description="会话 ID", examples=["session-001"]),
+    body: BohriumSubmitConfirmationSetRequest = Body(...),
+    user_id: str = Depends(UserService.require_user_id),
+    chat_svc: ChatSessionsService = Depends(get_sessions_service),
+):
+    sid = session_id.strip()
+    if not chat_svc.set_bohrium_submit_confirmation(sid, user_id, body.required):
+        raise NotFoundErrorResponse(
+            msg="Session not found or you are not the owner",
+        )
+    row = chat_svc.get_session(sid)
+    if not row:
+        raise NotFoundErrorResponse(msg="Session not found or you are not the owner")
+    return BohriumSubmitConfirmationApiResponse(
+        data=_session_bohrium_submit_confirmation_data_from_row(sid, row)
+    )
+
+
 @router.put(
     "/{session_id}/title",
     response_model=SessionTitleApiResponse,
@@ -781,10 +891,63 @@ def confirm_interrupt(
 
 
 @router.delete(
+    "/by-directory",
+    response_model=SessionDirectoryDeleteApiResponse,
+    summary="按会话目录整组删除会话",
+    description="仅删除当前用户在指定项目、指定 session_directory 组下的会话；"
+    "若组内存在 active/waiting 会话，则整组拒绝删除且不会部分删除。",
+    operation_id="deleteChatSessionsByDirectory",
+    responses={
+        400: COMMON_ERROR_RESPONSES[400],
+        401: COMMON_ERROR_RESPONSES[401],
+        409: COMMON_ERROR_RESPONSES[409],
+    },
+)
+def delete_sessions_by_directory(
+    query: SessionDirectoryDeleteQuery = Depends(),
+    user_id: str = Depends(UserService.require_user_id),
+    chat_svc: ChatSessionsService = Depends(get_sessions_service),
+):
+    """整组软删除某个会话目录下的会话；运行中/排队中会话会阻断整组删除。"""
+    directory: str | None = None
+    if not query.unset_directory:
+        try:
+            directory = normalize_session_directory_for_storage(query.directory)
+        except SessionDirectoryError as exc:
+            raise _session_directory_error(exc) from exc
+        if directory is None:
+            raise BaseErrorResponse(
+                http_status=400,
+                code=400,
+                msg="请指定 unset_directory=true 或非空 directory",
+            )
+
+    result = chat_svc.delete_sessions_by_directory(
+        user_id=user_id,
+        project_id=query.project_id,
+        directory=directory,
+    )
+    if result.get("blocked_count", 0) > 0:
+        raise ConflictErrorResponse(
+            msg="该目录下存在运行中或排队中的会话，无法删除",
+            data={
+                "blocked_count": result.get("blocked_count", 0),
+                "blocked_statuses": result.get("blocked_statuses", []),
+            },
+        )
+    return SessionDirectoryDeleteApiResponse(
+        msg="ok",
+        data=SessionDirectoryDeleteData(
+            deleted_count=int(result.get("deleted_count", 0)),
+        ),
+    )
+
+
+@router.delete(
     "/{session_id}",
     response_model=BaseResponse,
     summary="删除会话",
-    description="仅会话所有者可删除；关联聊天事件会随会话级联删除。",
+    description="仅会话所有者可删除；删除为软删除，用户侧不再展示，关联聊天事件保留。",
     operation_id="deleteChatSession",
     responses={
         401: COMMON_ERROR_RESPONSES[401],
@@ -796,8 +959,19 @@ def delete_session(
     user_id: str = Depends(UserService.require_user_id),
     chat_svc: ChatSessionsService = Depends(get_sessions_service),
 ):
-    """删除会话。仅会话所有者可删除；关联的聊天事件会随会话级联删除。"""
+    """软删除会话。仅会话所有者可删除；运行中/排队中的会话不可删除。"""
     sid = session_id.strip()
+    row = chat_svc.get_session(sid)
+    if not row or row.get("user_id") != user_id:
+        raise NotFoundErrorResponse(
+            msg="Session not found or you are not the owner",
+        )
+    status = chat_svc.reconcile_waiting_status(sid, row.get("status"))
+    if status in DELETE_BLOCKED_STATUSES:
+        raise ConflictErrorResponse(
+            msg="运行中或排队中的会话无法删除",
+            data={"blocked_status": status},
+        )
     if not chat_svc.delete_session(sid, user_id=user_id):
         raise NotFoundErrorResponse(
             msg="Session not found or you are not the owner",

@@ -620,9 +620,9 @@ async def test_run_agent_idempotent_skip_when_user_turn_context_already_exists()
 
         instructions_hash = hash_user_instructions("Use SI units.")
         rendered_content = (
-            "<user_instructions>\nUse SI units.\n</user_instructions>"
+            "<user-instructions>\nUse SI units.\n</user-instructions>"
             "\n\n"
-            "<current_instruction>\nfirst question\n</current_instruction>"
+            "<current-instruction>\nfirst question\n</current-instruction>"
         )
         existing_payload = {
             "schema_version": USER_TURN_CONTEXT_SCHEMA_VERSION,

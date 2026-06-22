@@ -175,7 +175,10 @@ def test_prepare_send_message_captures_turn_input_before_user_event():
     from src.services.stream_service import ChatStreamService
 
     sessions_service = MagicMock()
-    sessions_service.get_session.return_value = {"session_directory": None}
+    sessions_service.get_session.return_value = {
+        "session_directory": None,
+        "bohrium_submit_confirmation_required": False,
+    }
     sessions_service.try_acquire_session_run.return_value = (True, None)
     events_service = MagicMock()
     events_service.get_latest_scope_event_id.return_value = 77
@@ -198,6 +201,7 @@ def test_prepare_send_message_captures_turn_input_before_user_event():
         ctx = service.prepare_send_message("sess-1", req, user_id="user-1")
 
     assert ctx.job["turn_input"]["user_text"] == "analyze current"
+    assert ctx.job["turn_input"]["instruction_tag"] == "current-instruction"
     assert ctx.job["turn_input"]["files"] == ["https://oss.example.com/chat/new.cif"]
     assert ctx.job["turn_input"]["images"] == [
         "https://oss.example.com/chat/current.png"
@@ -208,6 +212,70 @@ def test_prepare_send_message_captures_turn_input_before_user_event():
     assert "schema_version" not in ctx.user_msg
     events_service.get_latest_scope_event_id.assert_called_once_with("sess-1", None)
     events_service.add_history_event.assert_called_once()
+
+
+def test_prepare_send_message_persists_and_passes_submit_confirmation():
+    from src.models.chat import ChatSendRequest
+    from src.services.stream_service import ChatStreamService
+
+    sessions_service = MagicMock()
+    sessions_service.get_session.return_value = {"session_directory": None}
+    sessions_service.try_acquire_session_run.return_value = (True, None)
+    events_service = MagicMock()
+    events_service.get_latest_scope_event_id.return_value = 0
+    service = ChatStreamService(
+        sessions_service=sessions_service,
+        events_service=events_service,
+        deploy_state_service=MagicMock(),
+    )
+    req = ChatSendRequest(
+        content="run",
+        bohrium_submit_confirmation_required=False,
+    )
+
+    with (
+        patch("src.services.stream_service.REDIS_URL", "redis://test"),
+        patch("src.services.stream_service.get_redis_dao", return_value=MagicMock()),
+    ):
+        ctx = service.prepare_send_message("sess-1", req, user_id="user-1")
+
+    assert ctx is not None
+    assert ctx.job["bohrium_submit_confirmation_required"] is False
+    sessions_service.set_bohrium_submit_confirmation.assert_called_once_with(
+        "sess-1",
+        "user-1",
+        False,
+    )
+
+
+def test_prepare_send_message_uses_session_submit_confirmation_when_request_omits():
+    from src.models.chat import ChatSendRequest
+    from src.services.stream_service import ChatStreamService
+
+    sessions_service = MagicMock()
+    sessions_service.get_session.return_value = {
+        "session_directory": None,
+        "bohrium_submit_confirmation_required": 1,
+    }
+    sessions_service.try_acquire_session_run.return_value = (True, None)
+    events_service = MagicMock()
+    events_service.get_latest_scope_event_id.return_value = 0
+    service = ChatStreamService(
+        sessions_service=sessions_service,
+        events_service=events_service,
+        deploy_state_service=MagicMock(),
+    )
+    req = ChatSendRequest(content="run")
+
+    with (
+        patch("src.services.stream_service.REDIS_URL", "redis://test"),
+        patch("src.services.stream_service.get_redis_dao", return_value=MagicMock()),
+    ):
+        ctx = service.prepare_send_message("sess-1", req, user_id="user-1")
+
+    assert ctx is not None
+    assert ctx.job["bohrium_submit_confirmation_required"] is True
+    sessions_service.set_bohrium_submit_confirmation.assert_not_called()
 
 
 def test_generate_send_stream_skips_current_task_in_history_replay():

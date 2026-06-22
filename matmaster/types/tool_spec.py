@@ -25,6 +25,7 @@ from typing import TYPE_CHECKING, Any, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from matmaster.types.cancellation import CancellationToken
+from matmaster.types.submit_review import SubmitReviewProvider
 from matmaster.types.tool_decision import ToolDecision
 from matmaster.types.tool_runner_state import ToolRunnerState
 from matmaster.types.topology import ToolPlane
@@ -124,3 +125,4 @@ class ToolInstance:
         ]
         | None
     ) = None
+    submit_review_provider: SubmitReviewProvider | None = None

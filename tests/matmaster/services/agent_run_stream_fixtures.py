@@ -295,6 +295,7 @@ async def _patched_service(events: list[Any], *, send_cb: Any = None):
             svc._test_playground = pg
             svc._test_events_table = events_table_fn.return_value
             svc._test_bohrium_svc = bohrium_inst
+            svc._test_redis_dao = redis_mock
 
             yield svc, sse_received, persist_received
 

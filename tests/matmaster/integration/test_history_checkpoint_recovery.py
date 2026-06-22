@@ -24,13 +24,13 @@ from src.services.history_checkpoint_codec import serialize_base_messages
 from src.services.history_checkpoint_service import HistoryCheckpointService
 from src.services.model_history_restore_service import ModelHistoryRestoreService
 from tests.matmaster.integration.test_context_ports import (
-    EmptySessionJobsPort,
+    EmptyWorkspaceJobsPort,
     TableSessionEventsPort,
 )
 
 
 def _compact_user_message(summary: str) -> UserMessage:
-    return UserMessage(content=f"<compacted_history>\n{summary}\n</compacted_history>")
+    return UserMessage(content=f"<compacted-history>\n{summary}\n</compacted-history>")
 
 
 class _SummaryProvider:
@@ -62,7 +62,7 @@ def _make_compactor_for_table(
     assembler = ContextAssembler(
         ports=ContextAssemblyPorts(
             session_events=TableSessionEventsPort(events_table=events_table),
-            session_jobs=EmptySessionJobsPort(),
+            workspace_jobs=EmptyWorkspaceJobsPort(),
         ),
         session_context_factory=build_session_context_factory(
             skill_resolver=empty_skill_resolver,
@@ -705,8 +705,8 @@ async def test_compaction_checkpoint_assembles_v1_session_attachments(
     base_messages = checkpoint["content"]["base_messages"]
     assert [message["role"] for message in base_messages] == ["user"]
     content = base_messages[0]["content"]
-    assert "<compacted_history>" in content
-    assert "<previous_session_summary>" not in content
+    assert "<compacted-history>" in content
+    assert "<previous-session-summary>" not in content
     assert "[Compacted Context]" not in content
     assert "<attachments>" in content
     assert "file_1" in content

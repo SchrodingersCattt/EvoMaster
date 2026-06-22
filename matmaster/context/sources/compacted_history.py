@@ -15,8 +15,8 @@ class CompactedHistorySource:
 
     def to_sections(self) -> tuple[ContextSection, ...]:
         return single_section_or_empty(
-            key="compacted_history",
-            tag="compacted_history",
+            key="compacted-history",
+            tag="compacted-history",
             content=self.summary,
             order=SectionOrder.COMPACTED_HISTORY,
         )

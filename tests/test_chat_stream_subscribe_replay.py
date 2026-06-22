@@ -1,5 +1,6 @@
 import asyncio
 import json
+import threading
 from unittest.mock import MagicMock, patch
 
 from src.services.stream_sse_filter import REPLAY_DISCARDED_EVENT_TYPES
@@ -252,3 +253,69 @@ def test_generate_subscribe_stream_replays_subagent_spawn_binding():
     events_service.get_session_events.assert_called_with(
         'sess-1', include_spawn=True, exclude_types=REPLAY_DISCARDED_EVENT_TYPES
     )
+
+
+async def test_generate_subscribe_stream_subscribes_before_replay_for_running_session():
+    """后台 trigger 已入队后补接会话流时，先订阅 live channel 再查历史。"""
+    from src.services.stream_service import ChatStreamService
+
+    order: list[str] = []
+    sessions_service = MagicMock()
+    sessions_service.get_session_status_payload.return_value = {
+        'source': 'System',
+        'type': 'status',
+        'content': '',
+        'session_id': 'sess-1',
+        'status': 'waiting',
+    }
+    sessions_service.is_session_running_on_this_pod.return_value = False
+    run_on_another_pod_states = iter(
+        [
+            False,  # initial logging/stale check before worker takes the queued run
+            True,  # _run_still_active after replay
+            True,  # branch into Redis subscription forwarding
+            True,  # inner forwarding loop consumes stream_closed
+            False,  # outer loop exits after stream_closed
+        ]
+    )
+    sessions_service.is_session_run_on_another_pod.side_effect = lambda _sid: next(
+        run_on_another_pod_states, False
+    )
+
+    redis_dao = MagicMock()
+    queued_states = iter([True, False])
+    redis_dao.is_session_run_queued.side_effect = lambda _sid: next(
+        queued_states, False
+    )
+
+    events_service = MagicMock()
+    events_service.get_session_events.side_effect = (
+        lambda *args, **kwargs: order.append('history') or []
+    )
+
+    service = ChatStreamService(
+        sessions_service=sessions_service,
+        events_service=events_service,
+        deploy_state_service=MagicMock(),
+    )
+
+    def _fake_sub(session_id, loop, *, thread_name):
+        order.append('subscribe')
+        ready = threading.Event()
+        ready.set()
+        queue: asyncio.Queue = asyncio.Queue()
+        queue.put_nowait({'type': 'stream_closed', 'session_id': session_id})
+        return queue, threading.Event(), ready, MagicMock()
+
+    with (
+        patch('src.services.stream_service.REDIS_URL', 'redis://test'),
+        patch('src.services.stream_service.get_redis_dao', return_value=redis_dao),
+        patch(
+            'src.services.stream_service._start_redis_stream_subscription',
+            side_effect=_fake_sub,
+        ),
+    ):
+        async for _ in service.generate_subscribe_stream('sess-1'):
+            pass
+
+    assert order == ['subscribe', 'history']

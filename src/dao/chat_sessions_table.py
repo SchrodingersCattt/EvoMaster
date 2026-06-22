@@ -48,9 +48,25 @@ def session_row_to_item(row: dict) -> dict:
     }
 
 
+def session_row_to_title_item(row: dict) -> dict:
+    """把会话表行映射为标题查询 DTO。"""
+    return {
+        "id": row["session_id"],
+        "project_id": row.get("project_id"),
+        "status": row.get("status", "idle"),
+        "title": _normalize_session_title_cell(row.get("session_title")),
+        "first_user_message": _parse_first_message_cell(row.get("first_message")),
+    }
+
+
 def _dir_key_expr(alias: str = "s") -> str:
     """SQL 表达式：与业务层 norm_dir 一致，空/NULL → __UNSET__。"""
     return f"COALESCE(NULLIF(TRIM({alias}.session_directory), ''), '__UNSET__')"
+
+
+def _not_deleted_expr(alias: str = "s") -> str:
+    """用户侧查询默认只读取未被软删除的会话。"""
+    return f"{alias}.deleted_at IS NULL"
 
 
 class _WorkspacePrefUnset:
@@ -75,10 +91,17 @@ class ChatSessionsTable(BaseTable):
             with conn.cursor() as cursor:
                 # 检查会话是否已存在
                 cursor.execute(
-                    f"SELECT id FROM {self.table_name} WHERE session_id = %s",
+                    f"SELECT id, deleted_at FROM {self.table_name} WHERE session_id = %s",
                     (session_id,),
                 )
-                if cursor.fetchone():
+                existing = cursor.fetchone()
+                if existing:
+                    if existing.get("deleted_at") is not None:
+                        logger.warning(
+                            "会话 %s 已被软删除，拒绝复用相同 session_id",
+                            session_id,
+                        )
+                        return False
                     logger.debug(f"会话 {session_id} 已存在")
                     return True
 
@@ -95,17 +118,22 @@ class ChatSessionsTable(BaseTable):
                 logger.info(f"创建会话成功: {session_id}")
                 return cursor.rowcount > 0
 
-    def get_session(self, session_id: str) -> dict | None:
+    def get_session(
+        self, session_id: str, *, include_deleted: bool = False
+    ) -> dict | None:
         """获取会话信息（含 user_id、org_id、project_id、status 等）。"""
         with self.get_connection() as conn:
             with conn.cursor() as cursor:
+                deleted_filter = "" if include_deleted else "AND deleted_at IS NULL"
                 cursor.execute(
                     f"""
                     SELECT session_id, user_id, org_id, project_id, session_directory,
-                           chat_mode, session_title, status, is_shared, last_task_id,
-                           created_at, updated_at
+                           chat_mode, bohrium_submit_confirmation_required,
+                           session_title, status, is_shared, last_task_id, created_at,
+                           updated_at, deleted_at, deleted_by
                     FROM {self.table_name}
                     WHERE session_id = %s
+                      {deleted_filter}
                     """,
                     (session_id,),
                 )
@@ -154,6 +182,28 @@ class ChatSessionsTable(BaseTable):
                 e,
             )
             return False
+
+    def get_latest_org_id_by_user(self, user_id: str) -> str | None:
+        """返回该用户最近一次会话记录中的 org_id；无记录返回 None。"""
+        with self.get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    f"""
+                    SELECT org_id
+                    FROM {self.table_name}
+                    WHERE user_id = %s
+                      AND org_id IS NOT NULL
+                      AND org_id != ''
+                      AND deleted_at IS NULL
+                    ORDER BY created_at DESC
+                    LIMIT 1
+                    """,
+                    (user_id,),
+                )
+                row = cursor.fetchone()
+                if not row:
+                    return None
+                return str(row["org_id"]).strip() or None
 
     def update_session_workspace_prefs(
         self,
@@ -216,6 +266,29 @@ class ChatSessionsTable(BaseTable):
             directory=directory,
             chat_mode=WORKSPACE_PREF_UNSET,
         )
+
+    def set_bohrium_submit_confirmation(
+        self,
+        session_id: str,
+        user_id: str,
+        required: bool | None,
+    ) -> bool:
+        """设置会话级 Bohrium 提交确认偏好；None 表示清除覆盖。仅所有者可写。"""
+        stored_value = None if required is None else int(required)
+        with self.get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    f"""
+                    UPDATE {self.table_name}
+                    SET bohrium_submit_confirmation_required = %s,
+                        updated_at = NOW()
+                    WHERE session_id = %s AND user_id = %s
+                      AND deleted_at IS NULL
+                    """,
+                    (stored_value, session_id, user_id),
+                )
+                conn.commit()
+                return cursor.rowcount > 0
 
     def set_session_title(
         self,
@@ -292,15 +365,183 @@ class ChatSessionsTable(BaseTable):
                 return cursor.rowcount > 0
 
     def delete_session(self, session_id: str, user_id: str) -> bool:
-        """删除会话。仅当会话属于该用户时删除（evo_chat_events 有 ON DELETE CASCADE 会级联删除）。"""
+        """软删除会话。仅当会话属于该用户且未删除时标记删除；聊天事件保留。"""
         with self.get_connection() as conn:
             with conn.cursor() as cursor:
                 cursor.execute(
-                    f"DELETE FROM {self.table_name} WHERE session_id = %s AND user_id = %s",
-                    (session_id, user_id),
+                    f"""
+                    UPDATE {self.table_name}
+                    SET deleted_at = NOW(), deleted_by = %s, updated_at = NOW()
+                    WHERE session_id = %s
+                      AND user_id = %s
+                      AND deleted_at IS NULL
+                      AND status NOT IN ('active', 'waiting')
+                    """,
+                    (user_id, session_id, user_id),
                 )
                 conn.commit()
                 return cursor.rowcount > 0
+
+    def list_session_delete_candidates_by_directory(
+        self,
+        user_id: str,
+        project_id: int,
+        *,
+        directory: str | None,
+    ) -> list[dict[str, Any]]:
+        """返回某目录组下仍未删除的会话，用于整组删除前校验状态。"""
+        with self.get_connection() as conn:
+            with conn.cursor() as cursor:
+                where_clause = (
+                    "WHERE user_id = %s AND project_id = %s AND deleted_at IS NULL"
+                )
+                params: list[object] = [user_id, int(project_id)]
+                if directory is None:
+                    where_clause += (
+                        " AND (session_directory IS NULL "
+                        "OR TRIM(session_directory) = '')"
+                    )
+                else:
+                    where_clause += " AND session_directory = %s"
+                    params.append(directory)
+                cursor.execute(
+                    f"""
+                    SELECT session_id, status
+                    FROM {self.table_name}
+                    {where_clause}
+                    ORDER BY updated_at DESC, session_id DESC
+                    """,
+                    tuple(params),
+                )
+                return list(cursor.fetchall() or [])
+
+    def soft_delete_sessions_by_ids(self, session_ids: list[str], user_id: str) -> int:
+        """按 session_id 集合软删除当前用户的未删除会话，返回实际标记数量。"""
+        ids = [sid.strip() for sid in session_ids if sid and sid.strip()]
+        if not ids:
+            return 0
+        placeholders = ", ".join(["%s"] * len(ids))
+        with self.get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    f"""
+                    UPDATE {self.table_name}
+                    SET deleted_at = NOW(), deleted_by = %s, updated_at = NOW()
+                    WHERE user_id = %s
+                      AND deleted_at IS NULL
+                      AND session_id IN ({placeholders})
+                    """,
+                    tuple([user_id, user_id, *ids]),
+                )
+                conn.commit()
+                return int(cursor.rowcount or 0)
+
+    def soft_delete_sessions_by_directory_if_unblocked(
+        self,
+        user_id: str,
+        project_id: int,
+        *,
+        directory: str | None,
+        blocked_statuses: tuple[str, ...],
+    ) -> dict[str, Any]:
+        """
+        事务内整组软删除目录会话。
+
+        先锁住该目录组仍未删除的会话；若锁内发现 active/waiting，则整组回滚，
+        避免“部分删除”或状态在预检查后被并发切换。
+        """
+        with self.get_connection() as conn:
+            with conn.cursor() as cursor:
+                where_clause = (
+                    "WHERE user_id = %s AND project_id = %s AND deleted_at IS NULL"
+                )
+                params: list[object] = [user_id, int(project_id)]
+                if directory is None:
+                    where_clause += (
+                        " AND (session_directory IS NULL "
+                        "OR TRIM(session_directory) = '')"
+                    )
+                else:
+                    where_clause += " AND session_directory = %s"
+                    params.append(directory)
+                cursor.execute(
+                    f"""
+                    SELECT session_id, status
+                    FROM {self.table_name}
+                    {where_clause}
+                    ORDER BY updated_at DESC, session_id DESC
+                    FOR UPDATE
+                    """,
+                    tuple(params),
+                )
+                rows = list(cursor.fetchall() or [])
+                if not rows:
+                    conn.commit()
+                    return {
+                        "session_ids": [],
+                        "deleted_count": 0,
+                        "blocked_count": 0,
+                        "blocked_statuses": [],
+                    }
+
+                blocked = [
+                    row
+                    for row in rows
+                    if str(row.get("status") or "") in blocked_statuses
+                ]
+                if blocked:
+                    conn.rollback()
+                    return {
+                        "session_ids": [],
+                        "deleted_count": 0,
+                        "blocked_count": len(blocked),
+                        "blocked_statuses": sorted(
+                            {str(row.get("status") or "") for row in blocked}
+                        ),
+                    }
+
+                ids = [
+                    str(row.get("session_id") or "").strip()
+                    for row in rows
+                    if str(row.get("session_id") or "").strip()
+                ]
+                if not ids:
+                    conn.commit()
+                    return {
+                        "session_ids": [],
+                        "deleted_count": 0,
+                        "blocked_count": 0,
+                        "blocked_statuses": [],
+                    }
+                placeholders = ", ".join(["%s"] * len(ids))
+                status_placeholders = ", ".join(["%s"] * len(blocked_statuses))
+                cursor.execute(
+                    f"""
+                    UPDATE {self.table_name}
+                    SET deleted_at = NOW(), deleted_by = %s, updated_at = NOW()
+                    WHERE user_id = %s
+                      AND deleted_at IS NULL
+                      AND session_id IN ({placeholders})
+                      AND status NOT IN ({status_placeholders})
+                    """,
+                    tuple([user_id, user_id, *ids, *blocked_statuses]),
+                )
+                deleted_count = int(cursor.rowcount or 0)
+                if deleted_count != len(ids):
+                    conn.rollback()
+                    return {
+                        "session_ids": [],
+                        "deleted_count": 0,
+                        "blocked_count": len(ids) - deleted_count,
+                        "blocked_statuses": sorted(blocked_statuses),
+                    }
+                conn.commit()
+                return {
+                    "session_ids": ids,
+                    "deleted_count": deleted_count,
+                    "blocked_count": 0,
+                    "blocked_statuses": [],
+                }
 
     def count_active_sessions(self) -> int:
         """统计所有用户的活跃会话数量（status='active'）"""
@@ -310,12 +551,32 @@ class ChatSessionsTable(BaseTable):
                     f"""
                     SELECT COUNT(*) as cnt
                     FROM {self.table_name}
-                    WHERE status = %s
+                    WHERE status = %s AND deleted_at IS NULL
                     """,
                     ("active",),
                 )
                 row = cursor.fetchone()
                 return int(row["cnt"]) if row and row.get("cnt") is not None else 0
+
+    def list_session_ids_by_status(
+        self, user_id: str, statuses: list[str]
+    ) -> list[str]:
+        """返回该用户名下 status 命中给定集合的 session_id，按更新时间倒序。"""
+        if not statuses:
+            return []
+        placeholders = ", ".join(["%s"] * len(statuses))
+        with self.get_connection() as conn:
+            with conn.cursor() as cursor:
+                sql = f"""
+                    SELECT session_id
+                    FROM {self.table_name}
+                    WHERE user_id = %s
+                      AND status IN ({placeholders})
+                    ORDER BY updated_at DESC
+                """
+                cursor.execute(sql, (user_id, *statuses))
+                rows = cursor.fetchall()
+                return [str(r["session_id"]) for r in rows if r.get("session_id")]
 
     def reset_all_active_to_idle(self) -> int:
         """
@@ -328,7 +589,7 @@ class ChatSessionsTable(BaseTable):
                     f"""
                     UPDATE {self.table_name}
                     SET status = 'idle', updated_at = NOW()
-                    WHERE status = %s
+                    WHERE status = %s AND deleted_at IS NULL
                     """,
                     ("active",),
                 )
@@ -343,7 +604,10 @@ class ChatSessionsTable(BaseTable):
         """获取该用户的会话总数（用于分页，可按 project_id 过滤）。"""
         with self.get_connection() as conn:
             with conn.cursor() as cursor:
-                sql = f"SELECT COUNT(*) as n FROM {self.table_name} WHERE user_id = %s"
+                sql = (
+                    f"SELECT COUNT(*) as n FROM {self.table_name} "
+                    "WHERE user_id = %s AND deleted_at IS NULL"
+                )
                 params: list[object] = [user_id]
                 if project_id is not None:
                     sql += " AND project_id = %s"
@@ -368,7 +632,7 @@ class ChatSessionsTable(BaseTable):
         with self.get_connection() as conn:
             with conn.cursor() as cursor:
                 # 使用子查询获取第一条用户消息，并带上会话 status；分页在应用层排序后做会破坏顺序，故在 SQL 中用子查询分页
-                where_clause = "WHERE s.user_id = %s"
+                where_clause = f"WHERE s.user_id = %s AND {_not_deleted_expr('s')}"
                 params: list[object] = [user_id]
                 if project_id is not None:
                     where_clause += " AND s.project_id = %s"
@@ -399,6 +663,44 @@ class ChatSessionsTable(BaseTable):
                 results = cursor.fetchall()
                 return [session_row_to_item(row) for row in results]
 
+    def get_session_titles_by_ids(
+        self,
+        user_id: str,
+        session_ids: list[str],
+    ) -> list[dict]:
+        """按 session_id 批量查询该用户自己的会话标题信息（含 first_message 供前端回退）。
+
+        仅返回归属当前用户且未软删除的会话；不存在/非本人/已删除的 id 静默忽略。
+        标题接口不返回 history_length，避免把列表页统计字段暴露到窄查询场景。
+        """
+        ids = [s for s in (sid.strip() for sid in session_ids) if s]
+        if not ids:
+            return []
+        with self.get_connection() as conn:
+            with conn.cursor() as cursor:
+                placeholders = ", ".join(["%s"] * len(ids))
+                sql = f"""
+                    SELECT s.session_id,
+                           s.project_id,
+                           s.status,
+                           s.session_title,
+                           (SELECT e2.content
+                            FROM evo_chat_events e2
+                            WHERE e2.session_id = s.session_id
+                              AND e2.source = 'User'
+                              AND e2.type = 'query'
+                            ORDER BY e2.created_at ASC
+                            LIMIT 1) as first_message
+                    FROM {self.table_name} s
+                    WHERE s.user_id = %s
+                      AND {_not_deleted_expr('s')}
+                      AND s.session_id IN ({placeholders})
+                """
+                params: list[object] = [user_id, *ids]
+                cursor.execute(sql, tuple(params))
+                results = cursor.fetchall()
+                return [session_row_to_title_item(row) for row in results]
+
     def aggregate_session_directory_stats(
         self,
         user_id: str,
@@ -413,7 +715,7 @@ class ChatSessionsTable(BaseTable):
                            COUNT(*) AS session_count,
                            MAX(s.updated_at) AS max_upd
                     FROM {self.table_name} s
-                    WHERE s.user_id = %s AND s.project_id = %s
+                    WHERE s.user_id = %s AND s.project_id = %s AND {_not_deleted_expr('s')}
                     GROUP BY dk
                 """
                 cursor.execute(sql, (user_id, int(project_id)))
@@ -479,7 +781,7 @@ class ChatSessionsTable(BaseTable):
                                    ORDER BY s.updated_at DESC, s.session_id DESC
                                ) AS rn
                         FROM {self.table_name} s
-                        WHERE s.user_id = %s AND s.project_id = %s
+                        WHERE s.user_id = %s AND s.project_id = %s AND {_not_deleted_expr('s')}
                     ) t
                     WHERE t.rn <= %s
                 """
@@ -504,7 +806,7 @@ class ChatSessionsTable(BaseTable):
         fetch_n = cap + 1
         with self.get_connection() as conn:
             with conn.cursor() as cursor:
-                where_clause = "WHERE s.user_id = %s AND s.project_id = %s"
+                where_clause = f"WHERE s.user_id = %s AND s.project_id = %s AND {_not_deleted_expr('s')}"
                 params: list[object] = [user_id, int(project_id)]
                 if directory is None:
                     where_clause += " AND (s.session_directory IS NULL OR TRIM(s.session_directory) = '')"

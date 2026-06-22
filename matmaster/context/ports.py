@@ -96,27 +96,80 @@ class SessionEventsPort(Protocol):
 
 
 @dataclass(frozen=True)
-class SessionJobs:
-    active_jobs: tuple[JsonObject, ...] = ()
-    pending_terminal_jobs: tuple[JsonObject, ...] = ()
-    detail_limit: int | None = None
-
-    @classmethod
-    def empty(cls) -> SessionJobs:
-        return cls(active_jobs=(), pending_terminal_jobs=())
+class WorkspaceJobsExport:
+    path: str
+    format: Literal["csv"]
+    row_count: int
+    columns: tuple[str, ...]
+    reason: Literal["row_limit", "char_limit"]
 
 
 @dataclass(frozen=True)
-class SessionJobsQuery:
+class WorkspaceJobsSummary:
+    total: (
+        int  # == active + unhandled_terminal + handled_recent_terminal == snapshot rows
+    )
+    active: int
+    unhandled_terminal: int
+    handled_recent_terminal: int
+    by_status: Mapping[str, int]
+    failed: int
+    stopped: int
+    lost: int
+    unhandled_action: int
+
+
+@dataclass(frozen=True)
+class WorkspaceJobsExportError:
+    reason: Literal[
+        "session_missing", "bad_target_path", "write_failed", "serialize_failed"
+    ]
+    rows: int
+    target_path: str
+
+    def as_meta(self) -> dict[str, JsonValue]:
+        """Single projection used for snapshot.export_failure and the rendered line."""
+        return {
+            "reason": self.reason,
+            "rows": self.rows,
+            "target_path": self.target_path,
+        }
+
+
+@dataclass(frozen=True)
+class WorkspaceJobs:
+    workspace: str | None = None
+    active_jobs: tuple[JsonObject, ...] = ()
+    unhandled_terminal_jobs: tuple[JsonObject, ...] = ()
+    handled_recent_terminal_jobs: tuple[JsonObject, ...] = ()
+    mode: Literal["workspace_observation", "session_workspace_delivery"] | None = None
+    summary: WorkspaceJobsSummary | None = None
+    export: WorkspaceJobsExport | None = None
+    export_error: WorkspaceJobsExportError | None = None
+    required_error: Mapping[str, JsonValue] | None = None
+    preview_limit: int | None = None
+    preview_rows: tuple[JsonObject, ...] = ()
+    omitted_count: int | None = None
+    required_truncated: bool = False
+    handled_recent_has_more: bool = False
+    handled_recent_unavailable: bool = False
+
+    @classmethod
+    def empty(cls) -> WorkspaceJobs:
+        return cls()
+
+
+@dataclass(frozen=True)
+class WorkspaceJobsQuery:
     session_id: str
 
 
 @runtime_checkable
-class SessionJobsPort(Protocol):
-    async def load_session_jobs(
+class WorkspaceJobsPort(Protocol):
+    async def load_workspace_jobs(
         self,
-        query: SessionJobsQuery,
-    ) -> SessionJobs:
+        query: WorkspaceJobsQuery,
+    ) -> WorkspaceJobs:
         raise NotImplementedError
 
 
@@ -151,4 +204,4 @@ class BohriumJobLedgerPort(Protocol):
 @dataclass(frozen=True)
 class ContextAssemblyPorts:
     session_events: SessionEventsPort
-    session_jobs: SessionJobsPort | None = None
+    workspace_jobs: WorkspaceJobsPort | None = None

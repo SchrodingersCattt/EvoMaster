@@ -98,6 +98,7 @@ class RedisStopSubscriber:
 
 # 仅存会话级运行时数据（如 bohrium_node_id）。history / task_ids / last_task_id、org_id / project_id 已持久化在 DB。
 SESSIONS: dict[str, dict] = {}
+DELETE_BLOCKED_STATUSES = {"active", "waiting"}
 
 
 class ChatSessionsService:
@@ -122,7 +123,13 @@ class ChatSessionsService:
         - 会话未分享：仅会话所有者可访问；若 ``allow_admin_read`` 且用户在 tools-server
           ``allowlist.admin`` 中，则允许只读场景（订阅 SSE、查看分享状态等）
         """
-        row = self.table.get_session(session_id)
+        row = self.table.get_session(session_id, include_deleted=True)
+        if row and row.get("deleted_at") is not None:
+            logger.info(
+                "can_access_session: session_id=%s denied (session deleted)",
+                session_id,
+            )
+            return False
         if not row:
             # 新会话尚未创建，仅允许已登录用户访问（会由 ensure_session 创建）
             allowed = user_id is not None
@@ -189,6 +196,20 @@ class ChatSessionsService:
         )
         total = self.table.count_sessions_by_user(user_id, project_id=project_id)
         return sessions, total
+
+    def get_session_titles_by_ids(
+        self,
+        user_id: str,
+        session_ids: list[str],
+    ) -> list[dict]:
+        """按 sessionId 批量获取标题（仅当前用户自己的会话）。
+
+        返回列表项含 id / title / first_user_message 等，供前端按既有规则派生显示标题。
+        非本人 / 不存在 / 已删除的 id 静默忽略。
+        """
+        if not session_ids:
+            return []
+        return self.table.get_session_titles_by_ids(user_id, session_ids)
 
     def list_sessions_grouped_by_directory(
         self,
@@ -369,9 +390,11 @@ class ChatSessionsService:
             out["last_task_id"] = last_task_id
         return out
 
-    def get_session(self, session_id: str) -> dict | None:
+    def get_session(
+        self, session_id: str, *, include_deleted: bool = False
+    ) -> dict | None:
         """获取会话完整信息（含 org_id、project_id，用于 run_creds）。"""
-        return self.table.get_session(session_id)
+        return self.table.get_session(session_id, include_deleted=include_deleted)
 
     def get_session_user_id(self, session_id: str) -> str | None:
         """获取会话所属用户 ID；会话不存在或无 user_id 时返回 None。"""
@@ -380,6 +403,15 @@ class ChatSessionsService:
             return None
         uid = row.get("user_id")
         return str(uid) if uid is not None else None
+
+    def list_live_run_session_ids(self, user_id: str) -> list[str]:
+        """该用户名下确实还有在途 run 的 session_id（用于 wakeup snapshot）。
+
+        先取 DB 中 waiting/active 的会话，再用 is_session_run_live 过滤掉
+        部署/重启后残留（run 已不存在）的，避免快照一连上就误报一堆旧会话。
+        """
+        raw = self.table.list_session_ids_by_status(user_id, ["waiting", "active"])
+        return [sid for sid in raw if self.is_session_run_live(sid)]
 
     def set_session_bohrium(
         self,
@@ -400,6 +432,19 @@ class ChatSessionsService:
     ) -> bool:
         """设置会话绑定的工作区目录。仅所有者可写。"""
         return self.table.set_session_directory(session_id, directory, user_id)
+
+    def set_bohrium_submit_confirmation(
+        self,
+        session_id: str,
+        user_id: str,
+        required: bool | None,
+    ) -> bool:
+        """设置会话级 Bohrium 提交确认偏好。仅所有者可写。"""
+        return self.table.set_bohrium_submit_confirmation(
+            session_id,
+            user_id,
+            required,
+        )
 
     def update_session_workspace_prefs(
         self,
@@ -437,6 +482,8 @@ class ChatSessionsService:
     def get_share_status(self, session_id: str) -> dict:
         """获取会话分享状态。返回 { \"enabled\": bool }，会话不存在返回 None。"""
         row = self.table.get_session(session_id)
+        if not row:
+            return {"enabled": False}
         return {"enabled": bool(row.get("is_shared"))}
 
     def set_share_status(self, session_id: str, enabled: bool, user_id: str) -> bool:
@@ -446,17 +493,97 @@ class ChatSessionsService:
         )
 
     def delete_session(self, session_id: str, user_id: str) -> bool:
-        """删除会话。仅会话所有者可删除；会清理内存中的 SESSIONS 与 run 占用。"""
+        """软删除会话。仅会话所有者可删除；会清理内存中的 SESSIONS 与 run 占用。"""
         row = self.table.get_session(session_id)
         if not row:
             return False
         if row.get("user_id") != user_id:
             return False
-        SESSIONS.pop(session_id, None)
-        with self._sessions_run_lock:
-            self._sessions_in_run.discard(session_id)
-        get_worker_registry_service().delete_session_run_owner(session_id)
+        status = self.reconcile_waiting_status(session_id, row.get("status"))
+        if status in DELETE_BLOCKED_STATUSES:
+            return False
+        self._clear_deleted_session_runtime([session_id])
         return self.table.delete_session(session_id, user_id)
+
+    def delete_sessions_by_directory(
+        self,
+        *,
+        user_id: str,
+        project_id: int,
+        directory: str | None,
+    ) -> dict:
+        """
+        整体软删除某个 session_directory 组。
+
+        若该组内存在 active/waiting，会整组拒绝删除，避免用户以为目录已清空但实际残留运行会话。
+        """
+        rows = self.table.list_session_delete_candidates_by_directory(
+            user_id,
+            project_id,
+            directory=directory,
+        )
+        if not rows:
+            return {
+                "deleted_count": 0,
+                "blocked_count": 0,
+                "blocked_statuses": [],
+            }
+
+        session_ids: list[str] = []
+        blocked_statuses: set[str] = set()
+        blocked_count = 0
+        for row in rows:
+            sid = str(row.get("session_id") or "").strip()
+            if not sid:
+                continue
+            session_ids.append(sid)
+            status = self.reconcile_waiting_status(sid, row.get("status"))
+            if status in DELETE_BLOCKED_STATUSES:
+                blocked_count += 1
+                blocked_statuses.add(status)
+
+        if blocked_count > 0:
+            return {
+                "deleted_count": 0,
+                "blocked_count": blocked_count,
+                "blocked_statuses": sorted(blocked_statuses),
+            }
+
+        delete_result = self.table.soft_delete_sessions_by_directory_if_unblocked(
+            user_id,
+            project_id,
+            directory=directory,
+            blocked_statuses=tuple(sorted(DELETE_BLOCKED_STATUSES)),
+        )
+        if delete_result.get("blocked_count", 0) > 0:
+            return {
+                "deleted_count": 0,
+                "blocked_count": delete_result.get("blocked_count", 0),
+                "blocked_statuses": delete_result.get("blocked_statuses", []),
+            }
+
+        deleted_session_ids = [
+            str(sid).strip() for sid in delete_result.get("session_ids", []) if sid
+        ]
+        self._clear_deleted_session_runtime(deleted_session_ids)
+        return {
+            "deleted_count": delete_result.get("deleted_count", 0),
+            "blocked_count": 0,
+            "blocked_statuses": [],
+        }
+
+    def _clear_deleted_session_runtime(self, session_ids: list[str]) -> None:
+        """软删除前清理 API 进程内和 worker registry 中的会话运行态。"""
+        clean_ids = [sid.strip() for sid in session_ids if sid and sid.strip()]
+        if not clean_ids:
+            return
+        registry = get_worker_registry_service()
+        with self._sessions_run_lock:
+            for sid in clean_ids:
+                SESSIONS.pop(sid, None)
+                self._sessions_in_run.discard(sid)
+        for sid in clean_ids:
+            registry.delete_session_run_owner(sid)
 
     def try_acquire_session_run(self, session_id: str) -> tuple[bool, str | None]:
         """
@@ -535,6 +662,21 @@ class ChatSessionsService:
         if owner is None or owner == get_worker_id():
             return False
         return registry.is_worker_alive(owner)
+
+    def is_session_run_live(self, session_id: str) -> bool:
+        """该会话当前是否真有在途 run（只读，绝不改库）。
+
+        queued（已入队）/ 本 pod 在跑 / 别的存活 pod 在跑，任一为真即视为存活；
+        三者皆否说明上一轮 run 已随部署/重启消失，是残留 waiting/active，交由既有懒恢复处理：
+        active 残留打开时经 generate_subscribe_stream 的 is_stale 分支重置并发 run_interrupted；
+        waiting 残留在状态读取时由 reconcile_waiting_status 静默重置 idle（不发提示）。
+        """
+        sid = session_id.strip()
+        if REDIS_URL and get_redis_dao().is_session_run_queued(sid):
+            return True
+        if self.is_session_running_on_this_pod(sid):
+            return True
+        return self.is_session_run_on_another_pod(sid)
 
     def reset_session_status_to_idle_in_db(self, session_id: str) -> None:
         """

@@ -3,7 +3,7 @@
 
 agents:
   general:
-    llm: "qwen_3_7_max"
+    llm: "matmaster/DeepSeek-v4-Pro"
 
 # env: retained as stub -- EvoMasterConfig.env requires cluster/docker/scheduler
 # sub-fields with no defaults. Removing causes Pydantic validation error.

@@ -98,6 +98,7 @@ async def stream_llm_items(
     usage_vendor: dict[str, Any] | None = None
     captured_provider_state = None
     producing_reasoning = False
+    reasoning_complete_emitted = False
     producing_content = False
     pending_response_parts: list[str] = []
     response_stream_released = False
@@ -152,6 +153,11 @@ async def stream_llm_items(
                     yield _thought_item(
                         "".join(reasoning_parts), stream_id, "segment_end"
                     )
+                    if not reasoning_complete_emitted:
+                        reasoning_complete_emitted = True
+                        yield _thought_item(
+                            "".join(reasoning_parts), stream_id, "complete"
+                        )
                     producing_reasoning = False
                 content_parts.append(chunk.content)
                 producing_content = True
@@ -170,6 +176,11 @@ async def stream_llm_items(
                     yield _thought_item(
                         "".join(reasoning_parts), stream_id, "segment_end"
                     )
+                    if not reasoning_complete_emitted:
+                        reasoning_complete_emitted = True
+                        yield _thought_item(
+                            "".join(reasoning_parts), stream_id, "complete"
+                        )
                     producing_reasoning = False
                 # Segment transition: content -> tool_calls
                 if producing_content:

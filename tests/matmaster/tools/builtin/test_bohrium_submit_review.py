@@ -1,0 +1,80 @@
+import pytest
+
+from matmaster.tools.builtin.bohrium_tool.submit_review import (
+    BohriumSubmitReviewProvider,
+    build_review_draft,
+    normalize_execution_args,
+)
+from matmaster.types.submit_review import SubmitReviewArgumentError
+
+
+def test_draft_none_for_non_submit():
+    assert build_review_draft({"action": "query", "job_id": "1"}) is None
+    assert build_review_draft({}) is None
+
+
+def test_draft_adds_defaults_and_cmd_redirect():
+    draft = build_review_draft(
+        {
+            "action": "submit",
+            "input_dir": "/share/c",
+            "image": "img",
+            "cmd": "python run.py",
+        }
+    )
+
+    assert draft is not None
+    assert draft.review_draft_arguments["cmd"] == "python run.py > log 2>&1"
+    assert draft.review_draft_arguments["machine"] == "c32_m128_cpu"
+    assert draft.review_draft_arguments["job_name"] == "matmaster-job"
+    assert draft.review_draft_arguments["disk_size"] == 50
+    assert draft.normalization_changes["cmd"]["to"] == "python run.py > log 2>&1"
+    assert draft.model_arguments["cmd"] == "python run.py"
+    assert draft.draft_issues == []
+
+
+def test_draft_missing_required_keeps_issues_still_reviewable():
+    draft = build_review_draft(
+        {"action": "submit", "input_dir": "/share/c", "cmd": "python run.py"}
+    )
+
+    assert draft is not None
+    codes = {issue["field"]: issue["code"] for issue in draft.draft_issues}
+    assert codes["image"] == "missing_required_field"
+
+
+def test_draft_oversized_field_raises():
+    with pytest.raises(SubmitReviewArgumentError):
+        build_review_draft(
+            {
+                "action": "submit",
+                "input_dir": "/share/c",
+                "image": "i",
+                "cmd": "x" * 9000,
+            }
+        )
+
+
+def test_normalize_is_idempotent():
+    once = normalize_execution_args(
+        {"action": "submit", "input_dir": "/share/c", "image": "i", "cmd": "run"}
+    )
+    twice = normalize_execution_args(once.arguments)
+
+    assert once.arguments == twice.arguments
+    assert twice.normalization_changes == {}
+
+
+def test_provider_object_implements_protocol():
+    provider = BohriumSubmitReviewProvider()
+
+    assert (
+        provider.build_review_draft(
+            {"action": "submit", "input_dir": "/s", "image": "i", "cmd": "c"}
+        )
+        is not None
+    )
+    assert (
+        provider.normalize_execution_args({"action": "submit"}).arguments["machine"]
+        == "c32_m128_cpu"
+    )

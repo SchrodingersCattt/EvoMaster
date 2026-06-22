@@ -13,7 +13,8 @@ Always include **universal baseline**: `calculation`, `basis_type`, `ntype`, `ec
 | DOS (NSCF) | `init_chg file`, `out_dos 1`, `dos_edelta_ev`, `dos_sigma`, `dos_nche`, `nbands`, `symmetry 0`; **PW add `pw_diag_thr 1.0e-5`** | Missing `dos_nche` for LCAO; PW missing `pw_diag_thr` → noisy DOS |
 | Relax | **`cal_force 1`**, `force_thr_ev 0.01`, `relax_nmax 100` | Missing `cal_force` → no force output |
 | Cell-relax | **`cal_force 1`**, **`cal_stress 1`**, `force_thr_ev 0.01`, `stress_thr 0.5`, `relax_nmax 100` | Missing `cal_force` or `cal_stress` → relaxation silently broken |
-| Work function / dipole | `out_pot 2`, `efield_flag 1`, `dip_cor_flag 1`, `efield_dir <vacuum>`, `efield_amp 0.0` | Missing `efield_amp 0.0` (pure dipole correction) |
+| Work function (symmetric slab — common case) | `out_pot 2` only | **Adding dipole correction to a symmetric slab** → fake vacuum ramp, Φ wrong by 100s of eV |
+| Work function (asymmetric slab / 1-sided adsorbate) | `out_pot 2`, `efield_flag 1`, `dip_cor_flag 1`, `efield_dir <vacuum>`, `efield_amp 0.0`, `efield_pos_max <vacuum-center>` | `efield_pos_max` copied as a constant (e.g. `0.95`) instead of the actual vacuum center |
 | Spin-polarized | `nspin 2`, `mixing_beta 0.1`, `mixing_ndim 20`, `mixing_gg0 1.5` | Omitting mixing params → SCF diverges |
 | DFT+U (strongly correlated) | `dft_plus_u 1`, `orbital_corr`, `hubbard_u`, `nspin 2` | See DFT+U section below |
 | Slab KPT | Always `1` in vacuum direction (e.g. `20 20 1 0 0 0`) | Using dense mesh in vacuum direction |
@@ -211,6 +212,8 @@ orbital_dir /root/apns-orbitals-efficiency-v1/
 > PEXSI requires `basis_type lcao` and `gamma_only 1`. Always set `pexsi_npole` (default 40, use 80 for production).
 
 ### Work Function / Electrostatic Potential INPUT Example
+
+**Symmetric slab (inversion symmetry — both faces equivalent). This is the common case; do NOT add dipole correction:**
 ```
 INPUT_PARAMETERS
 calculation scf
@@ -222,14 +225,12 @@ scf_nmax 100
 smearing_method gauss
 smearing_sigma 0.01
 out_pot 2
-efield_flag 1
-dip_cor_flag 1
-efield_dir 2
-efield_pos_max 0.0
-efield_pos_dec 0.1
-efield_amp 0.0
 ```
 Slab KPT for work function (z = vacuum): `20 20 1 0 0 0`
+
+> **⚠ Dipole correction is NOT a default part of a work-function calculation.** A symmetric slab has zero net dipole — both vacuum sides are already equipotential, so `out_pot 2` alone yields the correct Φ (read the flat vacuum plateau, subtract `E_F`). Forcing `dip_cor_flag 1` here injects an artificial sawtooth ramp into the vacuum → absurd Φ (e.g. hundreds of eV).
+>
+> **Only an asymmetric slab** (one-sided adsorbate, polar/Janus surface — net dipole ⊥ surface) needs it. Then add `efield_flag 1`, `dip_cor_flag 1`, `efield_dir <vacuum>`, `efield_amp 0.0`, and set **`efield_pos_max` to the fractional coordinate at the CENTER of the vacuum gap** — derive it from the atom z-range in STRU, place it as far from all atoms as possible. Never copy a constant like `0.95`: if the sawtooth discontinuity lands on non-zero charge density the dipole is mis-estimated and the vacuum potential bends into a slope.
 
 ### External Electric Field INPUT Example (28_efield)
 ```
@@ -255,7 +256,7 @@ pseudo_dir /root/apns-pseudopotentials-v1/
 > - `dip_cor_flag 1` + `efield_amp 0.0` = **dipole correction only** (work function, no external field)
 > - `dip_cor_flag 0` + `efield_amp ≠ 0` = **external electric field** (sawtooth field applied to slab)
 >
-> When a task says "external electric field" or "apply E-field", use `dip_cor_flag 0`. When it says "work function" or "dipole correction", use `dip_cor_flag 1` + `efield_amp 0.0`.
+> When a task says "external electric field" or "apply E-field", use `dip_cor_flag 0`. Use `dip_cor_flag 1` + `efield_amp 0.0` **only for an asymmetric slab** whose net surface dipole must be cancelled — never as a blanket default for work-function jobs (a symmetric slab needs neither, and dipole correction on a symmetric slab corrupts Φ).
 
 ---
 

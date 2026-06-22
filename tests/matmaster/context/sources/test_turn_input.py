@@ -16,11 +16,24 @@ def test_turn_instruction_source_returns_runtime_only_section() -> None:
 
     assert len(sections) == 1
     section = sections[0]
-    assert section.key == "current_instruction"
-    assert section.tag == "current_instruction"
+    assert section.key == "current-instruction"
+    assert section.tag == "current-instruction"
     assert section.content == "Explain FeO."
     assert section.order == SectionOrder.TURN_INSTRUCTION
     assert section.views == frozenset({ContextView.RUNTIME})
+
+
+def test_turn_instruction_source_can_render_system_tag_section() -> None:
+    sections = TurnInstructionSource(
+        user_text="作业已完成。",
+        tag="system-reminder",
+    ).to_sections()
+
+    assert len(sections) == 1
+    section = sections[0]
+    assert section.key == "system-reminder"
+    assert section.tag == "system-reminder"
+    assert section.content == "作业已完成。"
 
 
 def test_turn_instruction_source_deferred_uses_last_order() -> None:
@@ -40,8 +53,8 @@ def test_turn_attachments_source_renders_future_split_section() -> None:
 
     assert len(sections) == 1
     section = sections[0]
-    assert section.key == "turn_attachments"
-    assert section.tag == "turn_attachments"
+    assert section.key == "turn-attachments"
+    assert section.tag == "turn-attachments"
     assert section.order == SectionOrder.TURN_ATTACHMENTS
     assert section.content == (
         "file_1 input.cif https://oss.example.com/input.cif\n"
@@ -64,7 +77,7 @@ def test_turn_input_default_merges_attachments_into_current_instruction() -> Non
     sections = turn_input.to_sections()
 
     assert len(sections) == 1
-    assert sections[0].key == "current_instruction"
+    assert sections[0].key == "current-instruction"
     assert sections[0].content == (
         "Explain FeO.\n\n"
         "[Current attachments]\n"
@@ -111,7 +124,7 @@ def test_turn_input_default_shape_matches_current_instruction_renderer() -> None
 
     section = turn_input.to_sections()[0]
 
-    assert section.tag == "current_instruction"
+    assert section.tag == "current-instruction"
     assert section.content == (
         "Explain FeO.\n\n"
         "[Current attachments]\n"
@@ -130,8 +143,8 @@ def test_turn_input_can_split_attachments_for_future_ab() -> None:
     sections = turn_input.to_sections(split_attachments=True)
 
     assert [section.key for section in sections] == [
-        "current_instruction",
-        "turn_attachments",
+        "current-instruction",
+        "turn-attachments",
     ]
 
 
@@ -173,6 +186,7 @@ def test_turn_input_round_trips_payload() -> None:
         images=["https://oss.example.com/image.png"],
         workspace_paths=["/share/current/POSCAR"],
         pre_turn_history_event_id=42,
+        instruction_tag="system-reminder",
     )
 
     assert TurnInput.from_payload(turn_input.to_payload()) == turn_input

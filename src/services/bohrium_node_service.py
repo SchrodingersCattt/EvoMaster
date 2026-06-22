@@ -15,8 +15,15 @@ from typing import Any
 import httpx
 
 from src.utils.constant import BOHRIUM_DEFAULT_IMAGE_ID, BOHRIUM_OPENAPI_HOST
+from utils.tracing import (
+    get_tracer,
+    inject_trace_context,
+    record_span_exception,
+    set_log_context_attributes,
+)
 
 logger = logging.getLogger(__name__)
+_TRACER = get_tracer(__name__)
 
 # 与 start.sh 一致：磁盘等；turnoffAfter=-1 表示默认不自动关机
 DEFAULT_DISK_SIZE = 40
@@ -30,6 +37,14 @@ POLL_INTERVAL = 5
 POLL_TIMEOUT = 600  # 10 分钟
 # 默认节点名（与 create_node 用同一来源，保证 destroy_untracked_nodes_by_name 匹配）
 _DEFAULT_NODE_NAME = 'matmaster-session'
+
+
+def _set_span_response_code(span: Any, code: Any) -> None:
+    try:
+        span.set_attribute('bohrium.response.code', int(code))
+    except (TypeError, ValueError):
+        if code is not None:
+            span.set_attribute('bohrium.response.code', str(code))
 
 
 def get_default_node_name() -> str:
@@ -80,7 +95,8 @@ class BohriumNodeService:
             'turnoffAfter': turnoff_after,
             'datasets': [],
         }
-        url = f"{self._host}/openapi/v1/node/add"
+        path = '/openapi/v1/node/add'
+        url = f"{self._host}{path}"
         # 可直接复制的 curl（单引号已转义便于在 shell 中执行）
         body_s = json.dumps(payload, ensure_ascii=False)
         ak_esc = access_key.replace("'", "'\\''")
@@ -91,35 +107,56 @@ class BohriumNodeService:
             f"-H 'content-type: application/json' "
             f"-d '{body_esc}'"
         )
-        logger.info('Bohrium create node curl (copy to reproduce): %s', curl_cmd)
-        with httpx.Client(timeout=60.0) as client:
-            r = client.post(
-                url,
-                headers={
-                    'accessKey': access_key,
-                    'content-type': 'application/json',
-                },
-                json=payload,
-            )
-            r.raise_for_status()
-            data = r.json()
-        code = data.get('code')
-        if code != 0:
-            logger.error(
-                'Bohrium create node failed: code=%s response=%s curl (copy to reproduce): %s',
-                code,
-                data,
-                curl_cmd,
-            )
-            raise RuntimeError(
-                f"Bohrium create node failed: code={code}, response={data}"
-            )
-        info = data.get('data') or {}
-        node_id = info.get('id')
-        if node_id is None:
-            raise RuntimeError(f"Bohrium create node returned no id: {data}")
-        logger.info('Bohrium node created node_id=%s', node_id)
-        return {'node_id': node_id, 'ip': None, 'password': None}
+        with _TRACER.start_as_current_span('bohrium.node.create') as span:
+            set_log_context_attributes(span)
+            span.set_attribute('bohrium.openapi.path', path)
+            span.set_attribute('bohrium.project_id', project_id)
+            span.set_attribute('bohrium.image_id', image_id)
+            span.set_attribute('bohrium.sku_id', sku_id)
+            span.set_attribute('bohrium.disk_size', disk_size)
+            span.set_attribute('bohrium.turnoff_after', turnoff_after)
+            span.set_attribute('http.request.method', 'POST')
+            span.set_attribute('url.full', url)
+            span.set_attribute('bohrium.request.body_json', body_s)
+            try:
+                logger.info(
+                    'Bohrium create node curl (copy to reproduce): %s', curl_cmd
+                )
+                with httpx.Client(timeout=60.0) as client:
+                    r = client.post(
+                        url,
+                        headers=inject_trace_context(
+                            {
+                                'accessKey': access_key,
+                                'content-type': 'application/json',
+                            }
+                        ),
+                        json=payload,
+                    )
+                    r.raise_for_status()
+                    data = r.json()
+                code = data.get('code')
+                _set_span_response_code(span, code)
+                if code != 0:
+                    logger.error(
+                        'Bohrium create node failed: code=%s response=%s curl (copy to reproduce): %s',
+                        code,
+                        data,
+                        curl_cmd,
+                    )
+                    raise RuntimeError(
+                        f"Bohrium create node failed: code={code}, response={data}"
+                    )
+                info = data.get('data') or {}
+                node_id = info.get('id')
+                if node_id is None:
+                    raise RuntimeError(f"Bohrium create node returned no id: {data}")
+                span.set_attribute('bohrium.node_id', str(node_id))
+                logger.info('Bohrium node created node_id=%s', node_id)
+                return {'node_id': node_id, 'ip': None, 'password': None}
+            except Exception as exc:
+                record_span_exception(span, exc)
+                raise
 
     def wait_until_ready(
         self,

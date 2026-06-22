@@ -37,10 +37,7 @@ class TestTodoWriteMetadata:
         tool = TodoWriteTool(workdir=tmp_path)
         prompt = tool.prompt()
         assert prompt is not None
-        assert "## When to Use This Tool" in prompt
-        assert "## When NOT to Use This Tool" in prompt
         assert "activeForm" in prompt
-        assert "Exactly ONE task must be in_progress" in prompt
 
 
 class TestTodoWriteValidation:

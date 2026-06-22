@@ -17,9 +17,9 @@ from matmaster.context.ports import (
     ContextAssemblyPorts,
     SessionEvent,
     SessionEventQuery,
-    SessionJobs,
-    SessionJobsQuery,
     UserInstructions,
+    WorkspaceJobs,
+    WorkspaceJobsQuery,
 )
 from matmaster.context.sections import ContextSection
 from matmaster.context.session import SessionContextBuilder
@@ -188,7 +188,7 @@ class ContextAssembler:
                         order="asc",
                     )
                 ),
-                self._load_jobs_or_empty(request.session_id),
+                self._load_workspace_jobs_or_empty(request.session_id),
             )
             session_sections = self._session_section_builder(
                 events,
@@ -196,14 +196,14 @@ class ContextAssembler:
                 True,
             )
         else:
-            jobs = await self._load_jobs_or_empty(request.session_id)
+            jobs = await self._load_workspace_jobs_or_empty(request.session_id)
 
         user_turn_context = composition.apply(
             ContextCompositionInputs(
                 user_instructions_text=request.user_instructions.text,
                 turn_input=request.turn_input,
                 session_sections=session_sections,
-                session_jobs=jobs,
+                workspace_jobs=jobs,
                 split_turn_attachments=self._render_options.split_turn_attachments,
             )
         )
@@ -233,7 +233,7 @@ class ContextAssembler:
                     order="asc",
                 )
             ),
-            self._load_jobs_or_empty(request.session_id),
+            self._load_workspace_jobs_or_empty(request.session_id),
         )
         session_sections = self._session_section_builder(
             events,
@@ -247,7 +247,7 @@ class ContextAssembler:
                 compacted_history_summary=request.compacted_history_summary,
                 turn_input=request.turn_input,
                 session_sections=session_sections,
-                session_jobs=jobs,
+                workspace_jobs=jobs,
                 session_attachments_override=request.session_attachments_override,
                 defer_turn_instruction=True,
                 split_turn_attachments=self._render_options.split_turn_attachments,
@@ -261,9 +261,9 @@ class ContextAssembler:
             covered_until_event_id=covered_until,
         )
 
-    async def _load_jobs_or_empty(self, session_id: str) -> SessionJobs:
-        if self._ports.session_jobs is None:
-            return SessionJobs.empty()
-        return await self._ports.session_jobs.load_session_jobs(
-            SessionJobsQuery(session_id=session_id)
+    async def _load_workspace_jobs_or_empty(self, session_id: str) -> WorkspaceJobs:
+        if self._ports.workspace_jobs is None:
+            return WorkspaceJobs.empty()
+        return await self._ports.workspace_jobs.load_workspace_jobs(
+            WorkspaceJobsQuery(session_id=session_id)
         )

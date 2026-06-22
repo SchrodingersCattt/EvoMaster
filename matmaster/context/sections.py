@@ -23,7 +23,7 @@ class SectionOrder(IntEnum):
     SESSION_ARTIFACTS = 700
     TURN_INSTRUCTION = 1000
     TURN_ATTACHMENTS = 1100
-    SESSION_JOBS = 1200
+    WORKSPACE_JOBS = 1200
     TURN_INSTRUCTION_LAST = 1300
 
 
@@ -48,6 +48,8 @@ class ContextSection:
             raise ValueError("ContextSection.key must be non-empty")
         if not self.tag:
             raise ValueError("ContextSection.tag must be non-empty")
+        if "_" in self.tag:
+            raise ValueError("ContextSection.tag must use hyphen separators")
 
 
 def single_section_or_empty(

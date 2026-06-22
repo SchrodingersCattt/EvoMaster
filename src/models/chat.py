@@ -3,7 +3,7 @@
 ag-ui 协议（前后端约定）：
 - 服务端 -> 客户端：SSE，event 固定为 "ag-ui"，data 为 JSON 字符串，字段：
   source: "System"|"User"|"MatMaster", type: 事件类型, content: 内容, session_id: 会话 id
-  事件类型示例: session_status, status, query, thought, response, response_figures, tool_call, tool_result, run_result, error, cancelled, run_interrupted, ask_question, ask_question_reply, ask_question_timeout, planner_reply, exp_run, log_line, workspace_uploaded, workspace_upload_error, bohrium_node 等。
+  事件类型示例: session_status, status, query, thought, response, response_figures, tool_call, tool_result, run_result, error, cancelled, run_interrupted, interaction_request, interaction_reply, interaction_timeout, planner_reply, exp_run, log_line, workspace_uploaded, workspace_upload_error, bohrium_node 等。
   thought：仅表示 reasoning / thinking 内容；若为流式思考分片，则仍使用 type='thought'，并在 payload 顶层附带 stream_state='start'|'streaming'|'end'，以及可选 stream_id/context/token_count。
   response：assistant 对用户可见的正文内容；流式分片同样在 payload 顶层附带 stream_state / stream_id，非流式 response 用于持久化与历史回放。
   response_figures：回答级图片绑定事件；content.figures 为已上传图片列表，顶层仍带 session_id、task_id、invocation_id、spawn_id。该事件用于侧边栏等图像展示，不会把图片写回正文文本。该事件可以在同一 invocation_id 下出现多次，每次都是当前已知完整图片组快照；合法顺序包括早于第一段 response、位于多个 response chunk 之间、或位于 run_result 之前的 final flush。前端应按 invocation_id eager upsert，且不从 tool_result.payload.figures 反推正式回答级图片。
@@ -13,11 +13,11 @@ ag-ui 协议（前后端约定）：
 - 客户端 -> 服务端：REST
   POST /chat/sessions/{session_id}/stream  Body 可选：不传或 content 为空→仅历史+ping；有 content→发送并返回本次 SSE 流
   POST /chat/sessions/{session_id}/stop  终止当前运行
-  POST /chat/sessions/{session_id}/ask_question_reply Body: ChatAskQuestionReplyRequest（结构化问答回复）
+  POST /chat/sessions/{session_id}/interactions/{request_id}/reply Body: InteractionReplyRequest（通用交互回复）
 - 统一流接口：POST /stream，要发消息就带 content，仅订阅就省略 body 或 content 为空。
 """
 
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -173,6 +173,51 @@ class SessionListApiResponse(BaseResponse[SessionListResponse]):
     )
 
 
+class SessionDirectoryDeleteQuery(BaseModel):
+    """DELETE /chat/sessions/by-directory 查询参数：整组删除某个 session_directory"""
+
+    project_id: int = Field(..., description="项目 ID", examples=[42])
+    directory: str | None = Field(
+        default=None,
+        description="工作区目录；与 unset_directory 二选一",
+        max_length=2048,
+    )
+    unset_directory: bool = Field(
+        default=False,
+        description="为 true 表示删除「未设置目录」分组（session_directory 为空）",
+    )
+
+    @model_validator(mode="after")
+    def directory_xor_unset(self) -> "SessionDirectoryDeleteQuery":
+        if self.unset_directory:
+            return self
+        d = (self.directory or "").strip()
+        if not d:
+            raise ValueError("请指定 unset_directory=true 或非空 directory")
+        self.directory = d
+        return self
+
+
+class SessionDirectoryDeleteData(BaseModel):
+    """DELETE /chat/sessions/by-directory 的 data 字段"""
+
+    deleted_count: int = Field(description="本次成功软删除的会话数量")
+
+
+class SessionDirectoryDeleteApiResponse(BaseResponse[SessionDirectoryDeleteData]):
+    """DELETE /chat/sessions/by-directory 规范响应"""
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "code": 0,
+                "msg": "ok",
+                "data": {"deleted_count": 12},
+            }
+        }
+    )
+
+
 class RunStatusData(BaseModel):
     """GET /chat/sessions/run_status 的 data 字段：执行中数、排队数"""
 
@@ -301,6 +346,36 @@ class SessionDirectorySetRequest(BaseModel):
     )
 
 
+# ---------- Bohrium 提交确认偏好（会话级） ----------
+
+
+class BohriumSubmitConfirmationData(BaseModel):
+    """GET/PUT /chat/sessions/{session_id}/bohrium-submit-confirmation 的 data 字段"""
+
+    session_id: str = Field(description="会话 ID")
+    required: bool | None = Field(
+        default=None,
+        description="会话级 Bohrium 提交确认覆盖值；null 表示未设置/继承",
+    )
+    source: Literal["session", "user", "default"] = Field(
+        default="default",
+        description="覆盖来源：session=会话级覆盖；user=用户全局占位；default=无覆盖",
+    )
+
+
+class BohriumSubmitConfirmationApiResponse(BaseResponse[BohriumSubmitConfirmationData]):
+    """Bohrium 提交确认偏好规范响应"""
+
+
+class BohriumSubmitConfirmationSetRequest(BaseModel):
+    """PUT /chat/sessions/{session_id}/bohrium-submit-confirmation 请求体"""
+
+    required: bool | None = Field(
+        default=None,
+        description="会话级覆盖值；null 表示清除覆盖",
+    )
+
+
 # ---------- 会话标题（重命名） ----------
 
 
@@ -359,6 +434,76 @@ class SessionTitleSetRequest(BaseModel):
     )
 
 
+class SessionTitlesQueryRequest(BaseModel):
+    """POST /chat/sessions/titles 请求体：按 sessionId 批量查询标题"""
+
+    session_ids: list[str] = Field(
+        default_factory=list,
+        max_length=200,
+        description="待查询的会话 ID 列表，单次最多 200 个；超量请分批。",
+    )
+
+    @field_validator("session_ids", mode="before")
+    @classmethod
+    def normalize_ids(cls, v: object) -> list[str]:
+        if v is None:
+            return []
+        if not isinstance(v, list):
+            raise ValueError("session_ids must be a list")
+        # 去空白、去空串、去重（保序）
+        seen: set[str] = set()
+        out: list[str] = []
+        for item in v:
+            s = str(item).strip()
+            if s and s not in seen:
+                seen.add(s)
+                out.append(s)
+        return out
+
+
+class SessionTitleItem(BaseModel):
+    """会话标题查询项；比 SessionItem 更窄，不包含列表页专属统计字段。"""
+
+    id: str
+    project_id: int | None = None
+    status: str = "idle"
+    title: str | None = None
+    first_user_message: str | None = None
+
+
+class SessionTitlesData(BaseModel):
+    """POST /chat/sessions/titles 的 data 字段：仅返回归属当前用户的会话"""
+
+    sessions: list[SessionTitleItem] = Field(
+        default_factory=list,
+        description="命中的会话项（含 title 与 first_user_message，供前端按既有规则派生显示标题）",
+    )
+
+
+class SessionTitlesApiResponse(BaseResponse[SessionTitlesData]):
+    """POST /chat/sessions/titles 规范响应"""
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "code": 0,
+                "msg": "success",
+                "data": {
+                    "sessions": [
+                        {
+                            "id": "session-001",
+                            "project_id": 42,
+                            "status": "idle",
+                            "title": "结构分析会话",
+                            "first_user_message": "分析结构",
+                        }
+                    ],
+                },
+            }
+        }
+    )
+
+
 # ---------- ag-ui 协议：客户端 -> 服务端 (REST Body) ----------
 
 
@@ -396,6 +541,10 @@ class ChatSendRequest(BaseModel):
         default=None,
         max_length=2048,
         description="可选，前端传入的本轮 Bohrium 远端工作目录（/share 或 /personal 下），随 query 写入历史事件；持久化请用 PUT …/session-directory",
+    )
+    bohrium_submit_confirmation_required: bool | None = Field(
+        default=None,
+        description="可选，Bohrium 任务提交是否需要确认；显式传入时同步写入会话级设置，并透传到本轮 job",
     )
     replace_last_turn: bool = Field(
         default=False,
@@ -437,20 +586,17 @@ class ChatSendRequest(BaseModel):
     )
 
 
-class ChatAskQuestionReplyRequest(BaseModel):
-    """POST /chat/sessions/{session_id}/ask_question_reply 结构化用户回答。"""
+class InteractionReplyRequest(BaseModel):
+    """POST /chat/sessions/{session_id}/interactions/{request_id}/reply 通用回复体。"""
 
-    request_id: str
-    answers: dict[str, str] = Field(default_factory=dict)
-    annotations: dict[str, dict[str, str]] = Field(default_factory=dict)
+    kind: str
+    payload: dict[str, Any] = Field(default_factory=dict)
 
     @model_validator(mode="after")
-    def validate_reply(self) -> "ChatAskQuestionReplyRequest":
-        self.request_id = self.request_id.strip()
-        if not self.request_id:
-            raise ValueError("request_id must not be empty")
-        if not self.answers and not self.annotations:
-            raise ValueError("answers or annotations must be provided")
+    def validate_reply(self) -> "InteractionReplyRequest":
+        self.kind = self.kind.strip()
+        if not self.kind:
+            raise ValueError("kind must not be empty")
         return self
 
 

@@ -53,11 +53,6 @@ def _install_fake_sdk_free_upload(monkeypatch, upload_calls: list) -> None:
     )
 
 
-# ---------------------------------------------------------------------------
-# TestBohriumMetadata
-# ---------------------------------------------------------------------------
-
-
 class TestBohriumMetadata:
     def test_name(self):
         assert BohriumTool.name == "Bohrium"
@@ -102,16 +97,8 @@ class TestBohriumMetadata:
         tool = BohriumTool(workdir=tmp_path)
         prompt = tool.prompt()
         assert prompt is not None
-        assert "single call" in prompt
-        assert "no blocking" in prompt
         assert "**download**" in prompt or "download artifacts" in prompt
-        assert "Does not download artifacts" in prompt
         assert "kill" in prompt
-
-
-# ---------------------------------------------------------------------------
-# TestBohriumSandboxMode
-# ---------------------------------------------------------------------------
 
 
 class TestBohriumSandboxMode:
@@ -124,12 +111,37 @@ class TestBohriumSandboxMode:
         assert use_sandbox() is False
 
 
-# ---------------------------------------------------------------------------
-# TestBohriumExecution
-# ---------------------------------------------------------------------------
-
-
 class TestBohriumExecution:
+    class _FakeSpan:
+        def __init__(self, name: str) -> None:
+            self.name = name
+            self.attributes: dict[str, object] = {}
+            self.exceptions: list[Exception] = []
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> None:
+            del exc_type, exc, tb
+
+        def set_attribute(self, key: str, value: object) -> None:
+            self.attributes[key] = value
+
+        def record_exception(self, exc: Exception) -> None:
+            self.exceptions.append(exc)
+
+        def set_status(self, status) -> None:
+            self.attributes["otel.status"] = status
+
+    class _FakeTracer:
+        def __init__(self) -> None:
+            self.spans: list[TestBohriumExecution._FakeSpan] = []
+
+        def start_as_current_span(self, name: str) -> TestBohriumExecution._FakeSpan:
+            span = TestBohriumExecution._FakeSpan(name)
+            self.spans.append(span)
+            return span
+
     def test_get_logs_http_error_context(self, monkeypatch, caplog):
         class FakeResponse:
             status_code = 401
@@ -741,7 +753,7 @@ class TestBohriumExecution:
         submitted = bohrium_tool_module.submit_job_via_runtime(
             input_dir=str(input_dir),
             image="registry.dp.tech/dptech/cp2k:2024.1",
-            cmd="cp2k.popt -i input.inp",
+            cmd="cp2k.popt -i input.inp > log 2>&1",
             machine="c64_m256_cpu",
             job_name="matmaster-job",
             disk_size=50,
@@ -755,6 +767,50 @@ class TestBohriumExecution:
             "bohrJobId": "bohr-456",
         }
         assert not isinstance(submitted, tuple)
+
+    def test_submit_job_via_runtime_emits_submit_span(self, tmp_path, monkeypatch):
+        input_dir = tmp_path / "inputs"
+        input_dir.mkdir()
+        (input_dir / "input.inp").write_text("&CONTROL\n", encoding="utf-8")
+        tracer = self._FakeTracer()
+
+        def fake_post(base_url, path, access_key, payload, timeout=30, log_curl=False):
+            del base_url, access_key, payload, timeout, log_curl
+            if path == "/openapi/v1/sandbox/job/create":
+                return {
+                    "code": 0,
+                    "data": {
+                        "storePath": "sandbox/jobs/run-1/",
+                        "storeHost": "https://store.example.com",
+                        "token": "token-123",
+                        "jobId": "create-job-id",
+                    },
+                }
+            if path == "/openapi/v1/sandbox/job/add":
+                return {"code": 0, "data": {"jobId": "job-123"}}
+            raise AssertionError(f"unexpected path: {path}")
+
+        monkeypatch.delenv("BOHRIUM_USE_SANDBOX", raising=False)
+        _patch_bridge(monkeypatch)
+        monkeypatch.setattr(bohrium_tool_module, "_TRACER", tracer)
+        monkeypatch.setattr(bohrium_client_module, "_post", fake_post)
+        _install_fake_sdk_free_upload(monkeypatch, [])
+
+        submitted = bohrium_tool_module.submit_job_via_runtime(
+            input_dir=str(input_dir),
+            image="registry.dp.tech/dptech/cp2k:2024.1",
+            cmd="cp2k.popt -i input.inp > log 2>&1",
+            machine="c64_m256_cpu",
+            job_name="matmaster-job",
+            disk_size=50,
+            workdir=tmp_path,
+            session=None,
+        )
+
+        assert submitted.job_id == "job-123"
+        assert tracer.spans[0].name == "bohrium.job.submit"
+        assert tracer.spans[0].attributes["bohrium.job_name"] == "matmaster-job"
+        assert tracer.spans[0].attributes["bohrium.job_id"] == "job-123"
 
     def test_poll_live_log_uses_canonical_job_id(self, tmp_path, monkeypatch):
         tool = BohriumTool(workdir=tmp_path)

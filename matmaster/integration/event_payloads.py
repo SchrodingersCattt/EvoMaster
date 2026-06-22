@@ -9,6 +9,8 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from pydantic import BaseModel, ConfigDict
+
 logger = logging.getLogger(__name__)
 
 
@@ -231,6 +233,21 @@ def build_public_sse_payload_from_bus_dump(
     return normalize_response_sse_payload(out)
 
 
+class PublicInteractionSseEnvelope(BaseModel):
+    """interaction_request / interaction_reply / interaction_timeout wire envelope."""
+
+    model_config = ConfigDict(extra='forbid')
+
+    source: str
+    type: str
+    content: dict[str, Any]
+    session_id: str
+    task_id: str
+    invocation_id: str | None = None
+    spawn_id: str | None = None
+    timestamp: str | None = None
+
+
 def _public_content_for_event(
     event_type: str, payload: dict[str, Any]
 ) -> object | None:
@@ -367,26 +384,26 @@ def _public_content_for_event(
     if event_type == 'cancelled':
         return {'reason': payload.get('reason', '')}
 
-    if event_type == 'ask_question':
+    if event_type == 'interaction_request':
         return {
+            'kind': payload.get('kind'),
             'request_id': payload.get('request_id'),
-            'questions': payload.get('questions') or [],
-            'metadata': payload.get('metadata') or {},
-            'origin': payload.get('origin'),
-            'preview_format': payload.get('preview_format', 'markdown'),
+            'task_id': payload.get('task_id'),
+            'expires_at': payload.get('expires_at'),
+            'payload': payload.get('payload') or {},
         }
 
-    if event_type == 'ask_question_reply':
+    if event_type == 'interaction_reply':
         return {
+            'kind': payload.get('kind'),
             'request_id': payload.get('request_id'),
-            'answers': payload.get('answers') or {},
-            'annotations': payload.get('annotations') or {},
+            'payload': payload.get('payload') or {},
         }
 
-    if event_type == 'ask_question_timeout':
+    if event_type == 'interaction_timeout':
         return {
+            'kind': payload.get('kind'),
             'request_id': payload.get('request_id'),
-            'questions': payload.get('questions') or [],
             'reason': payload.get('reason', 'timeout'),
         }
 
