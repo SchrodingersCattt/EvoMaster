@@ -460,6 +460,22 @@ def test_trigger_run_inherits_when_model_blank(model_kwargs):
     assert pushed["model"] == "matmaster/qwen3.7-max"
 
 
+def test_trigger_run_drops_unknown_inherited_model():
+    service, sessions_service, events_service = _make_trigger_service()
+    events_service.get_last_resolved_model_profile.return_value = (
+        "matmaster/qwen3.6-max-preview"
+    )
+    fake_redis = MagicMock()
+    fake_redis.dedup_key_exists.return_value = False
+    fake_redis.lpush_agent_run_job.return_value = True
+    p1, p2, p3, p4 = _trigger_patches(fake_redis)
+    with p1, p2, p3, p4:
+        res = service.trigger_run("s1", "继续分析", origin="loop")
+    assert res.status == "enqueued"
+    pushed = fake_redis.lpush_agent_run_job.call_args.args[0]
+    assert pushed["model"] is None
+
+
 def test_trigger_run_explicit_model_skips_inheritance():
     service, sessions_service, events_service = _make_trigger_service()
     fake_redis = MagicMock()

@@ -9,8 +9,10 @@ from collections.abc import AsyncGenerator, Callable
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from functools import lru_cache
+from pathlib import Path
 
 from matmaster.config.exp import DEFAULT_MODE, SUPPORTED_MODES
+from matmaster.config.loader import load_llm_config
 from matmaster.context.sources.turn_input import TurnInput, TurnInstructionTag
 from src.dao.redis_dao import (
     STREAM_CHANNEL_PREFIX,
@@ -53,6 +55,30 @@ from src.utils.feishu_notifier import (
 from src.utils.worker_id import get_worker_id
 
 logger = logging.getLogger(__name__)
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+_LLM_CONFIG_PATH = _PROJECT_ROOT / "config" / "llm_config.yaml"
+
+
+class InvalidModelProfileError(ValueError):
+    def __init__(self, profile_key: str, available_profiles: tuple[str, ...]) -> None:
+        super().__init__(profile_key)
+        self.profile_key = profile_key
+        self.available_profiles = available_profiles
+
+
+@lru_cache(maxsize=1)
+def _available_llm_profiles() -> tuple[str, ...]:
+    return tuple(load_llm_config(_LLM_CONFIG_PATH).profiles)
+
+
+def validate_platform_model_profile(model: str | None) -> str | None:
+    profile_key = (model or '').strip() or None
+    if profile_key is None:
+        return None
+    available = _available_llm_profiles()
+    if profile_key not in available:
+        raise InvalidModelProfileError(profile_key, available)
+    return profile_key
 
 
 def _start_redis_channel_subscription(
@@ -444,6 +470,29 @@ class ChatStreamService:
         model_val = (model or '').strip() or None
         if model_val is None:
             model_val = self._events_service.get_last_resolved_model_profile(sid)
+            try:
+                model_val = validate_platform_model_profile(model_val)
+            except InvalidModelProfileError as exc:
+                logger.warning(
+                    "trigger inherited unknown llm profile; falling back to default "
+                    "session_id=%s profile=%s available=%s",
+                    sid,
+                    exc.profile_key,
+                    list(exc.available_profiles),
+                )
+                model_val = None
+        else:
+            try:
+                model_val = validate_platform_model_profile(model_val)
+            except InvalidModelProfileError as exc:
+                logger.warning(
+                    "trigger explicit unknown llm profile rejected "
+                    "session_id=%s profile=%s available=%s",
+                    sid,
+                    exc.profile_key,
+                    list(exc.available_profiles),
+                )
+                return TriggerResult(status="error", reason="invalid_model_profile")
         delivery_payload = delivery.model_dump() if delivery is not None else None
 
         def _system_event_writer(task_id: str, invocation_id: str) -> dict:
@@ -816,6 +865,8 @@ class ChatStreamService:
             req.model or ''
         ).strip() or None  # 本轮模型名，如 matmaster/qwen3.7-max / claude-sonnet-4-6
         byok_credential_id = (req.byok_credential_id or '').strip() or None
+        if byok_credential_id is None:
+            model = validate_platform_model_profile(model)
 
         org_id_val = org_id.strip() if org_id else None
         try:
