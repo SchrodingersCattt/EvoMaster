@@ -6,6 +6,8 @@ import copy
 import json
 from pathlib import Path
 
+import pytest
+
 from evaluation.validators.dpgen_dargs import check_dpgen_dargs
 
 BASE_PARAM: dict = {
@@ -106,7 +108,22 @@ def _machine_with_list_sections() -> dict:
     return data
 
 
+def _require_dpgen_schema() -> None:
+    pytest.importorskip(
+        "dpgen.generator.arginfo",
+        reason="DP-GEN schema validators require optional calculation dependency",
+    )
+
+
+def _require_dpgen_runtime() -> None:
+    pytest.importorskip(
+        "dpgen.remote.decide_machine",
+        reason="DP-GEN runtime conversion requires optional calculation dependency",
+    )
+
+
 def test_param_schema_accepts_valid_param(tmp_path: Path) -> None:
+    _require_dpgen_schema()
     _write_json(tmp_path, "param_output.json", BASE_PARAM)
 
     ok, reason = check_dpgen_dargs(
@@ -135,6 +152,7 @@ def test_param_schema_rejects_top_level_list(tmp_path: Path) -> None:
 
 
 def test_machine_schema_accepts_canonical_dict_sections(tmp_path: Path) -> None:
+    _require_dpgen_schema()
     _write_json(tmp_path, "machine_output.json", BASE_MACHINE)
 
     ok, reason = check_dpgen_dargs(
@@ -149,6 +167,7 @@ def test_machine_schema_accepts_canonical_dict_sections(tmp_path: Path) -> None:
 
 
 def test_machine_schema_rejects_deprecated_list_sections(tmp_path: Path) -> None:
+    _require_dpgen_schema()
     _write_json(tmp_path, "machine_output.json", _machine_with_list_sections())
 
     ok, reason = check_dpgen_dargs(
@@ -164,6 +183,7 @@ def test_machine_schema_rejects_deprecated_list_sections(tmp_path: Path) -> None
 
 
 def test_machine_runtime_accepts_canonical_dict_sections(tmp_path: Path) -> None:
+    _require_dpgen_runtime()
     _write_json(tmp_path, "machine_output.json", BASE_MACHINE)
 
     ok, reason = check_dpgen_dargs(
@@ -178,6 +198,7 @@ def test_machine_runtime_accepts_canonical_dict_sections(tmp_path: Path) -> None
 
 
 def test_machine_runtime_accepts_deprecated_list_sections(tmp_path: Path) -> None:
+    _require_dpgen_runtime()
     _write_json(tmp_path, "machine_output.json", _machine_with_list_sections())
 
     ok, reason = check_dpgen_dargs(
