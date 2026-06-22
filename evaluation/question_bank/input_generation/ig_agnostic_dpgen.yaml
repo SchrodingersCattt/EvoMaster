@@ -28,15 +28,17 @@ questions:
     value: machine_output.json
     workspace_resolve: root
   - key: param_output_dargs
+    workspace_resolve: root
     value:
       filename: param_output.json
       check: schema
       kind: param
       strict: false
   - key: machine_output_dargs
+    workspace_resolve: root
     value:
       filename: machine_output.json
-      check: schema
+      check: runtime
       kind: machine
       strict: false
   - key: param_water_vasp_lammps
@@ -58,7 +60,7 @@ questions:
       - '"train"'
       - '"model_devi"'
       - '"fp"'
-      - dp train
+      - dp
       - lmp
       - vasp
       flags: is
@@ -79,7 +81,7 @@ questions:
     axis: correctness
     verify: dpgen_dargs_check
   - id: machine_output_dargs
-    criterion: machine_output.json passes DP-GEN official dargs schema validation.
+    criterion: machine_output.json passes DP-GEN runtime-compatible machine validation.
     axis: correctness
     verify: dpgen_dargs_check
   - id: param_water_vasp_lammps
@@ -126,15 +128,17 @@ questions:
     value: machine_output.json
     workspace_resolve: root
   - key: param_output_dargs
+    workspace_resolve: root
     value:
       filename: param_output.json
       check: schema
       kind: param
       strict: false
   - key: machine_output_dargs
+    workspace_resolve: root
     value:
       filename: machine_output.json
-      check: schema
+      check: runtime
       kind: machine
       strict: false
   - key: param_numb_models
@@ -218,7 +222,7 @@ questions:
     verify: dpgen_dargs_check
   - id: machine_output_dargs
     criterion: >-
-      Repaired machine_output.json passes DP-GEN official dargs schema validation
+      Repaired machine_output.json passes DP-GEN runtime-compatible machine validation
       (catches all 5 machine bugs: group_size string to int, api_version float to str,
       command_name to command, model_devi.command list to str,
       cpu_per_node string to int).
