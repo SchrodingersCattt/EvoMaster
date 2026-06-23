@@ -141,7 +141,7 @@ banks:
 - path: structure_retrieval/rt_agnostic.yaml
   capability: structure_retrieval
   domain: agnostic
-  questions: 17
+  questions: 18
 - path: structure_retrieval/rt_agnostic_recommend_monomer.yaml
   capability: structure_retrieval
   domain: agnostic
