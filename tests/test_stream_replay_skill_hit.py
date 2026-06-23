@@ -114,7 +114,9 @@ def test_normalize_replayed_event_lifts_structured_run_result_content() -> None:
     assert out["status"] == "completed"
     assert out["reason"] == "natural"
     assert out["usage"] == {"total_tokens": 20}
-    assert out["model"] == "gpt-5-mini"
+    # model identity is persist-only: replay strips it from both top level and content
+    assert "model" not in out
+    assert "model" not in out["content"]
 
 
 class TestReplayDedupeSpawnId:
