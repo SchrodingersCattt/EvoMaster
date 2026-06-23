@@ -42,10 +42,12 @@ reporting success.
    recipe for a simple inorganic crystal, use
    `../build-crystal-from-params/SKILL.md`.
 
-   If the request involves a known material, database/DOI/SI source, molecular
-   crystal, polyatomic ionic crystal (NaNO3, CaCO3, K2SO4, ...), or
-   uncertain/implicit coordinates, use
-   `../../../structure-search/skills/retrieve-structure/SKILL.md` first.
+   If the request involves a known material or database source, use
+   `../../../structure-search/skills/mcp-mat-struct-db/SKILL.md` first. For
+   DOI/SI URLs, fetch the explicit structure file and validate it with
+   `inspect-atomic-structure`. For molecular crystals or polyatomic ionic
+   crystals (NaNO3, CaCO3, K2SO4, ...), prefer `operate-molecular-crystal` when
+   PBC molecule integrity matters.
    `operate-molecular-crystal` is for operations on an existing molecular-crystal
    structure, not for building one from scratch.
 

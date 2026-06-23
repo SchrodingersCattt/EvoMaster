@@ -1,6 +1,6 @@
 ---
 name: sample-atomic-structures
-description: "Use when sampling candidate crystal structures via CALYPSO evolutionary search or CrystalFormer property-conditional generation — not for known-compound lookup (use mcp-mat-struct-db or retrieve-structure instead)."
+description: "Use when sampling candidate crystal structures via CALYPSO evolutionary search or CrystalFormer property-conditional generation — not for known-compound lookup (use mcp-mat-struct-db instead)."
 mcp_server: mat_sg
 ---
 

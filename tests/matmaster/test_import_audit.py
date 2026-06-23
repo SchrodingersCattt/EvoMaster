@@ -103,11 +103,7 @@ class TestPhase30FullIsolation:
     # Format: "relative/path.py:L<lineno>"
     # Remove entries as subsequent plans resolve them.
     # 23 violations resolved since Plan 01 (exp.py, playground.py, tools/, integration/).
-    KNOWN_VIOLATIONS: frozenset[str] = frozenset(
-        {
-            "matmaster/plugins/structure-search/skills/retrieve-structure/scripts/fetch_web_structure.py:L30",
-        }
-    )
+    KNOWN_VIOLATIONS: frozenset[str] = frozenset()
 
     def test_no_forbidden_imports_in_matmaster(self):
         """Scan all matmaster/*.py, confirm no evomaster/playground/src runtime imports.
@@ -151,8 +147,8 @@ class TestPhase30FullIsolation:
 
     def test_known_violations_count(self):
         """Track the total known violations count -- this number should decrease over time."""
-        assert len(self.KNOWN_VIOLATIONS) == 1, (
-            f"Expected 1 known violation, got {len(self.KNOWN_VIOLATIONS)}. "
+        assert len(self.KNOWN_VIOLATIONS) == 0, (
+            f"Expected 0 known violations, got {len(self.KNOWN_VIOLATIONS)}. "
             "Update this count as violations are resolved."
         )
 
