@@ -191,6 +191,11 @@ class TestRealLlmConfigResponsesMigration:
 
         assert cfg.default == "matmaster/qwen3.7-max"
         assert cfg.profiles["matmaster/qwen3.7-max"].provider == "litellm-qwen"
+        glm = cfg.profiles["matmaster/glm-5.2"]
+        assert glm.provider == "litellm"
+        assert glm.model == "matmaster/glm-5.2"
+        assert glm.context_limit == 1_000_000
+        assert glm.supports_vision is False
 
     def test_migrated_config_builds_responses_transport(self) -> None:
         from matmaster.providers.llm_factory import build_provider
