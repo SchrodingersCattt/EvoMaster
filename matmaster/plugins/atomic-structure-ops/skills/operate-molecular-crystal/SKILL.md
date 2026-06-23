@@ -392,5 +392,5 @@ Never stop at `dir(molcrys_kit)` — the helpers live in
   placement.
 - `transform-atomic-structure`: non-molecular doping, defects, strain,
   supercells.
-- `retrieve-structure` contains additional molecular-crystal slab /
-  passivation helper scripts for known fragile cases.
+- Keep molecular-crystal slab and passivation workflows in this skill when PBC
+  molecule integrity is the main risk.

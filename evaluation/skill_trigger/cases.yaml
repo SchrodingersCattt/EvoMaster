@@ -155,7 +155,7 @@ cases:
       - "用 DeePMD 训练一个势"                                  # no training workflow in mlips
       - "怎么做主动学习选点"                                    # no active-learning workflow in mlips
       - "用 DP-GEN 做一个迭代训练"                               # no DP-GEN training workflow in mlips
-      - "AIS Square 上 DPA-3-NM 的 checkpoint 哪里下载"          # → aissq-explorer / retrieve-structure
+      - "AIS Square 上 DPA-3-NM 的 checkpoint 哪里下载"          # → aissq-explorer
       - "把这个OUTCAR转换成MLIP训练的数据集"
 
   - skill: dpgen
@@ -194,7 +194,7 @@ cases:
       - "搭一个 fcc Ni 的原胞"                                  # → build-crystal-from-params
       - "把这个 POSCAR 扩成 3x3x2"                              # → transform-atomic-structure
       - "在 Pt(111) top 位放一个 CO 分子"                       # → assemble-atomic-structure
-      - "文献 SI 这个 CIF 链接，下下来并 validate"              # → retrieve-structure
+      - "文献 SI 这个 CIF 链接，下下来并 validate"              # → direct source + inspect-atomic-structure
       - "帮我用 VASP 算一下这个 POSCAR 的能带"                  # → vasp
 
   - skill: build-crystal-from-params
@@ -215,13 +215,13 @@ cases:
       - "把这个 POSCAR 扩成 3x3x2"                              # → transform-atomic-structure
       - "TiO2 里随机替换 5% 的 Ti 为 Nb"                        # → transform-atomic-structure
       - "从 Cu bulk 切 (110) slab，5 层，真空 15 Å"             # → assemble-atomic-structure
-      - "文献 SI 这个 CIF 链接，下下来并 validate"              # → retrieve-structure
+      - "文献 SI 这个 CIF 链接，下下来并 validate"              # → direct source + inspect-atomic-structure
       - "用 CALYPSO 搜 Mg-Si-O 的候选晶体结构"                  # → sample-atomic-structures
       - "SMILES CCC=O 转成带 3D 坐标的 SDF"                    # → agent direct RDKit
       - "枚举碳酸乙烯酯的氟代衍生物并生成 3D 构象"              # → agent direct RDKit
-      - "从文献 CIF 链接构建 NaNO3"                             # → retrieve-structure
-      - "用参数直接搭 CaCO3 / K2SO4 这种多原子离子晶体"          # → retrieve-structure
-      - "构建RDX的分子晶体结构"                               # → retrieve-structure
+      - "从文献 CIF 链接构建 NaNO3"                             # → direct source + inspect-atomic-structure
+      - "用参数直接搭 CaCO3 / K2SO4 这种多原子离子晶体"          # → build-crystal-from-params
+      - "构建RDX的分子晶体结构"                               # → operate-molecular-crystal
 
   - skill: sample-atomic-structures
     positive:
@@ -241,7 +241,7 @@ cases:
       - "mp-149 的 CIF 帮我搜一下"                             # → mcp-mat-struct-db
       - "搭一个 fcc Ni 的原胞"                                  # → build-crystal-from-params
       - "把这个 POSCAR 扩成 3x3x2"                              # → transform-atomic-structure
-      - "文献 SI 这个 CIF 链接，下下来并 validate"              # → retrieve-structure
+      - "文献 SI 这个 CIF 链接，下下来并 validate"              # → direct source + inspect-atomic-structure
       - "帮我用 VASP 做结构优化"                                # → vasp
 
   - skill: transform-atomic-structure
@@ -281,7 +281,7 @@ cases:
       - "搭一个 fcc Ni 的原胞"                                  # → build-crystal-from-params
       - "把这个 POSCAR 扩成 3x3x2"                              # → transform-atomic-structure
       - "这个分子晶体 CIF 切 (010) 表面，不要切断分子"          # → operate-molecular-crystal
-      - "把这个 CIF 转成 POSCAR，元素顺序也理一下"              # → retrieve-structure
+      - "把这个 CIF 转成 POSCAR，元素顺序也理一下"              # → direct conversion + inspect-atomic-structure
 
   - skill: operate-molecular-crystal
     positive:
@@ -355,28 +355,9 @@ cases:
     negative:
       - "用本地的 DPA-2 模型跑一个 MD"                          # → mlips
       - "帮我训练一个 NEP 势函数"                               # → mlips
-      - "从 Materials Project 下载 SrTiO3"                      # → retrieve-structure
-      - "去 HuggingFace 上把 MACE-MP large 拉下来跑 NPT"         # → retrieve-structure + mlips
-      - "论文 SI 把 SevenNet-l3i5 的权重挂在 figshare 上了，拉下来跑一段 NPT"  # → retrieve-structure + mlips
-
-  - skill: retrieve-structure
-    positive:
-      - "这个 URL 是 POSCAR 直链，下载到 workspace"                             # [imperative][url]
-      - "文献 SI 这个 CIF 链接，下下来并 validate"                              # [imperative][url][workflow]
-      - "这个 supplementary HTML 页面里嵌了结构文件，抓出来"                    # [imperative][webpage]
-      - "把这个 CIF 转成 POSCAR，元素顺序也理一下"                              # [imperative][convert]
-      - "用 convert_format.py 把 CIF 转 LAMMPS data，带 type-map 和 atom-style"  # [imperative][explicit][convert]
-      - "把这条 XYZ 转成 CIF 并保留对称性"                                      # [imperative][convert]
-      - "用 assess_structure.py 验证一下这个 CIF 能不能被 ASE 读"               # [imperative][explicit][validate]
-      - "切完 slab 后跑 assess_structure 验证维度"                              # [imperative][workflow][validate]
-      - "Download this remote POSCAR URL, validate it, then convert to CIF"    # [english][url][convert][validate]
-      - "Fetch the top-3 perovskite CIFs matching ABO3 with formation energy below -2 eV/atom"  # [english][screening]
-    negative:
-      - "用 ASE 给我搭一个 fcc Ni 单胞"                # → build-crystal-from-params (moved out)
-      - "把这个 POSCAR 扩成 2x2x2 超胞"                # → transform-atomic-structure (moved out)
-      - "从 Cu bulk 切一个 (111) slab"                  # → assemble-atomic-structure (moved out)
-      - "看一下这个 CIF 的空间群是什么"                # → inspect-atomic-structure (moved out)
-      - "mp-149 的 CIF 帮我搜一下"                     # → mcp-mat-struct-db (simple formula lookup)
+      - "从 Materials Project 下载 SrTiO3"                      # → mcp-mat-struct-db
+      - "去 HuggingFace 上把 MACE-MP large 拉下来跑 NPT"         # → direct source + mlips
+      - "论文 SI 把 SevenNet-l3i5 的权重挂在 figshare 上了，拉下来跑一段 NPT"  # → direct source + mlips
 
 
   - skill: composition-optimization

@@ -1,34 +1,146 @@
 ---
 name: mcp-mat-struct-db
-description: 当需要从数据库检索已知晶体结构时调用本 skill。支持按化学式、组成、材料 ID、原型检索，返回 CIF/POSCAR。
+description: Use when retrieving known crystal structures from databases. Supports lookup by chemical formula, elements, and space group; some backends support limited band-gap filtering; returns CIF/POSCAR when available.
 mcp_server: mat_struct_db
 ---
 
 # Structure Database (MCP) — Query Guide
 
+## Backend Overview
+
+The structure retrieval service mainly uses these database backends:
+
+| Backend | Use case |
+|---------|----------|
+| `bohriumpublic` | General inorganic crystal structures. Useful for semiconductors, battery materials, oxides, perovskites, catalysts, etc. |
+| `optimade` | Multi-provider database aggregation, covering MP, COD, NOMAD, Alexandria, ODBX, twodmatpedia, and other providers. |
+| `openlam` | Crystal structures and lattice-matching-related structures. Useful for formula, energy-range, and submission-time queries. |
+| `mofdbsql` | MOF structure database. Useful for MOFs, porous materials, surface area, pore size, and void-fraction queries. |
+
+For general inorganic crystal-structure retrieval, prefer:
+
+```text
+bohriumpublic -> optimade -> openlam
+```
+
+For MOF or porous-framework retrieval, prefer:
+
+```text
+mofdbsql -> optimade
+```
+
+## Query Construction
+
+When building the `fetch_structures_from_db` query, prioritize chemical formula, elements, and space group.
+
+| Available information | Query pattern |
+|-----------------------|---------------|
+| Formula only | `RbClO4`, `LaH10` |
+| Formula plus space group | `TiO2 space group 136`, `Ti Al O space group 63` |
+| Element system only | `Ti Al O`, `Na P O` |
+| Specific database source | Do not encode source names in the query. Filter by provenance after results return. |
+| MP/COD/ICSD-style ID | Bootstrap formula and space group first, then build the query. |
+
+### Avoid vs Preferred
+
+Do not put ordinary source words directly into the query, for example:
+
+```text
+TiO2 mp rutile
+SiO2 only COD
+```
+
+Prefer:
+
+```text
+TiO2 space group 136
+SiO2
+```
+
+Then filter returned candidates by MP, COD, or other provenance.
+
+### Examples
+
+| User intent | Recommended query | Notes |
+|-------------|-------------------|-------|
+| Find RbClO4 structure | `RbClO4` | Formula query. |
+| Find TiO2 rutile from MP | `TiO2 space group 136` | Resolve rutile to space group 136. Filter MP after results return. |
+| Find Ti-Al-O with space group 63 | `Ti Al O space group 63` | Elements plus space group. |
+| Find SiO2 from COD | `SiO2` | Filter COD after results return. |
+| Find oxide semiconductors with band gap 1 to 2 eV | `O band gap 1 2` | Supported only by selected backends or providers. |
+| Find HKUST-1 or UiO-66 | Prefer `mofdbsql` | MOF-specific backend is more suitable. |
+
+## OPTIMADE Notes
+
+`optimade` is a multi-provider aggregation backend and is useful for cross-database structure retrieval.
+
+Ordinary structure queries mainly cover:
+
+```text
+alexandria
+cmr
+cod
+mp
+mpdd
+mpds
+nmd
+odbx
+omdb
+tcod
+twodmatpedia
+```
+
+Note: `oqmd` may appear in the default provider list, but its URL is currently commented out in the implementation, so it is usually skipped.
+
+OPTIMADE capability boundaries:
+
+- Basic queries support formula and elements.
+- Space-group queries are supported, but provider coverage is incomplete.
+- Band-gap queries are supported only for selected providers, mainly `alexandria`, `odbx`, and `twodmatpedia`.
+- Do not claim that all OPTIMADE providers support band-gap filtering.
+
+## Backend Selection
+
+| User intent | Preferred backend |
+|-------------|-------------------|
+| General inorganic crystal structure | `bohriumpublic`, `optimade`, `openlam` |
+| Materials Project / MP / COD / NOMAD source request | `optimade` |
+| Semiconductor or band-gap material | `bohriumpublic` or `optimade` |
+| Battery material | `bohriumpublic`, `openlam`, `optimade` |
+| MOF / COF / porous material | `mofdbsql`, `optimade` |
+| Explicit OpenLAM request | `openlam` |
+| Explicit Bohrium Public request | `bohriumpublic` |
+
+## ID Bootstrap
+
+For `mp-XXXX`, `icsd-XXXX`, `cod-XXXX`, or similar ID-driven requests, do not infer structure metadata from memory.
+
+Recommended workflow:
+
+1. Use WebSearch or an official source to confirm the formula and space group.
+2. If the space group is known, query: `<formula> space group <sg>`
+3. If the space group is unknown, query: `<formula>`
+4. After results return, filter candidates by the requested database provenance.
+
+
+## Failure Handling
+
+If the database returns nothing, state this explicitly. Do not fabricate:
+
+- lattice constants
+- space group
+- Wyckoff positions
+- CIF/POSCAR files
+- database provenance
+- band gaps
+- formation energies
+
+If downloaded content contains only `summary.json`, it may not include direct CIF/POSCAR files. In that case, try to extract lattice parameters, space group, and Wyckoff positions from metadata, and only build locally with `pymatgen Structure.from_spacegroup(...)` when enough information is available.
+
 ## Efficiency Rules
 
-- **Budget 1–2 query attempts per target compound**. If the first query fails or times out, try ONE alternative query form (different formula notation, composition range, or material ID). If both fail, move on.
-- **Batch tasks (≥5 structures)**: Query breadth-first — submit all queries before waiting. Do not spend >3 turns on any single entry. **Turn economy is critical**: plan the minimum number of queries to cover all targets, batch independent queries in parallel, and fall back to local construction (pymatgen `from_spacegroup`) immediately when DB results are incomplete.
-- **Timeout handling**: If the MCP tool returns a timeout or empty result, **do not retry the same query more than once**. Switch to an alternative source (literature search, web databases) or honestly report that the database did not return results.
-- **Download contains only summary.json**: The `fetch_structures_from_db` download tarball sometimes contains only `summary.json` with metadata (formula, space group, lattice parameters) but **no actual CIF/POSCAR files**. The `structure_file` paths in the summary refer to server-internal locations and are not included in the download. When this happens:
-  1. Extract lattice parameters, space group, and Wyckoff positions from the summary metadata.
-  2. Build structures locally with `pymatgen Structure.from_spacegroup(...)` using the extracted parameters.
-  3. **Do not** issue additional DB queries trying to get the CIF files — this wastes turns.
-  4. Save built structures as CIF, then validate with `assess_structure.py` if the retrieve-structure skill is loaded.
-
-## Query Strategies
-
-| What you have | Query approach |
-|---------------|---------------|
-| Exact formula (e.g. LaH₁₀) | `fetch_structures_from_db` by formula |
-| Composition system (e.g. La-H) | Query by composition/elements |
-| Material ID (mp-XXXX, ICSD-XXXX) | Query by ID directly |
-| Prototype (perovskite, spinel) | Query by prototype |
-| Approximate composition | Use composition range query |
-
-## Honesty Constraint
-
-- If the database does not return a structure, **state this explicitly**. Do NOT fabricate crystal parameters, lattice constants, or space groups based on intuition or literature scraps.
-- When falling back to literature, clearly distinguish "retrieved from database" vs "found in literature" vs "estimated/predicted".
-- Partial results are acceptable — report what was found and what was not.
+- Use 1–2 attempts per target structure.
+- After failure, retry once with a different formula notation or space-group expression.
+- For batch structure tasks, avoid spending too long on a single entry.
+- Partial results are acceptable, but report which structures were found and which were not.
+- Distinguish the structure source: directly retrieved from database, filtered from candidates, locally constructed, found in literature, or estimated.
