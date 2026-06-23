@@ -64,6 +64,17 @@ profiles:
     max_retries: 3
     retry_delay: 1.0
 
+  matmaster/glm-5.2:
+    provider: litellm
+    model: matmaster/glm-5.2
+    reasoning_effort: max
+    context_limit: 1000000
+    timeout: 1200
+    stream_timeout: 120
+    stream_idle_timeout: 60
+    max_retries: 3
+    retry_delay: 1.0
+
   matmaster/gpt-5.5:
     provider: litellm-responses
     model: matmaster/gpt-5.5
