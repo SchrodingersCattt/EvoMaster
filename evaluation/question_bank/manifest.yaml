@@ -133,7 +133,7 @@ banks:
 - path: structure_construction/sc_catalysis.yaml
   capability: structure_construction
   domain: catalysis
-  questions: 8
+  questions: 9
 - path: structure_construction/sc_semiconductor.yaml
   capability: structure_construction
   domain: semiconductor

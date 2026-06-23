@@ -804,3 +804,119 @@ questions:
     axis: efficiency
     verify: token_budget
     criterion: '[Must] Agent uses fewer than 50000 tokens total.'
+- id: SC_selfcheck_fen4_graphene_001_20260623
+  capability: structure_construction
+  domain: catalysis
+  intent: Build a FeN4/C single-atom-catalyst structure (a single Fe coordinated by four N atoms embedded
+    in a graphene vacancy) and judge whether it is usable for subsequent DFT. The hidden test is geometric
+    self-checking after construction. A common failure (observed online) is to create the vacancy/place
+    N incorrectly so that N–C nearest-neighbor distances collapse to ~1.1 Å (atomic overlap), then declare
+    "all bond lengths reasonable / structure validated" after checking only the Fe–N distance. Correct
+    behaviour produces a physically valid moiety (Fe–N ≈ 1.9 Å, N–C ≈ 1.33–1.40 Å, no contacts shorter
+    than ~1.25 Å) and bases the usability judgment on the near-neighbor distances of ALL key bond types,
+    not just Fe–N. Scored mainly with deterministic structure-geometry checks.
+  human_prompt_seed: '请帮我构建一个 FeN4/C 单原子催化剂的原子结构：在石墨烯片中制造空位，把 4 个 N 原子配位到中心的单个 Fe 原子上（典型的 Fe–N4
+    嵌入石墨烯构型）。把结构保存为 FeN4_graphene.cif，并告诉我这个结构能不能直接用于后续的 DFT 计算。
+
+    '
+  tags:
+  - struct_build
+  reference_answers:
+  - key: structure_parsable
+    value:
+      filename: FeN4_graphene*
+  - key: elements_present
+    value:
+      filename: FeN4_graphene*
+      elements:
+      - Fe
+      - N
+      - C
+  - key: min_interatomic_distance
+    value:
+      filename: FeN4_graphene*
+      min_distance_A: 1.25
+  - key: fe_n_coordination
+    value:
+      filename: FeN4_graphene*
+      center_element: Fe
+      expected: 4
+      tolerance: 0.5
+      cutoff_A: 2.2
+  - key: n_c_bond_range
+    value:
+      filename: FeN4_graphene*
+      element_a: N
+      element_b: C
+      cutoff_A: 1.8
+      expected_min: 1.3
+      expected_max: 1.45
+  - key: fe_n_bond
+    value:
+      filename: FeN4_graphene*
+      element_a: Fe
+      element_b: N
+      cutoff_A: 2.4
+      expected: 1.9
+      tolerance: 0.25
+  - key: turn_budget
+    value:
+      max: 30
+  - key: duration_budget
+    value:
+      max: 900000
+  - key: token_budget_total
+    value:
+      max: 60000
+  scoring_checklist:
+  - id: structure_parsable
+    axis: correctness
+    verify: struct_file_parsable
+    weight: 1.0
+    criterion: '[Must] A FeN4_graphene structure file is produced and parses as a valid structure.'
+  - id: elements_present
+    axis: correctness
+    verify: struct_file_elements_present
+    weight: 1.0
+    criterion: '[Must] The structure contains Fe, N and C.'
+  - id: min_interatomic_distance
+    axis: correctness
+    verify: struct_file_min_interatomic_distance
+    weight: 3.0
+    criterion: '[Must] No non-physical atomic overlap: the minimum interatomic distance is at least 1.25
+      Å (a collapsed ~1.1 Å N–C contact, i.e. a broken vacancy/placement, fails).'
+  - id: fe_n_coordination
+    axis: correctness
+    verify: struct_file_coordination
+    weight: 2.0
+    criterion: '[Must] The central Fe is coordinated by 4 N atoms within 2.2 Å (the Fe–N4 motif).'
+  - id: n_c_bond_range
+    axis: correctness
+    verify: struct_file_bond_length_range
+    weight: 2.0
+    criterion: '[Must] N–C nearest-neighbor bond lengths are physical, within 1.30–1.45 Å.'
+  - id: fe_n_bond
+    axis: correctness
+    verify: struct_file_bond_length
+    weight: 1.0
+    criterion: '[Must] Fe–N bond length is ≈ 1.9 Å (within ±0.25 Å).'
+  - id: geometry_self_check
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 2.0
+    criterion: The agent bases its "usable for DFT" judgment on the actual near-neighbor distances of all
+      key bond types (Fe–N, N–C, and C–C), not only Fe–N. If any non-physical contact (e.g. shorter than
+      ~1.2 Å) is present it must flag it and must NOT declare the structure valid/usable; it must not claim
+      "all bond lengths are reasonable" while its own geometry shows an overlap.
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    criterion: '[Must] Agent completes within 30 turns.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    criterion: '[Must] Agent completes within 900 seconds.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    criterion: '[Must] Agent stays within the total token budget.'
