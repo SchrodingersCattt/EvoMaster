@@ -92,6 +92,7 @@ def submit_job_via_runtime(
     session,
     session_id: str | None = None,
     invocation_id: str | None = None,
+    allow_local_paths: bool = True,
 ) -> BohriumSubmittedJob:
     with _TRACER.start_as_current_span("bohrium.job.submit") as span:
         set_log_context_attributes(span)
@@ -113,6 +114,7 @@ def submit_job_via_runtime(
                 raw_path=str(input_dir),
                 workdir=workdir,
                 session=session,
+                allow_local_paths=allow_local_paths,
             )
             span.set_attribute("bohrium.input_source.kind", source.kind)
 
@@ -316,6 +318,7 @@ class BohriumTool(BuiltinTool):
         job_ledger: Any | None = None,
         session_id: str | None = None,
         invocation_id: str | None = None,
+        allow_local_paths: bool = True,
     ) -> None:
         super().__init__(
             session=session,
@@ -325,6 +328,7 @@ class BohriumTool(BuiltinTool):
         self._job_ledger = job_ledger
         self._session_id = session_id
         self._invocation_id = invocation_id
+        self._allow_local_paths = allow_local_paths
 
     # prompt() keeps workflow + cross-skill rules only. Per-software image/machine/cmd
     # belong in matmaster/skills/<name>/SKILL.md — do not paste full default tables here
@@ -538,6 +542,7 @@ class BohriumTool(BuiltinTool):
                 session=self._session,
                 session_id=self._session_id,
                 invocation_id=self._invocation_id,
+                allow_local_paths=self._allow_local_paths,
             )
             self._safe_ledger(
                 "record_submit",
@@ -746,6 +751,7 @@ class BohriumTool(BuiltinTool):
                 raw_path=result_dir_str,
                 workdir=self._workdir,
                 session=self._session,
+                allow_local_paths=self._allow_local_paths,
             )
             detail_data = get_job_detail(ctx, job_id=job_id)
             code = detail_data.get("status", 0)
