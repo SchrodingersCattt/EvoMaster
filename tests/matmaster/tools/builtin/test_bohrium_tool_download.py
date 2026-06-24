@@ -77,6 +77,36 @@ class TestBohriumDownloadExecution:
         assert result.status == 'error'
         assert 'remote session' in result.content.lower()
 
+    def test_download_rejects_local_result_dir_when_disallowed(
+        self, tmp_path, monkeypatch
+    ):
+        tool = BohriumTool(workdir=tmp_path, allow_local_paths=False)
+        get_called = False
+
+        def fake_get(base_url, path, access_key, params=None, timeout=30):
+            del base_url, path, access_key, params, timeout
+            nonlocal get_called
+            get_called = True
+            return {'data': {'status': 2}}
+
+        monkeypatch.delenv('BOHRIUM_USE_SANDBOX', raising=False)
+        _patch_bridge(monkeypatch)
+        monkeypatch.setattr(bohrium_client_module, '_get', fake_get)
+
+        result = asyncio.run(
+            tool.execute(
+                {
+                    'action': 'download',
+                    'job_id': 'job-1',
+                    'result_dir': 'results/run_job-1',
+                }
+            )
+        )
+
+        assert result.status == 'error'
+        assert 'worker-local paths' in result.content
+        assert get_called is False
+
     def test_download_finished_job_returns_files(self, tmp_path, monkeypatch):
         tool = BohriumTool(workdir=tmp_path)
 

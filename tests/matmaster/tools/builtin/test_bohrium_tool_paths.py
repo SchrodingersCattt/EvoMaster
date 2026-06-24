@@ -26,6 +26,35 @@ def test_resolve_input_source_collapses_relative_local_path(tmp_path: Path) -> N
     assert source.resolved_path == str(input_dir)
 
 
+def test_resolve_input_source_rejects_local_path_when_disallowed(
+    tmp_path: Path,
+) -> None:
+    input_dir = tmp_path / "inputs"
+    input_dir.mkdir()
+
+    with pytest.raises(BohriumPathError, match="worker-local paths"):
+        resolve_input_source(
+            raw_path="inputs",
+            workdir=tmp_path,
+            session=None,
+            allow_local_paths=False,
+        )
+
+
+def test_resolve_input_source_relative_remote_workdir_uses_remote_session() -> None:
+    session = FakeRemoteSession(existing_paths={"/share/session/submission"})
+
+    source = resolve_input_source(
+        raw_path="submission",
+        workdir=Path("/share/session"),
+        session=session,
+        allow_local_paths=False,
+    )
+
+    assert source.kind == "remote_share_dir"
+    assert source.resolved_path == "/share/session/submission"
+
+
 def test_resolve_input_source_rejects_missing_remote_session() -> None:
     with pytest.raises(BohriumPathError, match="remote session"):
         resolve_input_source(
@@ -50,3 +79,30 @@ def test_resolve_download_target_uses_remote_direct_for_remote_share(
     assert target.resolved_path == "/share/results"
     assert target.publish_mode == "remote_direct"
     assert target.staging_dir == Path("/share/results")
+
+
+def test_resolve_download_target_rejects_local_path_when_disallowed(
+    tmp_path: Path,
+) -> None:
+    with pytest.raises(BohriumPathError, match="worker-local paths"):
+        resolve_download_target(
+            raw_path="results/run_1",
+            workdir=tmp_path,
+            session=None,
+            allow_local_paths=False,
+        )
+
+
+def test_resolve_download_target_relative_remote_workdir_uses_remote_direct() -> None:
+    session = FakeRemoteSession(is_open=True)
+
+    target = resolve_download_target(
+        raw_path="results/run_1",
+        workdir=Path("/personal/session"),
+        session=session,
+        allow_local_paths=False,
+    )
+
+    assert target.kind == "remote_share_dir"
+    assert target.resolved_path == "/personal/session/results/run_1"
+    assert target.publish_mode == "remote_direct"

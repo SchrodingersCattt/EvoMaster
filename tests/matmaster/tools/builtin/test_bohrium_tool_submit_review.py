@@ -51,6 +51,35 @@ def test_submit_optout_normalizes_before_runtime(tmp_path, monkeypatch):
     assert result.meta["submit_execution_audit"]["job_id"] == "job-123"
 
 
+def test_submit_forwards_local_path_policy_to_runtime(tmp_path, monkeypatch):
+    tool = BohriumTool(workdir=tmp_path, allow_local_paths=False)
+    captured: dict[str, object] = {}
+
+    _patch_bridge(monkeypatch)
+
+    def fake_submit_job_via_runtime(**kwargs):
+        captured.update(kwargs)
+        return BohriumSubmittedJob(job_id="job-123", raw_add_response={})
+
+    monkeypatch.setattr(
+        bohrium_tool_module,
+        "submit_job_via_runtime",
+        fake_submit_job_via_runtime,
+    )
+
+    result = tool._submit(
+        {
+            "action": "submit",
+            "input_dir": "inputs",
+            "image": "test:latest",
+            "cmd": "run",
+        }
+    )
+
+    assert result.status == "success"
+    assert captured["allow_local_paths"] is False
+
+
 def test_submit_optout_rejects_oversized_args_before_runtime(tmp_path, monkeypatch):
     tool = BohriumTool(workdir=tmp_path)
     called = False
