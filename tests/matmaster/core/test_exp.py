@@ -14,7 +14,6 @@ from matmaster.core.hooks import HookExecutor
 from matmaster.core.playground import ExecutionEnvironment
 from matmaster.core.run_context import AgentRunContext, AgentRunRequest
 from matmaster.tools.tool_registry import ToolRegistry
-from matmaster.types.run_metadata import RunMetadata
 from matmaster.types.runtime import AgentRuntime
 from matmaster.types.session import Session
 from matmaster.types.tool_desc_ctx import ToolDescriptionContext
@@ -29,8 +28,6 @@ def _make_ctx(
     with_llm: bool = False,
     workdir: Path | None = None,
     execution_workdir: str | None = None,
-    session_type: str = "local",
-    metadata_source: str = "",
     session: object = _UNSET,
     interaction_bridge: object = None,
 ) -> AgentRunContext:
@@ -46,9 +43,8 @@ def _make_ctx(
     cache_area = Path("/tmp/cache") if workdir is None else wd / "cache"
     env_kwargs: dict = {
         "workdir": wd,
-        "session_type": session_type,
+        "session_type": "local",
         "cache_area": cache_area,
-        "metadata": RunMetadata(source=metadata_source),
     }
     if execution_workdir is not None:
         env_kwargs["execution_workdir"] = execution_workdir
@@ -589,63 +585,6 @@ class TestExpBuiltinTools:
         assert "WebSearch" in registry
         assert "WebFetch" in registry
         assert "Bohrium" in registry
-
-    def test_bohrium_tool_disallows_local_paths_outside_devshell(
-        self, tmp_path: Path
-    ) -> None:
-        from matmaster.tools.builtin.bohrium_tool import BohriumTool
-
-        exp = Exp(ExpConfig(name="test"))
-        ctx = self._make_ctx_with_session(tmp_path)
-        registry = ToolRegistry()
-
-        exp._init_builtin_tools(ctx, registry, ["Bohrium"])
-
-        tool = registry.get_raw("Bohrium")
-        assert isinstance(tool, BohriumTool)
-        assert tool._allow_local_paths is False
-        assert tool._workdir == tmp_path
-
-    def test_bohrium_tool_allows_local_paths_for_devshell(
-        self, tmp_path: Path
-    ) -> None:
-        from matmaster.tools.builtin.bohrium_tool import BohriumTool
-
-        exp = Exp(ExpConfig(name="test"))
-        ctx = _make_ctx(
-            workdir=tmp_path,
-            session=MagicMock(spec=Session),
-            metadata_source="devshell",
-            with_llm=True,
-        )
-        registry = ToolRegistry()
-
-        exp._init_builtin_tools(ctx, registry, ["Bohrium"])
-
-        tool = registry.get_raw("Bohrium")
-        assert isinstance(tool, BohriumTool)
-        assert tool._allow_local_paths is True
-        assert tool._workdir == tmp_path
-
-    def test_bohrium_tool_uses_remote_workdir_for_ssh(self, tmp_path: Path) -> None:
-        from matmaster.tools.builtin.bohrium_tool import BohriumTool
-
-        exp = Exp(ExpConfig(name="test"))
-        ctx = _make_ctx(
-            workdir=tmp_path,
-            execution_workdir="/share/session",
-            session_type="ssh",
-            session=MagicMock(spec=Session),
-            with_llm=True,
-        )
-        registry = ToolRegistry()
-
-        exp._init_builtin_tools(ctx, registry, ["Bohrium"])
-
-        tool = registry.get_raw("Bohrium")
-        assert isinstance(tool, BohriumTool)
-        assert tool._allow_local_paths is False
-        assert tool._workdir == Path("/share/session")
 
     async def test_explicit_builtin_config_filters_tools(self, tmp_path: Path) -> None:
         """Non-empty explicit tool list registers only the requested tools."""

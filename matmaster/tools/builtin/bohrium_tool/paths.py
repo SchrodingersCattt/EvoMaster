@@ -58,9 +58,7 @@ def resolve_input_source(
         if not active_session.path_exists(normalized):
             raise BohriumPathError(f"Remote input_dir not found: {normalized}")
         if active_session.is_file(normalized):
-            raise BohriumPathError(
-                f"Remote input_dir is not a directory: {normalized}"
-            )
+            raise BohriumPathError(f"Remote input_dir is not a directory: {normalized}")
         return BohriumInputSource(
             kind="remote_share_dir",
             raw_path=raw_path,
