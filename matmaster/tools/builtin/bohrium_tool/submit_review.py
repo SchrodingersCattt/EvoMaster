@@ -75,6 +75,7 @@ def _canonicalize_submit_args(
     args: dict[str, Any],
     *,
     default_max_runtime_seconds: int | None = None,
+    include_runtime_policy: bool = True,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     canonical: dict[str, Any] = {key: args[key] for key in SUBMIT_FIELDS if key in args}
     changes: dict[str, Any] = {}
@@ -102,7 +103,7 @@ def _canonicalize_submit_args(
             changes["disk_size"] = {"from": raw_disk, "to": disk_size}
         canonical["disk_size"] = disk_size
 
-    if default_max_runtime_seconds is not None:
+    if include_runtime_policy and default_max_runtime_seconds is not None:
         canonical["max_runtime_seconds"] = default_max_runtime_seconds
 
     cmd = canonical.get("cmd")
@@ -137,6 +138,7 @@ def build_review_draft(
     canonical, changes = _canonicalize_submit_args(
         model_args,
         default_max_runtime_seconds=default_max_runtime_seconds,
+        include_runtime_policy=False,
     )
     issues: list[dict[str, Any]] = []
     for field in ("input_dir", "image", "cmd"):

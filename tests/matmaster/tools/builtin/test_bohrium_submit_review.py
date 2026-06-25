@@ -33,7 +33,7 @@ def test_draft_adds_defaults_and_cmd_redirect():
     assert draft.draft_issues == []
 
 
-def test_draft_adds_default_max_runtime_seconds():
+def test_draft_hides_default_max_runtime_seconds():
     provider = BohriumSubmitReviewProvider(default_max_runtime_seconds=7200)
 
     draft = provider.build_review_draft(
@@ -46,7 +46,7 @@ def test_draft_adds_default_max_runtime_seconds():
     )
 
     assert draft is not None
-    assert draft.review_draft_arguments["max_runtime_seconds"] == 7200
+    assert "max_runtime_seconds" not in draft.review_draft_arguments
     assert "max_runtime_seconds" not in draft.editable_fields
     assert "max_runtime_seconds" not in draft.normalization_changes
 
