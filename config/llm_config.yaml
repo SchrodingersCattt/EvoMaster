@@ -43,7 +43,7 @@ profiles:
     provider: litellm-qwen
     model: matmaster/qwen3.7-max
     reasoning_effort: high
-    context_limit: 1000000
+    context_limit: 3000000
     supports_vision: true
     timeout: 1200
     stream_timeout: 120
@@ -103,7 +103,7 @@ profiles:
     provider: litellm-anthropic
     model: global.anthropic.claude-opus-4-6-v1
     reasoning_effort: max
-    context_limit: 200000
+    context_limit: 300000
     supports_vision: true
     max_tokens: 32000
     timeout: 1200
