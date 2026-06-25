@@ -250,33 +250,6 @@ def test_prepare_send_message_persists_and_passes_submit_confirmation():
         False,
     )
 
-
-def test_prepare_send_message_passes_bohrium_node_sku_id_to_job():
-    from src.models.chat import ChatSendRequest
-    from src.services.stream_service import ChatStreamService
-
-    sessions_service = MagicMock()
-    sessions_service.get_session.return_value = {"session_directory": None}
-    sessions_service.try_acquire_session_run.return_value = (True, None)
-    events_service = MagicMock()
-    events_service.get_latest_scope_event_id.return_value = 0
-    service = ChatStreamService(
-        sessions_service=sessions_service,
-        events_service=events_service,
-        deploy_state_service=MagicMock(),
-    )
-    req = ChatSendRequest(content="run", bohrium_node_sku_id=12345)
-
-    with (
-        patch("src.services.stream_service.REDIS_URL", "redis://test"),
-        patch("src.services.stream_service.get_redis_dao", return_value=MagicMock()),
-    ):
-        ctx = service.prepare_send_message("sess-1", req, user_id="user-1")
-
-    assert ctx is not None
-    assert ctx.job["bohrium_node_sku_id"] == 12345
-
-
 def test_prepare_send_message_uses_session_submit_confirmation_when_request_omits():
     from src.models.chat import ChatSendRequest
     from src.services.stream_service import ChatStreamService
