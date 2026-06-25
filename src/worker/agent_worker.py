@@ -49,7 +49,7 @@ _FAIL_REASON_DISPLAY: dict[str, str] = {
 }
 
 # BLPOP 超时（秒），超时后继续循环，便于进程能响应 SIGTERM
-_BLPOP_TIMEOUT = int(os.environ.get('AGENT_WORKER_BLPOP_TIMEOUT', '30'))
+_BLPOP_TIMEOUT = int(os.environ.get("AGENT_WORKER_BLPOP_TIMEOUT", "30"))
 # 存活心跳间隔（秒），需小于 Redis WORKER_ALIVE_TTL_SEC(30)，否则 API 会误判本进程已死
 _WORKER_HEARTBEAT_INTERVAL = 10.0
 # 当前正在跑的 session_id（由主循环设置/清除），供心跳线程刷新 run_owner TTL，避免长任务超过 SESSION_RUN_OWNER_TTL 后 API 误判 stale
@@ -61,25 +61,25 @@ _active_controller: CancellationController | None = None
 
 def _session_url(session_id: str) -> str:
     """根据当前环境拼接前端会话链接。"""
-    sid = (session_id or '').strip()
+    sid = (session_id or "").strip()
     if not sid:
-        return '-'
-    env = (SERVICE_ENV or '').strip().lower()
-    suffix = '' if not env or env == 'prod' else f'.{env}'
-    return f'https://matmaster{suffix}.bohrium.com/matmaster/chat-evo/{sid}'
+        return "-"
+    env = (SERVICE_ENV or "").strip().lower()
+    suffix = "" if not env or env == "prod" else f".{env}"
+    return f"https://matmaster{suffix}.bohrium.com/matmaster/chat-evo/{sid}"
 
 
 def _format_run_duration(duration_sec: float) -> str:
     """把运行秒数格式化为「X 秒 / X 分 X 秒 / X 小时 X 分」。"""
     if duration_sec < 60:
-        return f'{duration_sec:.1f} 秒'
+        return f"{duration_sec:.1f} 秒"
     if duration_sec < 3600:
         m = int(duration_sec // 60)
         s = int(duration_sec % 60)
-        return f'{m} 分 {s} 秒'
+        return f"{m} 分 {s} 秒"
     h = int(duration_sec // 3600)
     m = int((duration_sec % 3600) // 60)
-    return f'{h} 小时 {m} 分'
+    return f"{h} 小时 {m} 分"
 
 
 def _should_notify_completion(delivery: dict | None) -> bool:
@@ -110,41 +110,41 @@ def _build_completion_card(
     纯函数，无副作用，便于单测（含失败原因行与 token 明细行的插入位置）。
     """
     rows: list[tuple[str, str]] = [
-        ('会话ID', session_id),
-        ('会话地址', session_url),
-        ('用户', user_info_display),
-        ('模型', format_llm_model_for_notify(model)),
-        ('用户问题', user_question or '-'),
-        ('执行节点', get_worker_id()),
+        ("会话ID", session_id),
+        ("会话地址", session_url),
+        ("用户", user_info_display),
+        ("模型", format_llm_model_for_notify(model)),
+        ("用户问题", user_question or "-"),
+        ("执行节点", get_worker_id()),
         (
-            '结果',
+            "结果",
             (
-                '成功'
+                "成功"
                 if run_success
-                else ('已取消' if fail_reason == 'cancelled' else '失败')
+                else ("已取消" if fail_reason == "cancelled" else "失败")
             ),
         ),
-        ('运行时间', duration_str),
-        ('执行中', str(active_count)),
-        ('排队数', str(queue_len)),
+        ("运行时间", duration_str),
+        ("执行中", str(active_count)),
+        ("排队数", str(queue_len)),
     ]
-    if not run_success and fail_reason_str and fail_reason_str != 'cancelled':
-        reason = (fail_reason_str or '-')[:500]
+    if not run_success and fail_reason_str and fail_reason_str != "cancelled":
+        reason = (fail_reason_str or "-")[:500]
         if len(fail_reason_str) > 500:
-            reason = reason + '…'
-        rows.insert(7, ('失败原因', reason))  # 插在「结果」之后
+            reason = reason + "…"
+        rows.insert(7, ("失败原因", reason))  # 插在「结果」之后
     # token 消耗明细插在「运行时间」之后、「执行中/排队数」之前
     usage_rows = format_usage_rows(usage_summary)
     if usage_rows:
         try:
-            anchor = next(i for i, (label, _) in enumerate(rows) if label == '运行时间')
+            anchor = next(i for i, (label, _) in enumerate(rows) if label == "运行时间")
             insert_at = anchor + 1
         except StopIteration:
             insert_at = len(rows)
         rows[insert_at:insert_at] = usage_rows
-    if fail_reason == 'cancelled':
-        return '用户取消运行', rows, CARD_TEMPLATE_ORANGE
-    title = 'Worker 执行成功' if run_success else 'Worker 执行失败'
+    if fail_reason == "cancelled":
+        return "用户取消运行", rows, CARD_TEMPLATE_ORANGE
+    title = "Worker 执行成功" if run_success else "Worker 执行失败"
     template = CARD_TEMPLATE_GREEN if run_success else CARD_TEMPLATE_RED
     return title, rows, template
 
@@ -162,36 +162,36 @@ def _send_completion_email(
     fail_reason_str: str,
 ) -> None:
     """会话完成/失败时给用户发完成邮件（含会话链接）。无 user_id 或邮箱时跳过。"""
-    email = user_info.get('email')
-    if not (session_user_id and email and email != '-'):
+    email = user_info.get("email")
+    if not (session_user_id and email and email != "-"):
         return
-    submitted_at_raw = payload.get('submitted_at') or ''
+    submitted_at_raw = payload.get("submitted_at") or ""
     try:
         if submitted_at_raw:
-            dt = datetime.fromisoformat(submitted_at_raw.replace('Z', '+00:00'))
-            submitted_at_str = dt.strftime('%Y-%m-%d %H:%M:%S UTC')
+            dt = datetime.fromisoformat(submitted_at_raw.replace("Z", "+00:00"))
+            submitted_at_str = dt.strftime("%Y-%m-%d %H:%M:%S UTC")
         else:
-            submitted_at_str = ''
+            submitted_at_str = ""
     except (ValueError, TypeError):
-        submitted_at_str = submitted_at_raw or ''
+        submitted_at_str = submitted_at_raw or ""
     result_status = (
-        '成功' if run_success else ('已取消' if fail_reason == 'cancelled' else '失败')
+        "成功" if run_success else ("已取消" if fail_reason == "cancelled" else "失败")
     )
     fail_reason_for_email = (
-        fail_reason_str if not run_success and fail_reason_str != 'cancelled' else ''
+        fail_reason_str if not run_success and fail_reason_str != "cancelled" else ""
     )
     if len(fail_reason_for_email) > 500:
-        fail_reason_for_email = fail_reason_for_email[:500] + '…'
+        fail_reason_for_email = fail_reason_for_email[:500] + "…"
     send_session_complete_email_async(
         session_url,
         session_user_id,
         email,
-        user_question=user_question or '',
+        user_question=user_question or "",
         submitted_at=submitted_at_str,
         duration=duration_str,
         result_status=result_status,
         fail_reason=fail_reason_for_email,
-        completed_at=datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC'),
+        completed_at=datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC"),
     )
 
 
@@ -242,42 +242,42 @@ def _publish_run_interrupted_deploy(session_id: str) -> None:
         return
     previous_version = get_build_version()
     content = (
-        '上一轮任务因服务升级中断，请重新发送以继续。'
+        "上一轮任务因服务升级中断，请重新发送以继续。"
         if previous_version
-        else '上一轮任务因服务部署中断，请重新发送以继续。'
+        else "上一轮任务因服务部署中断，请重新发送以继续。"
     )
     run_interrupted_payload = {
-        'source': 'System',
-        'type': 'run_interrupted',
-        'content': content,
-        'session_id': sid,
-        'reason': 'deploy',
-        'treat_as_failure': True,
+        "source": "System",
+        "type": "run_interrupted",
+        "content": content,
+        "session_id": sid,
+        "reason": "deploy",
+        "treat_as_failure": True,
     }
     if previous_version:
-        run_interrupted_payload['previous_version'] = previous_version
-    run_interrupted_payload['reason_note'] = 'worker_sigterm'
+        run_interrupted_payload["previous_version"] = previous_version
+    run_interrupted_payload["reason_note"] = "worker_sigterm"
     try:
         redis_dao.publish_stream_event(sid, run_interrupted_payload)
         redis_dao.publish_stream_event(
             sid,
             {
-                'source': 'System',
-                'type': 'stream_closed',
-                'content': content,
-                'session_id': sid,
-                'end_reason': 'run_interrupted_deploy',
-                'treat_as_failure': True,
+                "source": "System",
+                "type": "stream_closed",
+                "content": content,
+                "session_id": sid,
+                "end_reason": "run_interrupted_deploy",
+                "treat_as_failure": True,
             },
         )
         logger.info(
-            'Agent worker: published run_interrupted(deploy)+stream_closed for session_id=%s worker_id=%s',
+            "Agent worker: published run_interrupted(deploy)+stream_closed for session_id=%s worker_id=%s",
             sid,
             get_worker_id(),
         )
     except Exception as e:
         logger.warning(
-            'Agent worker: publish run_interrupted failed session_id=%s: %s',
+            "Agent worker: publish run_interrupted failed session_id=%s: %s",
             sid,
             e,
         )
@@ -297,7 +297,7 @@ def _worker_heartbeat_loop(stop_ev: threading.Event) -> None:
                 )
         except Exception as e:
             logger.warning(
-                'Agent worker heartbeat skipped worker_id=%s: %s', get_worker_id(), e
+                "Agent worker heartbeat skipped worker_id=%s: %s", get_worker_id(), e
             )
 
 
@@ -306,7 +306,7 @@ def _run_worker_loop() -> None:
     redis_dao = get_redis_dao()
     if not redis_dao.get_command_client():
         logger.error(
-            'Agent worker: REDIS_URL not configured or Redis unreachable. Exit.'
+            "Agent worker: REDIS_URL not configured or Redis unreachable. Exit."
         )
         sys.exit(1)
 
@@ -320,66 +320,81 @@ def _run_worker_loop() -> None:
         if payload is None:
             if _drain_requested:
                 logger.info(
-                    'Agent worker: drain requested, no current job, exiting loop. worker_id=%s',
+                    "Agent worker: drain requested, no current job, exiting loop. worker_id=%s",
                     get_worker_id(),
                 )
                 return
             continue
 
-        session_id = (payload.get('session_id') or '').strip()
-        task_id = payload.get('task_id') or ''
-        invocation_id = payload.get('invocation_id')
-        user_prompt = payload.get('user_prompt') or ''
-        mode = (payload.get('mode') or DEFAULT_MODE).strip().lower() or DEFAULT_MODE
+        session_id = (payload.get("session_id") or "").strip()
+        task_id = payload.get("task_id") or ""
+        invocation_id = payload.get("invocation_id")
+        user_prompt = payload.get("user_prompt") or ""
+        mode = (payload.get("mode") or DEFAULT_MODE).strip().lower() or DEFAULT_MODE
         if mode not in SUPPORTED_MODES:
             logger.warning(
-                'Agent worker: unknown mode %r in payload, fallback to %s',
+                "Agent worker: unknown mode %r in payload, fallback to %s",
                 mode,
                 DEFAULT_MODE,
             )
             mode = DEFAULT_MODE
-        model_override = (payload.get('model') or '').strip() or None
-        byok_credential_id = (payload.get('byok_credential_id') or '').strip() or None
-        raw_images = payload.get('images') or []
+        model_override = (payload.get("model") or "").strip() or None
+        byok_credential_id = (payload.get("byok_credential_id") or "").strip() or None
+        raw_images = payload.get("images") or []
         images = (
             [url for url in raw_images if isinstance(url, str)]
             if isinstance(raw_images, list)
             else []
         )
-        turn_input = TurnInput.from_payload(payload.get('turn_input'))
-        bohrium_required = bool(payload.get('bohrium_required'))
+        turn_input = TurnInput.from_payload(payload.get("turn_input"))
+        bohrium_required = bool(payload.get("bohrium_required"))
         submit_confirmation_enabled = bool(
-            payload.get('bohrium_submit_confirmation_required')
+            payload.get("bohrium_submit_confirmation_required")
         )
         bohrium_job_max_runtime_seconds = None
-        raw_max_runtime = payload.get('bohrium_job_max_runtime_seconds')
-        if raw_max_runtime not in (None, ''):
+        raw_max_runtime = payload.get("bohrium_job_max_runtime_seconds")
+        if raw_max_runtime not in (None, ""):
             try:
                 parsed_max_runtime = int(raw_max_runtime)
                 if parsed_max_runtime > 0:
                     bohrium_job_max_runtime_seconds = parsed_max_runtime
             except (TypeError, ValueError):
                 logger.warning(
-                    'Agent worker: ignore invalid bohrium_job_max_runtime_seconds=%r '
-                    'session_id=%s task_id=%s',
+                    "Agent worker: ignore invalid bohrium_job_max_runtime_seconds=%r "
+                    "session_id=%s task_id=%s",
                     raw_max_runtime,
                     session_id,
                     task_id,
                 )
-        raw_workspace = payload.get('workspace')
+        raw_workspace = payload.get("workspace")
         workspace = (
             raw_workspace.strip() or None if isinstance(raw_workspace, str) else None
         )
-        delivery = payload.get('delivery')
-        origin = (payload.get('origin') or '').strip() or None
+        bohrium_node_sku_id = None
+        raw_node_sku_id = payload.get("bohrium_node_sku_id")
+        if raw_node_sku_id not in (None, ""):
+            try:
+                parsed_node_sku_id = int(raw_node_sku_id)
+                if parsed_node_sku_id > 0:
+                    bohrium_node_sku_id = parsed_node_sku_id
+            except (TypeError, ValueError):
+                logger.warning(
+                    "Agent worker: ignore invalid bohrium_node_sku_id=%r "
+                    "session_id=%s task_id=%s",
+                    raw_node_sku_id,
+                    session_id,
+                    task_id,
+                )
+        delivery = payload.get("delivery")
+        origin = (payload.get("origin") or "").strip() or None
         job_context_mode = (
-            'session_workspace_delivery'
-            if origin == 'bohrium_completion'
-            else 'workspace_observation'
+            "session_workspace_delivery"
+            if origin == "bohrium_completion"
+            else "workspace_observation"
         )
 
         if not session_id:
-            logger.warning('Agent worker: skip job with empty session_id')
+            logger.warning("Agent worker: skip job with empty session_id")
             continue
 
         LogContext.bind(session_id, task_id)
@@ -390,12 +405,12 @@ def _run_worker_loop() -> None:
         )
         # 清除可能残留的上一轮 stop key（含 session 级），避免上一轮 finally 中 delete 失败导致本轮一启动即被误判为已请求停止
         logger.info(
-            'Agent worker: clear stop keys before run session_id=%s task_id=%s',
+            "Agent worker: clear stop keys before run session_id=%s task_id=%s",
             session_id,
             task_id,
         )
         redis_dao.delete_stop_requested(session_id, task_id)
-        redis_dao.set_interaction_run_context(session_id, task_id, invocation_id or '')
+        redis_dao.set_interaction_run_context(session_id, task_id, invocation_id or "")
 
         def send_cb(p: dict, _sid: str = session_id) -> None:
             # 不在此处写 DB：run_agent 内 event_callback 已写，此处再写会导致同一条事件落库两次
@@ -413,9 +428,9 @@ def _run_worker_loop() -> None:
             acquired_ok, fail_reason = sessions_service.try_acquire_session_run(
                 session_id
             )
-            if not acquired_ok and fail_reason == 'db_update_failed':
+            if not acquired_ok and fail_reason == "db_update_failed":
                 logger.info(
-                    'Agent worker: db_update_failed, retry once after 2s session_id=%s task_id=%s',
+                    "Agent worker: db_update_failed, retry once after 2s session_id=%s task_id=%s",
                     session_id,
                     task_id,
                 )
@@ -425,10 +440,10 @@ def _run_worker_loop() -> None:
                 )
             if not acquired_ok:
                 logger.warning(
-                    'Agent worker: skip job session_id=%s task_id=%s reason=%s',
+                    "Agent worker: skip job session_id=%s task_id=%s reason=%s",
                     session_id,
                     task_id,
-                    fail_reason or 'unknown',
+                    fail_reason or "unknown",
                 )
                 redis_dao.delete_interaction_run_context(session_id)
                 LogContext.clear()
@@ -444,21 +459,21 @@ def _run_worker_loop() -> None:
             queue_len = redis_dao.llen_agent_run_queue()
             active_count = get_worker_registry_service().count_active_runs()
             session_url = _session_url(session_id)
-            user_question = (user_prompt or '').strip()
+            user_question = (user_prompt or "").strip()
             if len(user_question) > 500:
-                user_question = user_question[:500] + '…'
+                user_question = user_question[:500] + "…"
             notify_post_async(
-                'Worker 开始执行',
+                "Worker 开始执行",
                 [
-                    ('会话ID', session_id),
-                    ('会话地址', session_url),
-                    ('用户', user_info_display),
-                    ('模型', format_llm_model_for_notify(model_override)),
-                    ('模式', mode),
-                    ('用户问题', user_question or '-'),
-                    ('执行节点', get_worker_id()),
-                    ('执行中', str(active_count)),
-                    ('排队数', str(queue_len)),
+                    ("会话ID", session_id),
+                    ("会话地址", session_url),
+                    ("用户", user_info_display),
+                    ("模型", format_llm_model_for_notify(model_override)),
+                    ("模式", mode),
+                    ("用户问题", user_question or "-"),
+                    ("执行节点", get_worker_id()),
+                    ("执行中", str(active_count)),
+                    ("排队数", str(queue_len)),
                 ],
                 template=CARD_TEMPLATE_BLUE,
             )
@@ -486,6 +501,7 @@ def _run_worker_loop() -> None:
                     "bohrium_job_max_runtime_seconds": (
                         bohrium_job_max_runtime_seconds
                     ),
+                    "bohrium_node_sku_id": bohrium_node_sku_id,
                     "submit_confirmation_enabled": submit_confirmation_enabled,
                     "delivery_snapshot": delivery_snapshot,
                     "job_context_mode": job_context_mode,
@@ -516,7 +532,7 @@ def _run_worker_loop() -> None:
                 run_success = False
                 fail_reason = str(e)
                 logger.exception(
-                    'Agent worker: run_agent failed session_id=%s task_id=%s: %s',
+                    "Agent worker: run_agent failed session_id=%s task_id=%s: %s",
                     session_id,
                     task_id,
                     e,
@@ -524,22 +540,22 @@ def _run_worker_loop() -> None:
                 try:
                     send_cb(
                         {
-                            'source': 'System',
-                            'type': 'error',
-                            'content': str(e),
-                            'session_id': session_id,
-                            'task_id': task_id,
-                            'invocation_id': invocation_id,
+                            "source": "System",
+                            "type": "error",
+                            "content": str(e),
+                            "session_id": session_id,
+                            "task_id": task_id,
+                            "invocation_id": invocation_id,
                         }
                     )
                     send_cb(
                         {
-                            'source': 'System',
-                            'type': 'stream_closed',
-                            'content': '',
-                            'session_id': session_id,
-                            'task_id': task_id,
-                            'invocation_id': invocation_id,
+                            "source": "System",
+                            "type": "stream_closed",
+                            "content": "",
+                            "session_id": session_id,
+                            "task_id": task_id,
+                            "invocation_id": invocation_id,
                         }
                     )
                 except Exception:
@@ -558,8 +574,8 @@ def _run_worker_loop() -> None:
                         bohrium_delivery_ack.confirm(delivery_snapshot)
                     except Exception:
                         logger.warning(
-                            'Agent worker: bohrium delivery confirm failed '
-                            'session_id=%s task_id=%s',
+                            "Agent worker: bohrium delivery confirm failed "
+                            "session_id=%s task_id=%s",
                             session_id,
                             task_id,
                             exc_info=True,
@@ -571,9 +587,9 @@ def _run_worker_loop() -> None:
                     queue_len = redis_dao.llen_agent_run_queue()
                     active_count = get_worker_registry_service().count_active_runs()
                     session_url = _session_url(session_id)
-                    user_question = (user_prompt or '').strip()
+                    user_question = (user_prompt or "").strip()
                     if len(user_question) > 500:
-                        user_question = user_question[:500] + '…'
+                        user_question = user_question[:500] + "…"
                     # 优先使用 run_agent 返回的 elapsed_ms（与 end 事件、前端展示一致），异常路径无返回值时用 Worker 侧计时
                     if elapsed_ms is not None:
                         duration_sec = elapsed_ms / 1000.0
@@ -581,7 +597,7 @@ def _run_worker_loop() -> None:
                         duration_sec = time.monotonic() - run_start_time
                     duration_str = _format_run_duration(duration_sec)
                     fail_reason_str = (
-                        str(fail_reason).strip() if fail_reason is not None else ''
+                        str(fail_reason).strip() if fail_reason is not None else ""
                     )
                     fail_reason_str = _FAIL_REASON_DISPLAY.get(
                         fail_reason_str, fail_reason_str
@@ -603,7 +619,7 @@ def _run_worker_loop() -> None:
                         )
                         notify_post_async(title, rows, template=template)
                         logger.info(
-                            'Agent worker: Feishu completion card queued session_id=%s title=%s',
+                            "Agent worker: Feishu completion card queued session_id=%s title=%s",
                             session_id,
                             title,
                         )
@@ -621,18 +637,18 @@ def _run_worker_loop() -> None:
                         )
                     else:
                         logger.info(
-                            'Agent worker: completion notify suppressed by delivery session_id=%s',
+                            "Agent worker: completion notify suppressed by delivery session_id=%s",
                             session_id,
                         )
                 except Exception:
                     logger.exception(
-                        'Agent worker: completion notify block failed session_id=%s task_id=%s',
+                        "Agent worker: completion notify block failed session_id=%s task_id=%s",
                         session_id,
                         task_id,
                     )
         if _drain_requested:
             logger.info(
-                'Agent worker: drain requested, current job finished, exiting loop. session_id=%s worker_id=%s',
+                "Agent worker: drain requested, current job finished, exiting loop. session_id=%s worker_id=%s",
                 session_id,
                 get_worker_id(),
             )
@@ -650,7 +666,7 @@ def main() -> None:
             _publish_run_interrupted_deploy(sid)
         _drain_requested = True
         logger.info(
-            'Agent worker: received SIGTERM, drain requested; will exit after current job or when idle. worker_id=%s',
+            "Agent worker: received SIGTERM, drain requested; will exit after current job or when idle. worker_id=%s",
             get_worker_id(),
         )
 
@@ -661,18 +677,18 @@ def main() -> None:
     heartbeat_thread = threading.Thread(
         target=_worker_heartbeat_loop,
         args=(_heartbeat_stop,),
-        name='agent_worker_heartbeat',
+        name="agent_worker_heartbeat",
         daemon=True,
     )
     heartbeat_thread.start()
     logger.info(
-        'Agent worker: heartbeat thread started interval=%.0fs worker_id=%s',
+        "Agent worker: heartbeat thread started interval=%.0fs worker_id=%s",
         _WORKER_HEARTBEAT_INTERVAL,
         get_worker_id(),
     )
 
     logger.info(
-        'Agent worker: starting BLPOP loop queue_key=%s', 'chat:agent_run_queue'
+        "Agent worker: starting BLPOP loop queue_key=%s", "chat:agent_run_queue"
     )
     try:
         _run_worker_loop()
@@ -680,5 +696,5 @@ def main() -> None:
         shutdown_tracing()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

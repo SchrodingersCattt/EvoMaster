@@ -43,7 +43,7 @@ def _make_pg(original_session: MagicMock) -> MagicMock:
     pg._owns_session = True
     pg.config = MagicMock()
     pg.config.model_dump.return_value = {
-        'skills': {'skills_root': 'matmaster/skills'},
+        "skills": {"skills_root": "matmaster/skills"},
     }
     return pg
 
@@ -65,10 +65,10 @@ def _allow_user_turn_context_write(events_table: MagicMock) -> None:
     events_table.add_event.return_value = True
 
 
-@patch.object(arb, '_run_clear_remote_proxy', MagicMock())
-@patch.object(arb, '_remote_session_workspace_root', return_value='/share')
-@patch('src.services.agent_run_bohrium.get_bohrium_nodes_table')
-@patch('src.services.agent_run_bohrium.get_bohrium_node_service')
+@patch.object(arb, "_run_clear_remote_proxy", MagicMock())
+@patch.object(arb, "_remote_session_workspace_root", return_value="/share")
+@patch("src.services.agent_run_bohrium.get_bohrium_nodes_table")
+@patch("src.services.agent_run_bohrium.get_bohrium_node_service")
 def test_successful_setup_returns_execution_binding_and_stores_runtime(
     mock_node_svc_factory: MagicMock,
     mock_nodes_table_factory: MagicMock,
@@ -82,10 +82,10 @@ def test_successful_setup_returns_execution_binding_and_stores_runtime(
     nodes_table.find_one_for_reuse.return_value = None
     nodes_table.list_node_ids_for_user_org.return_value = []
 
-    node_svc.create_node.return_value = {'node_id': 42}
+    node_svc.create_node.return_value = {"node_id": 42}
     node_svc.wait_until_ready.return_value = {
-        'ip': '10.0.0.1',
-        'password': 'secret',
+        "ip": "10.0.0.1",
+        "password": "secret",
     }
 
     original_session = MagicMock()
@@ -96,51 +96,55 @@ def test_successful_setup_returns_execution_binding_and_stores_runtime(
     mock_ssh.is_open = True
     mock_ssh._env = MagicMock()
     mock_ssh._env.upload_directory_tarball = MagicMock(return_value=1)
-    mock_ssh.remote_project_root = '/remote/proj'
+    mock_ssh.remote_project_root = "/remote/proj"
 
-    with patch.object(arb, 'SSHSession', return_value=mock_ssh) as mock_ssh_cls:
+    with patch.object(arb, "SSHSession", return_value=mock_ssh) as mock_ssh_cls:
         svc = _make_bohrium_service()
         result = svc._setup_bohrium_for_run(
-            session_id='sess-ok',
+            session_id="sess-ok",
             pg=pg,
             run_creds={
-                'access_key': 'ak',
-                'project_id': 99,
+                "access_key": "ak",
+                "project_id": 99,
             },
-            user_id_for_ak='u1',
-            org_id='o1',
+            user_id_for_ak="u1",
+            org_id="o1",
             event_callback=MagicMock(),
             run_started_at=0.0,
+            bohrium_node_sku_id=12345,
         )
 
     assert result.ssh_attached is True
     assert result.abort_result is None
     assert result.execution_session is mock_ssh
-    assert result.execution_workdir == '/share'
-    assert result.session_type == 'ssh'
+    assert result.execution_workdir == "/share"
+    assert result.session_type == "ssh"
 
     assert pg.session is mock_ssh
     assert pg._owns_session is False
 
     mock_ssh_cls.assert_called_once()
     cfg = mock_ssh_cls.call_args[0][0]
-    assert cfg.host == '10.0.0.1'
-    assert cfg.password == 'secret'
-    assert cfg.workspace_path == '/share'
+    assert cfg.host == "10.0.0.1"
+    assert cfg.password == "secret"
+    assert cfg.workspace_path == "/share"
 
     mock_ssh.open.assert_called_once()
 
-    rt = SESSIONS['sess-ok'].get('bohrium_runtime')
+    rt = SESSIONS["sess-ok"].get("bohrium_runtime")
     assert rt is not None
-    assert rt['original_session'] is original_session
-    assert rt['original_owns_session'] is True
-    assert rt['ssh_session'] is mock_ssh
+    assert rt["original_session"] is original_session
+    assert rt["original_owns_session"] is True
+    assert rt["ssh_session"] is mock_ssh
+    nodes_table.find_one_for_reuse.assert_called_once_with("u1", "o1", 99, 12345)
+    node_svc.create_node.assert_called_once_with("ak", 99, sku_id=12345)
+    nodes_table.insert_node.assert_called_once_with("u1", "o1", 99, 12345, 42)
 
 
-@patch.object(arb, '_run_clear_remote_proxy', MagicMock())
-@patch.object(arb, '_remote_session_workspace_root', return_value='/share')
-@patch('src.services.agent_run_bohrium.get_bohrium_nodes_table')
-@patch('src.services.agent_run_bohrium.get_bohrium_node_service')
+@patch.object(arb, "_run_clear_remote_proxy", MagicMock())
+@patch.object(arb, "_remote_session_workspace_root", return_value="/share")
+@patch("src.services.agent_run_bohrium.get_bohrium_nodes_table")
+@patch("src.services.agent_run_bohrium.get_bohrium_node_service")
 def test_setup_does_not_emit_skills_synced_event(
     mock_node_svc_factory: MagicMock,
     mock_nodes_table_factory: MagicMock,
@@ -154,10 +158,10 @@ def test_setup_does_not_emit_skills_synced_event(
     nodes_table.find_one_for_reuse.return_value = None
     nodes_table.list_node_ids_for_user_org.return_value = []
 
-    node_svc.create_node.return_value = {'node_id': 42}
+    node_svc.create_node.return_value = {"node_id": 42}
     node_svc.wait_until_ready.return_value = {
-        'ip': '10.0.0.1',
-        'password': 'secret',
+        "ip": "10.0.0.1",
+        "password": "secret",
     }
 
     original_session = MagicMock()
@@ -176,34 +180,34 @@ def test_setup_does_not_emit_skills_synced_event(
         def close(self) -> None:
             self.is_open = False
 
-    with patch.object(arb, 'SSHSession', new=FakeSSHSession):
+    with patch.object(arb, "SSHSession", new=FakeSSHSession):
         svc = _make_bohrium_service()
         result = svc._setup_bohrium_for_run(
-            session_id='sess-no-skill-sync',
+            session_id="sess-no-skill-sync",
             pg=pg,
             run_creds={
-                'access_key': 'ak',
-                'project_id': 99,
+                "access_key": "ak",
+                "project_id": 99,
             },
-            user_id_for_ak='u1',
-            org_id='o1',
+            user_id_for_ak="u1",
+            org_id="o1",
             event_callback=event_callback,
             run_started_at=0.0,
         )
 
     assert result.ssh_attached is True
     assert not any(
-        call.args[1] == 'bohrium_node'
+        call.args[1] == "bohrium_node"
         and isinstance(call.args[2], dict)
-        and call.args[2].get('status') == 'skills_synced'
+        and call.args[2].get("status") == "skills_synced"
         for call in event_callback.call_args_list
     )
 
 
-@patch.object(arb, '_run_clear_remote_proxy')
-@patch.object(arb, '_remote_session_workspace_root', return_value='/share')
-@patch('src.services.agent_run_bohrium.get_bohrium_nodes_table')
-@patch('src.services.agent_run_bohrium.get_bohrium_node_service')
+@patch.object(arb, "_run_clear_remote_proxy")
+@patch.object(arb, "_remote_session_workspace_root", return_value="/share")
+@patch("src.services.agent_run_bohrium.get_bohrium_nodes_table")
+@patch("src.services.agent_run_bohrium.get_bohrium_node_service")
 def test_setup_failure_after_open_restores_original_and_clears_runtime(
     mock_node_svc_factory: MagicMock,
     mock_nodes_table_factory: MagicMock,
@@ -218,10 +222,10 @@ def test_setup_failure_after_open_restores_original_and_clears_runtime(
     nodes_table.find_one_for_reuse.return_value = None
     nodes_table.list_node_ids_for_user_org.return_value = []
 
-    node_svc.create_node.return_value = {'node_id': 42}
+    node_svc.create_node.return_value = {"node_id": 42}
     node_svc.wait_until_ready.return_value = {
-        'ip': '10.0.0.1',
-        'password': 'secret',
+        "ip": "10.0.0.1",
+        "password": "secret",
     }
 
     original_session = MagicMock()
@@ -232,22 +236,22 @@ def test_setup_failure_after_open_restores_original_and_clears_runtime(
     mock_ssh.is_open = True
 
     def _raise_after_store(pg_obj: object, phase: str) -> None:
-        if phase == 'post_ssh':
-            raise RuntimeError('post-store failure')
+        if phase == "post_ssh":
+            raise RuntimeError("post-store failure")
 
-    with patch.object(arb, 'SSHSession', return_value=mock_ssh):
+    with patch.object(arb, "SSHSession", return_value=mock_ssh):
         mock_run_clear_remote_proxy.side_effect = _raise_after_store
         event_callback = MagicMock()
         svc = _make_bohrium_service()
         result = svc._setup_bohrium_for_run(
-            session_id='sess-fail',
+            session_id="sess-fail",
             pg=pg,
             run_creds={
-                'access_key': 'ak',
-                'project_id': 99,
+                "access_key": "ak",
+                "project_id": 99,
             },
-            user_id_for_ak='u1',
-            org_id='o1',
+            user_id_for_ak="u1",
+            org_id="o1",
             event_callback=event_callback,
             run_started_at=0.0,
         )
@@ -256,23 +260,23 @@ def test_setup_failure_after_open_restores_original_and_clears_runtime(
     assert result.abort_result is not None
     assert pg.session is original_session
     assert pg._owns_session is True
-    assert 'bohrium_runtime' not in SESSIONS.get('sess-fail', {})
+    assert "bohrium_runtime" not in SESSIONS.get("sess-fail", {})
     mock_ssh.open.assert_called_once()
     mock_ssh.close.assert_called_once()
-    mock_run_clear_remote_proxy.assert_called_once_with(pg, 'post_ssh')
+    mock_run_clear_remote_proxy.assert_called_once_with(pg, "post_ssh")
     event_callback.assert_any_call(
-        'System',
-        'bohrium_node',
+        "System",
+        "bohrium_node",
         {
-            'status': 'failed',
-            'message': 'Bohrium 节点创建失败: post-store failure',
-            'node_id': 42,
+            "status": "failed",
+            "message": "Bohrium 节点创建失败: post-store failure",
+            "node_id": 42,
         },
     )
 
 
-@patch('src.services.agent_run_bohrium.get_bohrium_nodes_table')
-@patch('src.services.agent_run_bohrium.get_bohrium_node_service')
+@patch("src.services.agent_run_bohrium.get_bohrium_nodes_table")
+@patch("src.services.agent_run_bohrium.get_bohrium_node_service")
 def test_cleanup_restores_when_ssh_attached_false(
     _mock_node_svc: MagicMock,
     _mock_nodes_table: MagicMock,
@@ -285,13 +289,13 @@ def test_cleanup_restores_when_ssh_attached_false(
 
     pg = SimpleNamespace(session=ssh_session, _owns_session=False)
 
-    SESSIONS['sess-x'] = {
-        'bohrium_runtime': {
-            'original_session': original_session,
-            'original_owns_session': True,
-            'ssh_session': ssh_session,
+    SESSIONS["sess-x"] = {
+        "bohrium_runtime": {
+            "original_session": original_session,
+            "original_owns_session": True,
+            "ssh_session": ssh_session,
         },
-        'bohrium_node_id': None,
+        "bohrium_node_id": None,
     }
 
     sessions_service = MagicMock()
@@ -300,7 +304,7 @@ def test_cleanup_restores_when_ssh_attached_false(
 
     svc = _make_bohrium_service(sessions_service)
     svc._cleanup_bohrium_after_run(
-        session_id='sess-x',
+        session_id="sess-x",
         event_callback=MagicMock(),
         pg_for_run=pg,
         ssh_attached=False,
@@ -309,7 +313,7 @@ def test_cleanup_restores_when_ssh_attached_false(
     assert pg.session is original_session
     assert pg._owns_session is True
     ssh_session.close.assert_called_once()
-    assert 'bohrium_runtime' not in SESSIONS['sess-x']
+    assert "bohrium_runtime" not in SESSIONS["sess-x"]
 
 
 def test_setup_with_required_bohrium_can_continue_after_retry_success() -> None:
@@ -320,13 +324,13 @@ def test_setup_with_required_bohrium_can_continue_after_retry_success() -> None:
         True,
         None,
         MagicMock(),
-        '/share',
-        'ssh',
+        "/share",
+        "ssh",
         None,
     )
     access_key_result = BohriumAccessKeyFetchResult(
-        status='success',
-        access_key='ak',
+        status="success",
+        access_key="ak",
         retryable=False,
         attempts=2,
     )
@@ -334,21 +338,21 @@ def test_setup_with_required_bohrium_can_continue_after_retry_success() -> None:
     with (
         patch.object(
             svc,
-            '_load_run_credentials',
-            return_value=({'project_id': 99}, 'u1', 'o1'),
+            "_load_run_credentials",
+            return_value=({"project_id": 99}, "u1", "o1"),
         ),
-        patch.object(svc, '_make_event_bridge', return_value=MagicMock()),
+        patch.object(svc, "_make_event_bridge", return_value=MagicMock()),
         patch.object(
-            svc, '_setup_bohrium_for_run', return_value=expected
+            svc, "_setup_bohrium_for_run", return_value=expected
         ) as mock_setup,
         patch(
-            'src.services.agent_run_bohrium.UserService.fetch_bohrium_access_key_result',
+            "src.services.agent_run_bohrium.UserService.fetch_bohrium_access_key_result",
             return_value=access_key_result,
         ),
     ):
         result = asyncio.run(
             svc.run_setup(
-                session_id='sess-ok',
+                session_id="sess-ok",
                 playground=MagicMock(),
                 run_started_at=1.0,
                 bohrium_required=True,
@@ -356,7 +360,7 @@ def test_setup_with_required_bohrium_can_continue_after_retry_success() -> None:
         )
 
     assert result is expected
-    assert mock_setup.call_args.kwargs['run_creds']['access_key'] == 'ak'
+    assert mock_setup.call_args.kwargs["run_creds"]["access_key"] == "ak"
 
 
 def _make_no_attach_bohrium_result() -> MagicMock:
@@ -368,11 +372,11 @@ def _make_no_attach_bohrium_result() -> MagicMock:
     r.execution_workdir = None
     r.session_type = None
     r._asdict.return_value = {
-        'ssh_attached': False,
-        'abort_result': None,
-        'execution_session': None,
-        'execution_workdir': None,
-        'session_type': None,
+        "ssh_attached": False,
+        "abort_result": None,
+        "execution_session": None,
+        "execution_workdir": None,
+        "session_type": None,
     }
     return r
 
@@ -391,8 +395,8 @@ def _provider_bundle(provider: Any) -> SimpleNamespace:
     )
 
 
-@patch('matmaster.providers.llm_factory.build_provider_bundle')
-@patch('matmaster.config.loader.load_llm_config')
+@patch("matmaster.providers.llm_factory.build_provider_bundle")
+@patch("matmaster.config.loader.load_llm_config")
 def test_run_agent_loads_exp_config_without_passing_skill_sync_to_bohrium_setup(
     mock_load_llm: MagicMock,
     mock_build_provider_bundle: MagicMock,
@@ -408,28 +412,28 @@ def test_run_agent_loads_exp_config_without_passing_skill_sync_to_bohrium_setup(
     _real_load_exp = matmaster_loader.load_exp_config
 
     def tracked_load_exp(name: str, **kwargs: Any) -> Any:
-        order.append('load_exp_config')
+        order.append("load_exp_config")
         return _real_load_exp(name, **kwargs)
 
     mock_sessions_svc = MagicMock()
-    mock_sessions_svc.get_session_user_id.return_value = 'user-123'
+    mock_sessions_svc.get_session_user_id.return_value = "user-123"
     svc = AgentRunService(sessions_service=mock_sessions_svc)
 
     mock_pg = MagicMock()
     mock_pg_env = ExecutionEnvironment(
-        workdir=tmp_path / 'workspace',
-        session_type='local',
-        cache_area=tmp_path / 'cache',
-        metadata=RunMetadata(run_dir=str(tmp_path), task_id='test-task'),
+        workdir=tmp_path / "workspace",
+        session_type="local",
+        cache_area=tmp_path / "cache",
+        metadata=RunMetadata(run_dir=str(tmp_path), task_id="test-task"),
     )
     mock_pg.prepare.return_value = mock_pg_env
-    mock_pg.config_path = Path('config/config.yaml')
+    mock_pg.config_path = Path("config/config.yaml")
     mock_pg.session = None
     captured_setup_kwargs: dict[str, Any] = {}
     mock_bohrium_result = _make_no_attach_bohrium_result()
 
     def tracked_setup(**kwargs: Any) -> MagicMock:
-        order.append('setup')
+        order.append("setup")
         captured_setup_kwargs.update(kwargs)
         return mock_bohrium_result
 
@@ -438,15 +442,15 @@ def test_run_agent_loads_exp_config_without_passing_skill_sync_to_bohrium_setup(
     mock_load_llm.return_value = MagicMock()
 
     with (
-        patch.object(svc._pg_manager, 'get_or_create', return_value=mock_pg),
+        patch.object(svc._pg_manager, "get_or_create", return_value=mock_pg),
         patch(
-            'src.services.agent_run_bohrium_stage.BohriumSetupService'
+            "src.services.agent_run_bohrium_stage.BohriumSetupService"
         ) as mock_bohrium_cls,
-        patch('src.services.agent_run_service.get_chat_events_table') as mock_events_fn,
-        patch('src.services.agent_run_service.get_redis_dao') as mock_redis_fn,
+        patch("src.services.agent_run_service.get_chat_events_table") as mock_events_fn,
+        patch("src.services.agent_run_service.get_redis_dao") as mock_redis_fn,
         patch.object(
             matmaster_loader,
-            'load_exp_config',
+            "load_exp_config",
             side_effect=tracked_load_exp,
         ),
     ):
@@ -466,22 +470,22 @@ def test_run_agent_loads_exp_config_without_passing_skill_sync_to_bohrium_setup(
 
         asyncio.run(
             svc.run_agent(
-                session_id='sess-spec-order',
-                user_prompt='prompt',
+                session_id="sess-spec-order",
+                user_prompt="prompt",
                 send_cb=AsyncMock(),
                 cancel_token=CancellationController().token,
-                mode='direct',
-                task_id='task-spec-order',
-                invocation_id='inv-spec-order',
+                mode="direct",
+                task_id="task-spec-order",
+                invocation_id="inv-spec-order",
             )
         )
 
-    assert order.index('load_exp_config') < order.index('setup')
-    assert 'skill_sync_spec' not in captured_setup_kwargs
+    assert order.index("load_exp_config") < order.index("setup")
+    assert "skill_sync_spec" not in captured_setup_kwargs
 
 
-@patch('matmaster.providers.llm_factory.build_provider_bundle')
-@patch('matmaster.config.loader.load_llm_config')
+@patch("matmaster.providers.llm_factory.build_provider_bundle")
+@patch("matmaster.config.loader.load_llm_config")
 def test_execution_binding_before_build_runtime(
     mock_load_llm: MagicMock,
     mock_build_provider_bundle: MagicMock,
@@ -494,18 +498,18 @@ def test_execution_binding_before_build_runtime(
     ).AgentRunService
 
     mock_sessions_svc = MagicMock()
-    mock_sessions_svc.get_session_user_id.return_value = 'user-123'
+    mock_sessions_svc.get_session_user_id.return_value = "user-123"
     svc = AgentRunService(sessions_service=mock_sessions_svc)
 
     mock_pg = MagicMock()
     mock_pg_env = ExecutionEnvironment(
-        workdir=tmp_path / 'workspace',
-        session_type='local',
-        cache_area=tmp_path / 'cache',
-        metadata=RunMetadata(run_dir=str(tmp_path), task_id='test-task'),
+        workdir=tmp_path / "workspace",
+        session_type="local",
+        cache_area=tmp_path / "cache",
+        metadata=RunMetadata(run_dir=str(tmp_path), task_id="test-task"),
     )
     mock_pg.prepare.return_value = mock_pg_env
-    mock_pg.config_path = Path('config/config.yaml')
+    mock_pg.config_path = Path("config/config.yaml")
     mock_pg.session = None
 
     mock_exec = MagicMock()
@@ -513,15 +517,15 @@ def test_execution_binding_before_build_runtime(
         True,
         None,
         mock_exec,
-        '/share/remote/ws',
-        'ssh',
+        "/share/remote/ws",
+        "ssh",
         BohriumRuntimeSnapshot(
-            session_type='ssh',
-            execution_workdir='/share/remote/ws',
-            remote_workspace_root='/share',
-            remote_project_root='/share/.matmaster',
+            session_type="ssh",
+            execution_workdir="/share/remote/ws",
+            remote_workspace_root="/share",
+            remote_project_root="/share/.matmaster",
             node_id=9,
-            node_ip='10.0.0.9',
+            node_ip="10.0.0.9",
             ssh_attached=True,
         ),
     )
@@ -533,16 +537,16 @@ def test_execution_binding_before_build_runtime(
     from matmaster.types.events import RunResultEvent
 
     mock_run_result_event = RunResultEvent(
-        source='MatMaster',
-        status='completed',
-        reason='natural',
+        source="MatMaster",
+        status="completed",
+        reason="natural",
     )
 
     captured_run_stream_args: dict[str, Any] = {}
 
     async def _mock_run_stream(*args, **kwargs):
-        captured_run_stream_args['ctx'] = args[0] if args else None
-        captured_run_stream_args['kwargs'] = kwargs
+        captured_run_stream_args["ctx"] = args[0] if args else None
+        captured_run_stream_args["kwargs"] = kwargs
         yield mock_run_result_event
 
     mock_exp_inst = MagicMock()
@@ -550,13 +554,13 @@ def test_execution_binding_before_build_runtime(
     mock_exp_inst._run_cleanup_callbacks = AsyncMock()
 
     with (
-        patch.object(svc._pg_manager, 'get_or_create', return_value=mock_pg),
+        patch.object(svc._pg_manager, "get_or_create", return_value=mock_pg),
         patch(
-            'src.services.agent_run_bohrium_stage.BohriumSetupService'
+            "src.services.agent_run_bohrium_stage.BohriumSetupService"
         ) as mock_bohrium_cls,
-        patch('src.services.agent_run_service.get_chat_events_table') as mock_events_fn,
-        patch('src.services.agent_run_service.get_redis_dao') as mock_redis_fn,
-        patch('matmaster.core.exp.Exp', return_value=mock_exp_inst),
+        patch("src.services.agent_run_service.get_chat_events_table") as mock_events_fn,
+        patch("src.services.agent_run_service.get_redis_dao") as mock_redis_fn,
+        patch("matmaster.core.exp.Exp", return_value=mock_exp_inst),
     ):
         mock_bohrium_svc = mock_bohrium_cls.return_value
         mock_bohrium_svc.run_setup = AsyncMock(return_value=mock_bohrium_result)
@@ -570,26 +574,26 @@ def test_execution_binding_before_build_runtime(
 
         asyncio.run(
             svc.run_agent(
-                session_id='sess-exec-bind',
-                user_prompt='prompt',
+                session_id="sess-exec-bind",
+                user_prompt="prompt",
                 send_cb=AsyncMock(),
                 cancel_token=CancellationController().token,
-                mode='direct',
-                task_id='task-exec-bind',
-                invocation_id='inv-exec-bind',
+                mode="direct",
+                task_id="task-exec-bind",
+                invocation_id="inv-exec-bind",
             )
         )
 
-    ctx_passed = captured_run_stream_args['ctx']
+    ctx_passed = captured_run_stream_args["ctx"]
     assert ctx_passed.environment.session is mock_exec
-    assert ctx_passed.environment.session_type == 'ssh'
-    assert ctx_passed.environment.execution_workdir == '/share/remote/ws'
+    assert ctx_passed.environment.session_type == "ssh"
+    assert ctx_passed.environment.execution_workdir == "/share/remote/ws"
     snapshot = ctx_passed.environment.bohrium.snapshot
     assert snapshot is not None
     assert snapshot.ssh_attached is True
-    assert snapshot.remote_workspace_root == '/share'
-    assert snapshot.remote_project_root == '/share/.matmaster'
-    assert 'bohrium' not in RunMetadata.model_fields
+    assert snapshot.remote_workspace_root == "/share"
+    assert snapshot.remote_project_root == "/share/.matmaster"
+    assert "bohrium" not in RunMetadata.model_fields
 
 
 @patch.object(arb, "_run_clear_remote_proxy", MagicMock())

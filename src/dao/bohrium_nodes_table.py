@@ -1,4 +1,4 @@
-"""Bohrium 节点复用表：按 user_id + org_id + project_id 查询/插入/更新 last_used_at。"""
+"""Bohrium 节点复用表：按 user_id + org_id + project_id + sku_id 复用节点。"""
 
 import logging
 from functools import lru_cache
@@ -12,23 +12,24 @@ logger = logging.getLogger(__name__)
 class BohriumNodesTable(BaseTable):
     """evo_bohrium_nodes：可复用节点缓存。"""
 
-    table_name = 'evo_bohrium_nodes'
+    table_name = "evo_bohrium_nodes"
 
     def find_one_for_reuse(
-        self, user_id: str, org_id: str, project_id: int
+        self, user_id: str, org_id: str, project_id: int, sku_id: int
     ) -> dict[str, Any] | None:
-        """取一条可复用的节点（同一 user/org/project），按 last_used_at 倒序取最新。"""
+        """取一条可复用的节点（同一 user/org/project/sku），按 last_used_at 倒序取最新。"""
         with self.get_connection() as conn:
             with conn.cursor() as cursor:
                 cursor.execute(
-                    f'''
-                    SELECT id, user_id, org_id, project_id, node_id, last_used_at, created_at, updated_at
+                    f"""
+                    SELECT id, user_id, org_id, project_id, sku_id, node_id,
+                           last_used_at, created_at, updated_at
                     FROM {self.table_name}
-                    WHERE user_id = %s AND org_id = %s AND project_id = %s
+                    WHERE user_id = %s AND org_id = %s AND project_id = %s AND sku_id = %s
                     ORDER BY last_used_at DESC
                     LIMIT 1
-                    ''',
-                    (user_id, org_id, project_id),
+                    """,
+                    (user_id, org_id, project_id, sku_id),
                 )
                 return cursor.fetchone()
 
@@ -37,17 +38,17 @@ class BohriumNodesTable(BaseTable):
         with self.get_connection() as conn:
             with conn.cursor() as cursor:
                 cursor.execute(
-                    f'''
+                    f"""
                     SELECT DISTINCT node_id
                     FROM {self.table_name}
                     WHERE user_id = %s AND org_id = %s
-                    ''',
+                    """,
                     (user_id, org_id),
                 )
                 rows = cursor.fetchall() or []
         out: set[int] = set()
         for row in rows:
-            node_id = row.get('node_id')
+            node_id = row.get("node_id")
             try:
                 out.add(int(node_id))
             except (TypeError, ValueError):
@@ -59,58 +60,62 @@ class BohriumNodesTable(BaseTable):
         user_id: str,
         org_id: str,
         project_id: int,
+        sku_id: int,
         node_id: int,
     ) -> bool:
         """插入一条节点记录。"""
         with self.get_connection() as conn:
             with conn.cursor() as cursor:
                 cursor.execute(
-                    f'''
+                    f"""
                     INSERT INTO {self.table_name}
-                    (user_id, org_id, project_id, node_id, last_used_at, created_at, updated_at)
-                    VALUES (%s, %s, %s, %s, NOW(), NOW(), NOW())
-                    ''',
-                    (user_id, org_id, project_id, node_id),
+                    (user_id, org_id, project_id, sku_id, node_id, last_used_at, created_at, updated_at)
+                    VALUES (%s, %s, %s, %s, %s, NOW(), NOW(), NOW())
+                    """,
+                    (user_id, org_id, project_id, sku_id, node_id),
                 )
                 conn.commit()
                 logger.info(
-                    'bohrium_nodes_table: inserted user_id=%s org_id=%s project_id=%s node_id=%s',
+                    "bohrium_nodes_table: inserted user_id=%s org_id=%s project_id=%s sku_id=%s node_id=%s",
                     user_id,
                     org_id,
                     project_id,
+                    sku_id,
                     node_id,
                 )
                 return cursor.rowcount > 0
 
     def update_last_used_at(
-        self, user_id: str, org_id: str, project_id: int, node_id: int
+        self, user_id: str, org_id: str, project_id: int, sku_id: int, node_id: int
     ) -> bool:
         """更新该节点的 last_used_at 为当前时间。"""
         with self.get_connection() as conn:
             with conn.cursor() as cursor:
                 cursor.execute(
-                    f'''
+                    f"""
                     UPDATE {self.table_name}
                     SET last_used_at = NOW(), updated_at = NOW()
-                    WHERE user_id = %s AND org_id = %s AND project_id = %s AND node_id = %s
-                    ''',
-                    (user_id, org_id, project_id, node_id),
+                    WHERE user_id = %s AND org_id = %s AND project_id = %s
+                      AND sku_id = %s AND node_id = %s
+                    """,
+                    (user_id, org_id, project_id, sku_id, node_id),
                 )
                 conn.commit()
                 return cursor.rowcount > 0
 
     def delete_by_node(
-        self, user_id: str, org_id: str, project_id: int, node_id: int
+        self, user_id: str, org_id: str, project_id: int, sku_id: int, node_id: int
     ) -> bool:
         """删除一条节点记录（节点已销毁或不可用时）。"""
         with self.get_connection() as conn:
             with conn.cursor() as cursor:
                 cursor.execute(
-                    f'''
+                    f"""
                     DELETE FROM {self.table_name}
-                    WHERE user_id = %s AND org_id = %s AND project_id = %s AND node_id = %s
-                    ''',
-                    (user_id, org_id, project_id, node_id),
+                    WHERE user_id = %s AND org_id = %s AND project_id = %s
+                      AND sku_id = %s AND node_id = %s
+                    """,
+                    (user_id, org_id, project_id, sku_id, node_id),
                 )
                 conn.commit()
                 return cursor.rowcount > 0
