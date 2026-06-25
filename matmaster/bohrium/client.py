@@ -493,6 +493,47 @@ def list_images(
     }
 
 
+def _coerce_optional_int(value: Any) -> int | None:
+    if value in (None, ""):
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _normalize_sandbox_sku(record: dict[str, Any]) -> dict[str, Any]:
+    sku_name = str(record.get("sku_name") or record.get("skuName") or "").strip()
+    entry: dict[str, Any] = {}
+    sku_id = _coerce_optional_int(record.get("sku_id") or record.get("skuId"))
+    if sku_id is not None:
+        entry["skuId"] = sku_id
+    if sku_name:
+        entry["skuEnName"] = sku_name
+        entry["skuName"] = sku_name
+
+    cpu_core_num = _coerce_optional_int(record.get("cpu") or record.get("cpuCoreNum"))
+    if cpu_core_num is not None:
+        entry["cpuCoreNum"] = cpu_core_num
+    memory = _coerce_optional_int(record.get("memory"))
+    if memory is not None:
+        entry["memory"] = memory
+
+    gpu_model = str(record.get("gpu_model") or record.get("gpu") or "").strip()
+    if gpu_model:
+        entry["gpu"] = gpu_model
+    gpu_core_num = _coerce_optional_int(
+        record.get("gpu_count") or record.get("gpuCoreNum")
+    )
+    if gpu_core_num is not None:
+        entry["gpuCoreNum"] = gpu_core_num
+
+    price = record.get("price")
+    if price not in (None, ""):
+        entry["price"] = price
+    return entry
+
+
 def list_machines(
     ctx: BohriumContext,
     *,
@@ -503,45 +544,36 @@ def list_machines(
     lowered_keyword = (keyword or "").strip().lower()
 
     if ctx.sandbox:
-        catalog = _load_sandbox_catalog()
-        sandbox_machines = (catalog.get("machines") or {}).get(machine_type) or []
-        if sandbox_machines:
-            if lowered_keyword:
-                filtered = [
-                    machine
-                    for machine in sandbox_machines
-                    if lowered_keyword
-                    in str(
-                        machine.get("skuEnName") or machine.get("skuName") or ""
-                    ).lower()
-                ]
-            else:
-                filtered = list(sandbox_machines)
-            results = filtered[:max_results]
-            return {
-                "success": True,
-                "type": machine_type,
-                "keyword": lowered_keyword,
-                "total_found": len(filtered),
-                "returned": len(results),
-                "machines": results,
-                "source": "sandbox_catalog",
-            }
-
-    data = _get(
-        ctx.credentials.base_url,
-        "/openapi/v1/calc/list",
-        ctx.credentials.access_key,
-        params={
-            "page": 1,
-            "pageSize": 512,
-            "scene": "job",
-            "isVirtualNode": "false",
-            "chooseType": machine_type,
-            "productLine": "bohrium",
-        },
-    )
-    all_machines = (data.get("data") or {}).get("items") or []
+        # Keep this in sync with scimaster-bohr-chat's pricing page:
+        # GET /openapi/launching/v2/bohr_sandbox/skus with accessKey in both
+        # query and header. The endpoint returns all CPU/GPU sandbox SKUs.
+        data = _get(
+            ctx.credentials.base_url,
+            "/openapi/launching/v2/bohr_sandbox/skus",
+            ctx.credentials.access_key,
+            params={"accessKey": ctx.credentials.access_key},
+        )
+        if data.get("code") not in (None, 0):
+            raise BohriumAPIError(f"bohr_sandbox/skus failed: {data}")
+        sku_data = data.get("data") or {}
+        raw_records = sku_data.get(machine_type) or []
+        normalized = [_normalize_sandbox_sku(record) for record in raw_records]
+        all_machines = [record for record in normalized if record]
+    else:
+        data = _get(
+            ctx.credentials.base_url,
+            "/openapi/v1/calc/list",
+            ctx.credentials.access_key,
+            params={
+                "page": 1,
+                "pageSize": 512,
+                "scene": "job",
+                "isVirtualNode": "false",
+                "chooseType": machine_type,
+                "productLine": "bohrium",
+            },
+        )
+        all_machines = (data.get("data") or {}).get("items") or []
 
     if lowered_keyword:
         filtered = [
@@ -557,6 +589,8 @@ def list_machines(
     for record in filtered[:max_results]:
         entry: dict[str, Any] = {}
         for key in (
+            "skuId",
+            "skuName",
             "skuEnName",
             "cpuCoreNum",
             "memory",
