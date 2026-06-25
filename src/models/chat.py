@@ -546,6 +546,16 @@ class ChatSendRequest(BaseModel):
         default=None,
         description="可选，Bohrium 任务提交是否需要确认；显式传入时同步写入会话级设置，并透传到本轮 job",
     )
+    bohrium_job_max_runtime_seconds: int | None = Field(
+        default=None,
+        gt=0,
+        description="可选，本轮 Bohrium job 最大运行时间（秒）；透传为 launching job/add 的 maxRunTime，未传则使用平台默认",
+    )
+    bohrium_node_sku_id: int | None = Field(
+        default=None,
+        gt=0,
+        description="可选，本轮 Bohrium 会话节点 SKU ID；透传为 node/add 与 node/restart 的 skuId，未传则使用平台默认",
+    )
     replace_last_turn: bool = Field(
         default=False,
         description="为 true 时先物理删除最后一条 User/query 及之后的所有事件，再以新 content 发送；用于编辑重发",

@@ -16,7 +16,7 @@ def _is_remote_share(path: str) -> bool:
     )
 
 
-def _normalize_local_path(raw_path: str, workdir: Path | None) -> str:
+def _normalize_path(raw_path: str, workdir: Path | None) -> str:
     stripped = raw_path.strip()
     if Path(stripped).is_absolute():
         return str(Path(stripped))
@@ -37,23 +37,38 @@ def _require_open_session(session: Any | None, raw_path: str) -> Any:
     return session
 
 
+def _reject_local_path(kind: str, raw_path: str) -> None:
+    raise BohriumPathError(
+        f"{kind} must be an absolute remote path under "
+        f"{' or '.join(REMOTE_ACCESS_ROOTS)}; relative or worker-local paths "
+        f"are not allowed here: {raw_path}"
+    )
+
+
 def resolve_input_source(
-    *, raw_path: str, workdir: Path | None, session: Any | None
+    *,
+    raw_path: str,
+    workdir: Path | None,
+    session: Any | None,
+    allow_local_paths: bool = True,
 ) -> BohriumInputSource:
-    stripped = raw_path.strip()
-    if _is_remote_share(stripped):
-        active_session = _require_open_session(session, stripped)
-        if not active_session.path_exists(stripped):
-            raise BohriumPathError(f"Remote input_dir not found: {stripped}")
-        if active_session.is_file(stripped):
-            raise BohriumPathError(f"Remote input_dir is not a directory: {stripped}")
+    normalized = _normalize_path(raw_path, workdir)
+    if _is_remote_share(normalized):
+        active_session = _require_open_session(session, normalized)
+        if not active_session.path_exists(normalized):
+            raise BohriumPathError(f"Remote input_dir not found: {normalized}")
+        if active_session.is_file(normalized):
+            raise BohriumPathError(f"Remote input_dir is not a directory: {normalized}")
         return BohriumInputSource(
             kind="remote_share_dir",
             raw_path=raw_path,
-            resolved_path=stripped,
+            resolved_path=normalized,
         )
 
-    local_path = Path(_normalize_local_path(stripped, workdir))
+    if not allow_local_paths:
+        _reject_local_path("input_dir", raw_path)
+
+    local_path = Path(normalized)
     if not local_path.exists():
         raise BohriumPathError(f"input_dir not found: {raw_path}")
     if not local_path.is_dir():
@@ -66,20 +81,27 @@ def resolve_input_source(
 
 
 def resolve_download_target(
-    *, raw_path: str, workdir: Path | None, session: Any | None
+    *,
+    raw_path: str,
+    workdir: Path | None,
+    session: Any | None,
+    allow_local_paths: bool = True,
 ) -> BohriumDownloadTarget:
-    stripped = raw_path.strip()
-    if _is_remote_share(stripped):
-        _require_open_session(session, stripped)
+    normalized = _normalize_path(raw_path, workdir)
+    if _is_remote_share(normalized):
+        _require_open_session(session, normalized)
         return BohriumDownloadTarget(
             kind="remote_share_dir",
             raw_path=raw_path,
-            resolved_path=stripped,
-            staging_dir=Path(stripped),
+            resolved_path=normalized,
+            staging_dir=Path(normalized),
             publish_mode="remote_direct",
         )
 
-    local_path = Path(_normalize_local_path(stripped, workdir))
+    if not allow_local_paths:
+        _reject_local_path("result_dir", raw_path)
+
+    local_path = Path(normalized)
     return BohriumDownloadTarget(
         kind="local_dir",
         raw_path=raw_path,

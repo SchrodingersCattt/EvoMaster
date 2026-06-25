@@ -376,12 +376,14 @@ def test_add_job_sandbox(monkeypatch: pytest.MonkeyPatch) -> None:
         machine="c32_m128_cpu",
         job_name="demo",
         disk_size=50,
+        max_runtime_seconds=7200,
         session_id="sess-123",
         round_id="inv-456",
     )
     assert calls[0]["ossPath"] == ["https://store.example.com/input.zip?token=abc"]
     assert calls[0]["projectId"] == 42
     assert calls[0]["sourceCode"] == "matmaster"
+    assert calls[0]["maxRunTime"] == 7200
     assert calls[0]["sessionId"] == "sess-123"
     assert calls[0]["roundId"] == "inv-456"
 
@@ -412,6 +414,36 @@ def test_add_job_sandbox_omits_session_round_when_absent(
     )
     assert "sessionId" not in calls[0]
     assert "roundId" not in calls[0]
+
+
+def test_add_job_non_sandbox_includes_max_runtime(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[dict] = []
+
+    def fake_post(base_url, path, access_key, payload, *, timeout=30, log_curl=False):
+        del base_url, access_key, timeout, log_curl
+        assert path == "/openapi/v2/job/add"
+        calls.append(payload)
+        return {"code": 0, "data": {"jobId": "job-2"}}
+
+    monkeypatch.setattr("matmaster.bohrium.client._post", fake_post)
+    add_job(
+        _make_ctx(sandbox=False),
+        create_data={"jobId": "create-job-id"},
+        upload=UploadedArchive(
+            oss_key="store/input.zip",
+            download_url="https://store.example.com/input.zip?token=abc",
+        ),
+        image="demo:latest",
+        cmd="python run.py",
+        machine="c32_m128_cpu",
+        job_name="demo",
+        disk_size=50,
+        max_runtime_seconds=3600,
+    )
+
+    assert calls[0]["maxRunTime"] == 3600
 
 
 class _FakeSpan:

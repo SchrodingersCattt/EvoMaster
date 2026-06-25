@@ -33,6 +33,56 @@ def test_draft_adds_defaults_and_cmd_redirect():
     assert draft.draft_issues == []
 
 
+def test_draft_hides_default_max_runtime_seconds():
+    provider = BohriumSubmitReviewProvider(default_max_runtime_seconds=7200)
+
+    draft = provider.build_review_draft(
+        {
+            "action": "submit",
+            "input_dir": "/share/c",
+            "image": "img",
+            "cmd": "python run.py",
+        }
+    )
+
+    assert draft is not None
+    assert "max_runtime_seconds" not in draft.review_draft_arguments
+    assert "max_runtime_seconds" not in draft.editable_fields
+    assert "max_runtime_seconds" not in draft.normalization_changes
+
+
+def test_explicit_max_runtime_seconds_does_not_override_default():
+    provider = BohriumSubmitReviewProvider(default_max_runtime_seconds=7200)
+
+    exec_args = provider.normalize_execution_args(
+        {
+            "action": "submit",
+            "input_dir": "/share/c",
+            "image": "i",
+            "cmd": "run",
+            "max_runtime_seconds": "3600",
+        }
+    )
+
+    assert exec_args.arguments["max_runtime_seconds"] == 7200
+    assert "max_runtime_seconds" not in exec_args.normalization_changes
+
+
+def test_explicit_max_runtime_seconds_ignored_without_default():
+    exec_args = normalize_execution_args(
+        {
+            "action": "submit",
+            "input_dir": "/share/c",
+            "image": "i",
+            "cmd": "run",
+            "max_runtime_seconds": 3600,
+        }
+    )
+
+    assert "max_runtime_seconds" not in exec_args.arguments
+    assert "max_runtime_seconds" not in exec_args.normalization_changes
+
+
 def test_draft_missing_required_keeps_issues_still_reviewable():
     draft = build_review_draft(
         {"action": "submit", "input_dir": "/share/c", "cmd": "python run.py"}
