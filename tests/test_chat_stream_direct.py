@@ -250,6 +250,7 @@ def test_prepare_send_message_persists_and_passes_submit_confirmation():
         False,
     )
 
+
 def test_prepare_send_message_uses_session_submit_confirmation_when_request_omits():
     from src.models.chat import ChatSendRequest
     from src.services.stream_service import ChatStreamService
