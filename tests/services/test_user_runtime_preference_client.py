@@ -41,6 +41,7 @@ def test_get_user_runtime_preference_combines_tools_preference_and_latest_org(
                     'last_selected_project_id': '42',
                     'last_selected_model': 'matmaster/qwen',
                     'bohrium_submit_confirmation_required': False,
+                    'bohrium_job_max_runtime_seconds': '7200',
                 },
             }
         )
@@ -56,6 +57,7 @@ def test_get_user_runtime_preference_combines_tools_preference_and_latest_org(
     assert pref.model == 'matmaster/qwen'
     assert pref.org_id == 'org-1'
     assert pref.user_bohrium_submit_confirmation_required is False
+    assert pref.bohrium_job_max_runtime_seconds == 7200
     assert fake_client.requests == [
         (
             'https://tools.example/api/v1/users/u1/runtime-preference',
@@ -85,3 +87,4 @@ def test_get_user_runtime_preference_fail_soft_when_tools_server_fails(
     assert pref.model is None
     assert pref.org_id == 'org-1'
     assert pref.user_bohrium_submit_confirmation_required is None
+    assert pref.bohrium_job_max_runtime_seconds is None
