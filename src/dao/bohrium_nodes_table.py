@@ -17,7 +17,7 @@ class BohriumNodesTable(BaseTable):
     def find_one_for_reuse(
         self, user_id: str, org_id: str, project_id: int, sku_id: int
     ) -> dict[str, Any] | None:
-        """取一条可复用的节点（同一 user/org/project/sku），按 last_used_at 倒序取最新。"""
+        """按唯一槽位读取可复用节点（同一 user/org/project/sku 最多一条）。"""
         with self.get_connection() as conn:
             with conn.cursor() as cursor:
                 cursor.execute(
@@ -26,7 +26,6 @@ class BohriumNodesTable(BaseTable):
                            last_used_at, created_at, updated_at
                     FROM {self.table_name}
                     WHERE user_id = %s AND org_id = %s AND project_id = %s AND sku_id = %s
-                    ORDER BY last_used_at DESC
                     LIMIT 1
                     """,
                     (user_id, org_id, project_id, sku_id),
@@ -63,7 +62,7 @@ class BohriumNodesTable(BaseTable):
         sku_id: int,
         node_id: int,
     ) -> bool:
-        """插入一条节点记录。"""
+        """插入或更新一个可复用节点槽位。"""
         with self.get_connection() as conn:
             with conn.cursor() as cursor:
                 cursor.execute(
@@ -71,12 +70,16 @@ class BohriumNodesTable(BaseTable):
                     INSERT INTO {self.table_name}
                     (user_id, org_id, project_id, sku_id, node_id, last_used_at, created_at, updated_at)
                     VALUES (%s, %s, %s, %s, %s, NOW(), NOW(), NOW())
+                    ON DUPLICATE KEY UPDATE
+                        node_id = VALUES(node_id),
+                        last_used_at = NOW(),
+                        updated_at = NOW()
                     """,
                     (user_id, org_id, project_id, sku_id, node_id),
                 )
                 conn.commit()
                 logger.info(
-                    "bohrium_nodes_table: inserted user_id=%s org_id=%s project_id=%s sku_id=%s node_id=%s",
+                    "bohrium_nodes_table: upserted user_id=%s org_id=%s project_id=%s sku_id=%s node_id=%s",
                     user_id,
                     org_id,
                     project_id,
