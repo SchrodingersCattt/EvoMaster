@@ -942,9 +942,7 @@ class BohriumTool(BuiltinTool):
             self._log_request_context(
                 action="list_machines",
                 ctx=ctx,
-                sandbox=bool(
-                    ctx.sandbox and payload.get("source") == "sandbox_catalog"
-                ),
+                sandbox=ctx.sandbox,
             )
 
             return ToolResult(

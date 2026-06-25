@@ -283,7 +283,33 @@ def test_list_machines_non_sandbox(monkeypatch: pytest.MonkeyPatch) -> None:
     assert get_calls[0][1]["chooseType"] == "gpu"
 
 
-def test_list_machines_sandbox_uses_catalog(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_list_machines_sandbox_uses_backend_api(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    get_calls: list[tuple[str, dict[str, object] | None]] = []
+
+    def fake_get(base_url, path, access_key, *, params=None, timeout=30):
+        del base_url, access_key, timeout
+        get_calls.append((path, params))
+        assert path == "/openapi/launching/v2/bohr_sandbox/skus"
+        return {
+            "code": 0,
+            "data": {
+                "cpu": [],
+                "gpu": [
+                    {
+                        "sku_id": 123,
+                        "sku_name": "c6_m60_1 * NVIDIA 4090",
+                        "cpu": "6",
+                        "memory": "60",
+                        "gpu_count": "1",
+                        "gpu_model": "NVIDIA 4090",
+                        "price": "0.20 RMB/h",
+                    }
+                ],
+            },
+        }
+
     monkeypatch.setattr(
         "matmaster.bohrium.client._load_sandbox_catalog",
         lambda: {
@@ -298,46 +324,6 @@ def test_list_machines_sandbox_uses_catalog(monkeypatch: pytest.MonkeyPatch) -> 
             }
         },
     )
-
-    result = list_machines(
-        _make_ctx(sandbox=True),
-        machine_type="gpu",
-        keyword="config_only",
-        max_results=10,
-    )
-
-    assert result["success"] is True
-    assert result["returned"] == 1
-    assert result["machines"][0]["skuEnName"] == "config_only_gpu"
-    assert result["source"] == "sandbox_catalog"
-
-
-def test_list_machines_sandbox_falls_back_when_catalog_empty(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    get_calls: list[tuple[str, dict[str, object] | None]] = []
-
-    def fake_get(base_url, path, access_key, *, params=None, timeout=30):
-        del base_url, access_key, timeout
-        get_calls.append((path, params))
-        assert path == "/openapi/v1/calc/list"
-        return {
-            "data": {
-                "items": [
-                    {
-                        "skuEnName": "c6_m60_1 * NVIDIA 4090",
-                        "gpu": "4090",
-                        "gpuCoreNum": 1,
-                        "hasStock": True,
-                    }
-                ]
-            }
-        }
-
-    monkeypatch.setattr(
-        "matmaster.bohrium.client._load_sandbox_catalog",
-        lambda: {"machines": {"gpu": []}},
-    )
     monkeypatch.setattr("matmaster.bohrium.client._get", fake_get)
 
     result = list_machines(
@@ -350,8 +336,63 @@ def test_list_machines_sandbox_falls_back_when_catalog_empty(
     assert result["success"] is True
     assert result["returned"] == 1
     assert result["machines"][0]["skuEnName"] == "c6_m60_1 * NVIDIA 4090"
+    assert result["machines"][0]["skuId"] == 123
+    assert result["machines"][0]["cpuCoreNum"] == 6
+    assert result["machines"][0]["memory"] == 60
+    assert result["machines"][0]["gpu"] == "NVIDIA 4090"
+    assert result["machines"][0]["gpuCoreNum"] == 1
+    assert result["machines"][0]["price"] == "0.20 RMB/h"
     assert "source" not in result or result["source"] != "sandbox_catalog"
-    assert get_calls[0][1]["chooseType"] == "gpu"
+    assert get_calls[0][1]["accessKey"] == "ak"
+
+
+def test_list_machines_sandbox_normalizes_cpu_pricing_skus(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fake_get(base_url, path, access_key, *, params=None, timeout=30):
+        del base_url, access_key, params, timeout
+        assert path == "/openapi/launching/v2/bohr_sandbox/skus"
+        return {
+            "code": 0,
+            "data": {
+                "cpu": [
+                    {
+                        "sku_id": 855,
+                        "sku_name": "c2_m4_cpu",
+                        "cpu": "2",
+                        "memory": "4",
+                        "price": "0.40 RMB/h",
+                    }
+                ],
+                "cpu_total": 1,
+                "gpu": [],
+                "gpu_total": 0,
+                "total": 1,
+            },
+        }
+
+    monkeypatch.setattr("matmaster.bohrium.client._get", fake_get)
+
+    result = list_machines(
+        _make_ctx(sandbox=True),
+        machine_type="cpu",
+        keyword="c2_m4",
+        max_results=10,
+    )
+
+    assert result["success"] is True
+    assert result["type"] == "cpu"
+    assert result["returned"] == 1
+    assert result["machines"] == [
+        {
+            "skuId": 855,
+            "skuName": "c2_m4_cpu",
+            "skuEnName": "c2_m4_cpu",
+            "cpuCoreNum": 2,
+            "memory": 4,
+            "price": "0.40 RMB/h",
+        }
+    ]
 
 
 def test_add_job_sandbox(monkeypatch: pytest.MonkeyPatch) -> None:
