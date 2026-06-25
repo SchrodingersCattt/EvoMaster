@@ -139,6 +139,84 @@ def test_successful_setup_returns_execution_binding_and_stores_runtime(
     nodes_table.find_one_for_reuse.assert_called_once_with("u1", "o1", 99, 12345)
     node_svc.create_node.assert_called_once_with("ak", 99, sku_id=12345)
     nodes_table.insert_node.assert_called_once_with("u1", "o1", 99, 12345, 42)
+    assert SESSIONS["sess-ok"]["bohrium_node_reuse_tracked"] is True
+
+
+def test_cleanup_destroys_created_node_when_reuse_table_insert_fails() -> None:
+    node_svc = MagicMock()
+    nodes_table = MagicMock()
+    nodes_table.find_one_for_reuse.return_value = None
+    nodes_table.list_node_ids_for_user_org.return_value = []
+    nodes_table.insert_node.side_effect = RuntimeError("db down")
+
+    node_svc.create_node.return_value = {"node_id": 42}
+    node_svc.wait_until_ready.return_value = {
+        "ip": "10.0.0.1",
+        "password": "secret",
+    }
+
+    original_session = MagicMock()
+    original_session.is_open = True
+    pg = _make_pg(original_session)
+    mock_ssh = MagicMock()
+    mock_ssh.is_open = True
+
+    sessions_service = MagicMock()
+    sessions_service.get_session.return_value = {
+        "user_id": "u1",
+        "org_id": "o1",
+        "project_id": 99,
+    }
+
+    with (
+        patch.object(arb, "SSHSession", return_value=mock_ssh),
+        patch.object(arb, "_run_clear_remote_proxy", MagicMock()),
+        patch.object(arb, "_remote_session_workspace_root", return_value="/share"),
+        patch(
+            "src.services.agent_run_bohrium.get_bohrium_node_service",
+            return_value=node_svc,
+        ),
+        patch(
+            "src.services.agent_run_bohrium.get_bohrium_nodes_table",
+            return_value=nodes_table,
+        ),
+        patch(
+            "src.services.agent_run_bohrium.UserService.get_bohrium_access_key",
+            return_value="ak",
+        ),
+    ):
+        svc = _make_bohrium_service(sessions_service)
+        result = svc._setup_bohrium_for_run(
+            session_id="sess-untracked",
+            pg=pg,
+            run_creds={
+                "access_key": "ak",
+                "project_id": 99,
+            },
+            user_id_for_ak="u1",
+            org_id="o1",
+            event_callback=MagicMock(),
+            run_started_at=0.0,
+            bohrium_node_sku_id=12345,
+        )
+
+        assert result.ssh_attached is True
+        assert SESSIONS["sess-untracked"]["bohrium_node_reuse_tracked"] is False
+
+        svc._cleanup_bohrium_after_run(
+            session_id="sess-untracked",
+            event_callback=MagicMock(),
+            pg_for_run=pg,
+            ssh_attached=True,
+        )
+
+    nodes_table.update_last_used_at.assert_not_called()
+    node_svc.destroy_node.assert_called_once_with(
+        "ak",
+        42,
+        99,
+        creator_id=arb._creator_id_from_user("u1"),
+    )
 
 
 @patch.object(arb, "_run_clear_remote_proxy", MagicMock())

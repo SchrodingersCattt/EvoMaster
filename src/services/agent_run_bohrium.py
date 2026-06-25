@@ -490,6 +490,7 @@ def _setup_bohrium_for_run(
     node_id: int | None = None
     node_ip = None
     node_pwd = None
+    node_reuse_tracked = False
     try:
         node_svc = get_bohrium_node_service()
         use_reuse_table = bool(user_id_for_ak and org_id)
@@ -573,6 +574,7 @@ def _setup_bohrium_for_run(
 
             if row:
                 node_id = int(row["node_id"])
+                node_reuse_tracked = True
                 node_info = node_svc.get_node_info(access_key, node_id)
                 logger.info(
                     "run_agent: node image check (ready) node_id=%s "
@@ -592,6 +594,7 @@ def _setup_bohrium_for_run(
                         )
                         _destroy_outdated_node(node_id)
                         node_id = None
+                        node_reuse_tracked = False
                         node_info = None
                     else:
                         node_ip = node_info.get("ip")
@@ -622,6 +625,7 @@ def _setup_bohrium_for_run(
                         )
                         _destroy_outdated_node(node_id)
                         node_id = None
+                        node_reuse_tracked = False
                     else:
                         try:
                             node_svc.restart_node(
@@ -659,6 +663,7 @@ def _setup_bohrium_for_run(
                                 node_id,
                             )
                             node_id = None
+                            node_reuse_tracked = False
         if node_id is None or node_ip is None:
             node_info = node_svc.create_node(
                 access_key, project_id, sku_id=effective_sku_id
@@ -683,6 +688,7 @@ def _setup_bohrium_for_run(
                             effective_sku_id,
                             node_id,
                         )
+                        node_reuse_tracked = True
                         logger.info(
                             "run_agent: inserted node into evo_bohrium_nodes "
                             "user_id=%s org_id=%s project_id=%s sku_id=%s node_id=%s",
@@ -703,6 +709,7 @@ def _setup_bohrium_for_run(
                 SESSIONS[session_id] = {}
             SESSIONS[session_id]["bohrium_node_id"] = node_id
             SESSIONS[session_id]["bohrium_node_sku_id"] = effective_sku_id
+            SESSIONS[session_id]["bohrium_node_reuse_tracked"] = node_reuse_tracked
             remote_workspace_root = _remote_session_workspace_root()
             _emit_node_status(
                 event_callback,
@@ -833,6 +840,7 @@ def _cleanup_bohrium_after_run(
     session_data = SESSIONS.get(session_id, {})
     node_id = session_data.pop("bohrium_node_id", None)
     node_sku_id = session_data.pop("bohrium_node_sku_id", None)
+    node_reuse_tracked = bool(session_data.pop("bohrium_node_reuse_tracked", False))
     row = sessions_service.get_session(session_id)
     org_id = ""
     project_id = None
@@ -851,6 +859,7 @@ def _cleanup_bohrium_after_run(
     if (
         node_id is not None
         and node_sku_id is not None
+        and node_reuse_tracked
         and user_id
         and org_id
         and project_id is not None
