@@ -19,7 +19,6 @@ EDITABLE_FIELDS = [
     "machine",
     "job_name",
     "disk_size",
-    "max_runtime_seconds",
 ]
 SUBMIT_FIELDS = [
     "action",
@@ -29,7 +28,6 @@ SUBMIT_FIELDS = [
     "machine",
     "job_name",
     "disk_size",
-    "max_runtime_seconds",
 ]
 _MAX_LEN = {
     "cmd": 8192,
@@ -104,29 +102,8 @@ def _canonicalize_submit_args(
             changes["disk_size"] = {"from": raw_disk, "to": disk_size}
         canonical["disk_size"] = disk_size
 
-    raw_max_runtime = canonical.get("max_runtime_seconds")
-    if raw_max_runtime in (None, ""):
-        if default_max_runtime_seconds is not None:
-            changes["max_runtime_seconds"] = {
-                "from": raw_max_runtime,
-                "to": default_max_runtime_seconds,
-            }
-            canonical["max_runtime_seconds"] = default_max_runtime_seconds
-    else:
-        try:
-            max_runtime_seconds = int(raw_max_runtime)
-        except (TypeError, ValueError) as exc:
-            raise SubmitReviewArgumentError(
-                "max_runtime_seconds must be an integer"
-            ) from exc
-        if max_runtime_seconds <= 0:
-            raise SubmitReviewArgumentError("max_runtime_seconds must be positive")
-        if raw_max_runtime != max_runtime_seconds:
-            changes["max_runtime_seconds"] = {
-                "from": raw_max_runtime,
-                "to": max_runtime_seconds,
-            }
-        canonical["max_runtime_seconds"] = max_runtime_seconds
+    if default_max_runtime_seconds is not None:
+        canonical["max_runtime_seconds"] = default_max_runtime_seconds
 
     cmd = canonical.get("cmd")
     if cmd:

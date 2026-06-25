@@ -257,10 +257,6 @@ class BohriumTool(BuiltinTool):
                 "type": "integer",
                 "description": "Disk size in GB. Default: 50. (submit)",
             },
-            "max_runtime_seconds": {
-                "type": "integer",
-                "description": "Maximum Bohrium job runtime in seconds. When omitted, the current run default or launching default is used. (submit)",
-            },
             # --- query ---
             "job_id": {
                 "type": ["integer", "string"],

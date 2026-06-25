@@ -109,7 +109,7 @@ def test_submit_uses_tool_default_max_runtime(tmp_path, monkeypatch):
     assert captured["max_runtime_seconds"] == 7200
 
 
-def test_submit_explicit_max_runtime_overrides_tool_default(tmp_path, monkeypatch):
+def test_submit_ignores_agent_provided_max_runtime(tmp_path, monkeypatch):
     tool = BohriumTool(workdir=tmp_path, default_max_runtime_seconds=7200)
     captured: dict[str, object] = {}
 
@@ -136,7 +136,11 @@ def test_submit_explicit_max_runtime_overrides_tool_default(tmp_path, monkeypatc
     )
 
     assert result.status == "success"
-    assert captured["max_runtime_seconds"] == 3600
+    assert captured["max_runtime_seconds"] == 7200
+
+
+def test_submit_schema_does_not_expose_max_runtime():
+    assert "max_runtime_seconds" not in BohriumTool.json_schema["properties"]
 
 
 def test_submit_optout_rejects_oversized_args_before_runtime(tmp_path, monkeypatch):
