@@ -351,6 +351,21 @@ def _run_worker_loop() -> None:
         submit_confirmation_enabled = bool(
             payload.get('bohrium_submit_confirmation_required')
         )
+        bohrium_job_max_runtime_seconds = None
+        raw_max_runtime = payload.get('bohrium_job_max_runtime_seconds')
+        if raw_max_runtime not in (None, ''):
+            try:
+                parsed_max_runtime = int(raw_max_runtime)
+                if parsed_max_runtime > 0:
+                    bohrium_job_max_runtime_seconds = parsed_max_runtime
+            except (TypeError, ValueError):
+                logger.warning(
+                    'Agent worker: ignore invalid bohrium_job_max_runtime_seconds=%r '
+                    'session_id=%s task_id=%s',
+                    raw_max_runtime,
+                    session_id,
+                    task_id,
+                )
         raw_workspace = payload.get('workspace')
         workspace = (
             raw_workspace.strip() or None if isinstance(raw_workspace, str) else None
@@ -468,6 +483,9 @@ def _run_worker_loop() -> None:
                     "turn_input": turn_input,
                     "workspace": workspace,
                     "bohrium_required": bohrium_required,
+                    "bohrium_job_max_runtime_seconds": (
+                        bohrium_job_max_runtime_seconds
+                    ),
                     "submit_confirmation_enabled": submit_confirmation_enabled,
                     "delivery_snapshot": delivery_snapshot,
                     "job_context_mode": job_context_mode,

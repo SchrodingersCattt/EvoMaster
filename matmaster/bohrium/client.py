@@ -205,6 +205,7 @@ def add_job(
     machine: str,
     job_name: str,
     disk_size: int,
+    max_runtime_seconds: int | None = None,
     session_id: str | None = None,
     round_id: str | None = None,
 ) -> dict[str, Any]:
@@ -219,6 +220,8 @@ def add_job(
             "projectId": ctx.credentials.project_id,
             "sourceCode": "matmaster",
         }
+        if max_runtime_seconds is not None:
+            payload["maxRunTime"] = max_runtime_seconds
         # sandbox job/add accepts sessionId/roundId for source attribution.
         # session_id == MatMaster session; round_id == agent run invocation_id.
         if session_id:
@@ -240,6 +243,8 @@ def add_job(
             "diskSize": disk_size,
             "logFiles": ["log"],
         }
+        if max_runtime_seconds is not None:
+            payload["maxRunTime"] = max_runtime_seconds
         path = "/openapi/v2/job/add"
     with _TRACER.start_as_current_span("bohrium.job.add") as span:
         set_log_context_attributes(span)
@@ -250,6 +255,8 @@ def add_job(
         span.set_attribute("bohrium.image", image)
         span.set_attribute("bohrium.machine", machine)
         span.set_attribute("bohrium.disk_size", disk_size)
+        if max_runtime_seconds is not None:
+            span.set_attribute("bohrium.max_runtime_seconds", max_runtime_seconds)
         created_job_id = create_data.get("jobId") or create_data.get("id")
         if created_job_id not in (None, ""):
             span.set_attribute("bohrium.created_job_id", str(created_job_id).strip())

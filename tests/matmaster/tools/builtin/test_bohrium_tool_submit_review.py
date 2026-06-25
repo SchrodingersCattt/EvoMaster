@@ -80,6 +80,65 @@ def test_submit_forwards_local_path_policy_to_runtime(tmp_path, monkeypatch):
     assert captured["allow_local_paths"] is False
 
 
+def test_submit_uses_tool_default_max_runtime(tmp_path, monkeypatch):
+    tool = BohriumTool(workdir=tmp_path, default_max_runtime_seconds=7200)
+    captured: dict[str, object] = {}
+
+    _patch_bridge(monkeypatch)
+
+    def fake_submit_job_via_runtime(**kwargs):
+        captured.update(kwargs)
+        return BohriumSubmittedJob(job_id="job-123", raw_add_response={})
+
+    monkeypatch.setattr(
+        bohrium_tool_module,
+        "submit_job_via_runtime",
+        fake_submit_job_via_runtime,
+    )
+
+    result = tool._submit(
+        {
+            "action": "submit",
+            "input_dir": "inputs",
+            "image": "test:latest",
+            "cmd": "run",
+        }
+    )
+
+    assert result.status == "success"
+    assert captured["max_runtime_seconds"] == 7200
+
+
+def test_submit_explicit_max_runtime_overrides_tool_default(tmp_path, monkeypatch):
+    tool = BohriumTool(workdir=tmp_path, default_max_runtime_seconds=7200)
+    captured: dict[str, object] = {}
+
+    _patch_bridge(monkeypatch)
+
+    def fake_submit_job_via_runtime(**kwargs):
+        captured.update(kwargs)
+        return BohriumSubmittedJob(job_id="job-123", raw_add_response={})
+
+    monkeypatch.setattr(
+        bohrium_tool_module,
+        "submit_job_via_runtime",
+        fake_submit_job_via_runtime,
+    )
+
+    result = tool._submit(
+        {
+            "action": "submit",
+            "input_dir": "inputs",
+            "image": "test:latest",
+            "cmd": "run",
+            "max_runtime_seconds": 3600,
+        }
+    )
+
+    assert result.status == "success"
+    assert captured["max_runtime_seconds"] == 3600
+
+
 def test_submit_optout_rejects_oversized_args_before_runtime(tmp_path, monkeypatch):
     tool = BohriumTool(workdir=tmp_path)
     called = False
@@ -140,10 +199,7 @@ def test_compiled_bohrium_instance_carries_provider(tmp_path):
         active_planes=frozenset(ToolPlane),
     )
 
-    instance = ToolCompiler().compile(
-        BohriumTool(workdir=tmp_path),
-        topology,
-        source="builtin",
-    )
+    tool = BohriumTool(workdir=tmp_path)
+    instance = ToolCompiler().compile(tool, topology, source="builtin")
 
-    assert instance.submit_review_provider is BohriumTool.submit_review_provider
+    assert instance.submit_review_provider is tool.submit_review_provider

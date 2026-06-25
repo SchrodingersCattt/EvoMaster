@@ -33,6 +33,59 @@ def test_draft_adds_defaults_and_cmd_redirect():
     assert draft.draft_issues == []
 
 
+def test_draft_adds_default_max_runtime_seconds():
+    provider = BohriumSubmitReviewProvider(default_max_runtime_seconds=7200)
+
+    draft = provider.build_review_draft(
+        {
+            "action": "submit",
+            "input_dir": "/share/c",
+            "image": "img",
+            "cmd": "python run.py",
+        }
+    )
+
+    assert draft is not None
+    assert draft.review_draft_arguments["max_runtime_seconds"] == 7200
+    assert draft.normalization_changes["max_runtime_seconds"] == {
+        "from": None,
+        "to": 7200,
+    }
+
+
+def test_explicit_max_runtime_seconds_overrides_default():
+    provider = BohriumSubmitReviewProvider(default_max_runtime_seconds=7200)
+
+    exec_args = provider.normalize_execution_args(
+        {
+            "action": "submit",
+            "input_dir": "/share/c",
+            "image": "i",
+            "cmd": "run",
+            "max_runtime_seconds": "3600",
+        }
+    )
+
+    assert exec_args.arguments["max_runtime_seconds"] == 3600
+    assert exec_args.normalization_changes["max_runtime_seconds"] == {
+        "from": "3600",
+        "to": 3600,
+    }
+
+
+def test_rejects_non_positive_max_runtime_seconds():
+    with pytest.raises(SubmitReviewArgumentError, match="positive"):
+        normalize_execution_args(
+            {
+                "action": "submit",
+                "input_dir": "/share/c",
+                "image": "i",
+                "cmd": "run",
+                "max_runtime_seconds": 0,
+            }
+        )
+
+
 def test_draft_missing_required_keeps_issues_still_reviewable():
     draft = build_review_draft(
         {"action": "submit", "input_dir": "/share/c", "cmd": "python run.py"}
