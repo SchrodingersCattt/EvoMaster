@@ -41,10 +41,16 @@ class _FakeConnection:
         self.committed = True
 
 
-def test_insert_node_upserts_user_org_project_sku_slot(monkeypatch):
+def _make_table(monkeypatch, conn):
+    monkeypatch.setattr(BohriumNodesTable, "init_table", lambda self: None)
     table = BohriumNodesTable()
-    conn = _FakeConnection()
     monkeypatch.setattr(table, "get_connection", lambda: conn)
+    return table
+
+
+def test_insert_node_upserts_user_org_project_sku_slot(monkeypatch):
+    conn = _FakeConnection()
+    table = _make_table(monkeypatch, conn)
 
     inserted = table.insert_node("u1", "o1", 99, 12345, 42)
 
@@ -57,9 +63,8 @@ def test_insert_node_upserts_user_org_project_sku_slot(monkeypatch):
 
 def test_find_one_for_reuse_reads_unique_slot_without_ordering(monkeypatch):
     expected = {"node_id": 42}
-    table = BohriumNodesTable()
     conn = _FakeConnection(fetchone_result=expected)
-    monkeypatch.setattr(table, "get_connection", lambda: conn)
+    table = _make_table(monkeypatch, conn)
 
     row = table.find_one_for_reuse("u1", "o1", 99, 12345)
 
