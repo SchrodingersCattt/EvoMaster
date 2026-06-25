@@ -24,6 +24,8 @@ class QuestionTag(StrEnum):
     eng_gromacs = 'eng_gromacs'
     eng_orca = 'eng_orca'
     eng_pyscf = 'eng_pyscf'
+    eng_dpgen = 'eng_dpgen'
+    eng_deepmd = 'eng_deepmd'
     # 代码库/工具链
     code_mlip = 'code_mlip'
     # 结构操作

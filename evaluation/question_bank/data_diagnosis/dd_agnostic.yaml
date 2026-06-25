@@ -1055,3 +1055,180 @@ questions:
     verify: token_budget
     weight: 0.0
     criterion: '[Must] Total token usage within 80000.'
+- id: DD_dpgen_nonconverge_001_20260623
+  capability: data_diagnosis
+  domain: agnostic
+  intent: Test whether the agent can diagnose, from the DP-GEN log pattern (a
+    persistently high failed fraction across iterations), why the active-learning run
+    fails to converge, and whether it proposes a corrected exploration/sampling
+    strategy rather than naively telling the user to run more iterations. The specific
+    expected diagnosis and remedies live in the scoring checklist, not here.
+  human_prompt_seed: '我在用 DP-GEN 做势函数主动学习训练。我定义了 5 轮 model_devi，每轮各放一个不同的初始构型去探索（5 轮 5 个构型）。
+    训练日志里每一轮的统计大致如下：
+
+    ```
+
+    iter.000000  system 000  accurate: 88.0%  candidate: 11.0%  failed: 1.0%
+
+    iter.000001  system 000  accurate:  6.2%  candidate:  3.1%  failed: 90.7%
+
+    iter.000002  system 000  accurate:  5.0%  candidate:  3.3%  failed: 91.7%
+
+    iter.000003  system 000  accurate:  5.5%  candidate:  3.8%  failed: 90.7%
+
+    ```
+
+    我的疑问是：照这个趋势，就算我把轮数加到 100 轮、每轮还是换一个全新的初始构型，最后这个势函数是不是依然不会收敛？请帮我分析根本原因，并给出正确的做法。'
+  tags:
+  - eng_dpgen
+  data_files: []
+  reference_answers:
+  - key: turn_budget
+    value:
+      max: 8
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 15000
+  scoring_checklist:
+  - id: diagnoses_config_jumping
+    criterion: Agent identifies the root cause as configuration-space jumping — each
+      iteration introduces a brand-new, unrelated configuration that has no overlap
+      with the accumulated training data, so the model can never extrapolate and the
+      failed fraction stays ~90% every round. It is NOT a transient or per-iteration
+      training problem.
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 3.0
+  - id: confirms_wont_converge_with_more_rounds
+    criterion: Agent confirms the user's intuition that simply increasing the number
+      of iterations (e.g. to 100) while still using one unrelated new configuration
+      per round will NOT lead to convergence — the model keeps chasing new regions
+      instead of consolidating coverage.
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 1.5
+  - id: correct_fix_all_configs_each_round
+    criterion: Agent proposes that all target configurations should participate in
+      every model_devi round (coverage), and/or that exploration should expand gradually
+      (e.g. progressively increasing temperature/pressure on physically related
+      configurations) rather than switching to an unrelated configuration each round.
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 2.0
+  - id: supporting_remedies
+    criterion: Agent suggests at least one additional concrete remedy, such as broadening
+      the initial training set with perturbed/AIMD structures, or adjusting model_devi_f_trust_lo/hi
+      so more frames become candidates (labeled) instead of being discarded as failed.
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 1.0
+  - id: not_just_more_rounds
+    criterion: Agent does NOT simply advise the user to run more iterations or train
+      longer without changing the exploration strategy.
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 1.5
+  - id: grounding_log
+    criterion: The diagnosis is grounded in the provided log numbers (the ~90% failed
+      fraction persisting across iter.000001-000003), not a generic DP-GEN explanation.
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+  - id: turn_budget
+    criterion: Agent completes within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
+    weight: 0.0
+  - id: duration_budget
+    criterion: Wall-clock run duration does not exceed ceiling.
+    axis: efficiency
+    verify: duration_budget
+    weight: 0.0
+  - id: token_budget_total
+    criterion: Total token usage stays within ceiling.
+    axis: efficiency
+    verify: token_budget
+    weight: 0.0
+- id: DD_dpa3_distill_oom_001_20260623
+  capability: data_diagnosis
+  domain: agnostic
+  intent: Test whether the agent can diagnose why a fine-tuned DPA-3 model runs out
+    of GPU memory when scaling MD to larger systems, reasoning from the specific
+    configuration given, and whether it proposes a viable path to enable large-system
+    MD. The specific expected root-cause analysis and remedy live in the scoring
+    checklist, not here.
+  human_prompt_seed: '我从 DPA-3 大模型微调得到了一个势函数模型，checkpoint 文件只有约 14 MB。在 50-200 原子的小体系上做
+    MD 完全正常，但一旦放到 500-5000 原子的体系上就 CUDA out of memory 跑不起来。这个模型的描述符是从大模型继承并冻结的，关键参数是
+    e_sel=1200（每个原子处理 1200 个邻居）、e_rcut=6.0 Å、repflow 架构。
+
+    我想让它能在大体系上跑 MD。请帮我分析为什么会 OOM，并给出可行的解决方案。'
+  tags:
+  - eng_dpgen
+  - eng_deepmd
+  data_files: []
+  reference_answers:
+  - key: turn_budget
+    value:
+      max: 8
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 15000
+  scoring_checklist:
+  - id: diagnoses_sel_not_params
+    criterion: Agent correctly identifies that the OOM root cause is the large neighbor
+      selection (e_sel=1200), which produces very large intermediate tensors that
+      scale with system size, NOT the model parameter count (the 14 MB checkpoint
+      is small). It explains the memory scales with number of atoms x sel.
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 3.0
+  - id: recognizes_frozen_descriptor
+    criterion: Agent recognizes that because the descriptor was inherited and frozen
+      from the large model, e_sel/a_sel cannot simply be lowered and the teacher
+      retrained in place — a new (student) model is required.
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 2.0
+  - id: proposes_distillation
+    criterion: Agent proposes knowledge distillation — training a fresh, smaller
+      student model (with a much smaller sel) on labels (energies/forces) generated
+      by the teacher — as the viable path to enable large-system MD.
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 2.0
+  - id: no_blind_dp_compress
+    criterion: Agent does NOT blindly recommend `dp compress` as the fix; if it
+      mentions compression it must note that table-based compression does not apply
+      to / is not supported for the DPA-3 repflow architecture (or otherwise flags
+      the uncertainty) rather than presenting it as a guaranteed solution.
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 2.0
+  - id: grounding_specifics
+    criterion: The analysis is grounded in the specifics given (14 MB checkpoint,
+      e_sel=1200, frozen descriptor, OOM only on large systems), not a generic
+      "model too big" answer.
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+  - id: turn_budget
+    criterion: Agent completes within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
+    weight: 0.0
+  - id: duration_budget
+    criterion: Wall-clock run duration does not exceed ceiling.
+    axis: efficiency
+    verify: duration_budget
+    weight: 0.0
+  - id: token_budget_total
+    criterion: Total token usage stays within ceiling.
+    axis: efficiency
+    verify: token_budget
+    weight: 0.0

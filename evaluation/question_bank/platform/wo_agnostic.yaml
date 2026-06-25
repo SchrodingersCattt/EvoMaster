@@ -76,7 +76,7 @@ questions:
     criterion: Agent completes within turn budget.
     axis: efficiency
     verify: turn_budget
-- id: WO_mace_001_20260513
+- id: WO_mace_001_20260616
   capability: workflow_orchestration
   domain: agnostic
   intent: Test whether agent knows MACE-MP-0 can be used directly by name via mlips
@@ -106,7 +106,7 @@ questions:
   - key: must_image_mlips
     value:
       filename: opt_submit.json
-      pattern: mlips
+      pattern: mace-mlip|dpa-calculator:mace
       flags: i
   - key: turn_budget
     value:
@@ -125,8 +125,8 @@ questions:
     axis: correctness
     verify: text_file_regex
   - id: must_image_mlips
-    criterion: '[Platform] image references the multi-family mlips image (not the
-      DPA-only image).'
+    criterion: '[Platform] image references a MACE-capable MLIP runtime image (not
+      the DPA-only image).'
     axis: correctness
     verify: text_file_regex
   - id: no_download_attempt
@@ -139,6 +139,142 @@ questions:
     criterion: Agent completes within turn budget.
     axis: efficiency
     verify: turn_budget
+- id: WO_mace_mp0_smoke_001_20260616
+  capability: workflow_orchestration
+  domain: agnostic
+  intent: Before a planned batch campaign, validate that MACE-MP-0 can run on Bohrium
+    for a small NaCl single-point calculation and produce real energy/force output.
+  human_prompt_seed: |
+    我后面准备批量用 MACE-MP-0 跑一批卤化物结构。先拿工作区里的 `nacl_bulk.cif`（NaCl 岩盐结构，64 原子超胞）做一次最小单点验证，确认 Bohrium 上的 MACE-MP-0 环境能正常算出能量和力。
+
+    要求：
+    - 提交到 Bohrium 真实运行，并在结束后下载日志和结果。
+    - 工作区里保留 `mace_mp0_smoke.py`、`mace_smoke_submit.json`、`mace_smoke.log`、`mace_smoke_result.json`。
+    - 结果 JSON 里记录模型、镜像、Bohrium job id、能量和最大力；最终回复里简要说明是否成功。如果失败，请基于真实日志说明失败原因。
+  tags:
+  - code_mlip
+  data_files:
+  - key: nacl_cif
+    path: data/WO_mace_001/nacl_bulk.cif
+    oss_url: ''
+    description: NaCl rock-salt 2x2x2 supercell (64 atoms), reused for MACE-MP-0 smoke.
+  reference_answers:
+  - key: smoke_script_artifact
+    value: mace_mp0_smoke.py
+  - key: submit_artifact
+    value: mace_smoke_submit.json
+  - key: result_artifact
+    value: mace_smoke_result.json
+  - key: log_artifact
+    value: mace_smoke.log
+  - key: script_uses_mace_mp0
+    value:
+      filename: mace_mp0_smoke.py
+      pattern: MACE-MP-0
+      flags: i
+  - key: submit_uses_mace_image
+    value:
+      filename: mace_smoke_submit.json
+      pattern: mace-mlip
+      flags: i
+  - key: submit_runs_smoke_script
+    value:
+      filename: mace_smoke_submit.json
+      pattern: mace_mp0_smoke\.py
+      flags: ''
+  - key: result_mentions_model
+    value:
+      filename: mace_smoke_result.json
+      pattern: MACE-MP-0|mace
+      flags: i
+  - key: result_has_energy_force
+    value:
+      filename: mace_smoke_result.json
+      pattern: energy|force
+      flags: i
+  - key: no_model_id_runtime_error
+    value:
+      filename: mace_smoke.log
+      pattern: unexpected keyword argument ['"]model_id['"]|unexpected keyword argument.*model_id
+      flags: i
+  - key: no_manual_mace_download
+    value:
+      filename: mace_mp0_smoke.py
+      pattern: MACE-MPA-0|mace-mpa-0|github\.com|mace-mpa-0-medium\.model
+      flags: i
+  - key: turn_budget
+    value:
+      max: 18
+  - key: duration_budget
+    value:
+      max: 1800000
+  scoring_checklist:
+  - id: smoke_script_artifact
+    criterion: Agent writes `mace_mp0_smoke.py` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: submit_artifact
+    criterion: Agent writes `mace_smoke_submit.json` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: result_artifact
+    criterion: Agent downloads or writes the real `mace_smoke_result.json` produced
+      by the Bohrium smoke run.
+    axis: correctness
+    verify: artifact_exists
+  - id: log_artifact
+    criterion: Agent downloads or writes the Bohrium runtime log `mace_smoke.log`.
+    axis: correctness
+    verify: artifact_exists
+  - id: script_uses_mace_mp0
+    criterion: '[Must] Smoke script uses MACE-MP-0 as the requested model, not a
+      different MACE checkpoint or a DPA fallback.'
+    axis: correctness
+    verify: text_file_regex
+    weight: 2.0
+  - id: submit_uses_mace_image
+    criterion: '[Platform] Submission config uses the MACE-specific MLIP runtime image.'
+    axis: correctness
+    verify: text_file_regex
+  - id: submit_runs_smoke_script
+    criterion: '[Platform] Submission config command runs `mace_mp0_smoke.py`.'
+    axis: correctness
+    verify: text_file_regex
+  - id: result_mentions_model
+    criterion: '[Must] Result artifact records that the smoke run used MACE/MACE-MP-0.'
+    axis: correctness
+    verify: text_file_regex
+  - id: result_has_energy_force
+    criterion: '[Must] Result artifact contains energy and/or force output from the
+      completed smoke calculation.'
+    axis: correctness
+    verify: text_file_regex
+  - id: bohrium_smoke_completed
+    criterion: '[Regression] Agent actually submits the MACE-MP-0 smoke to Bohrium,
+      waits for completion, downloads the result/log files, and does not merely prepare
+      a submit package.'
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 2.0
+  - id: no_model_id_runtime_error
+    criterion: '[Regression] Runtime log does NOT contain the historical MACE-MP-0
+      failure `unexpected keyword argument model_id`.'
+    axis: correctness
+    verify: text_file_regex_absent
+    weight: 2.0
+  - id: no_manual_mace_download
+    criterion: Agent does NOT switch to MACE-MPA-0 or manually download a GitHub
+      MACE model; MACE-MP-0 should be used directly as a known model name.
+    axis: grounding
+    verify: text_file_regex_absent
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock time within budget for the small Bohrium smoke run.
+    axis: efficiency
+    verify: duration_budget
 - id: PWO_elec_009_20260521
   capability: workflow_orchestration
   domain: agnostic

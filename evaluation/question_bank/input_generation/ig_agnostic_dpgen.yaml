@@ -1,0 +1,274 @@
+version: v5
+capability: input_generation
+domain: agnostic
+questions:
+- id: IG_dpgen_dargs_waterbox_001_20260616
+  capability: input_generation
+  domain: agnostic
+  intent: Generate DP-GEN param and machine JSON inputs for a water-box DeePMD/LAMMPS/VASP workflow from a short natural-language request.
+  human_prompt_seed: '用 DP-GEN 从头开发一个水盒子的力场；DeepMD 训练、LAMMPS exploration、VASP FP，路径先占位。只输出 `param_output.json` 和 `machine_output.json`。
+
+    输入文件：
+
+    - `project_note.md`: `data/IG_dpgen_dargs_waterbox_001_20260616/project_note.md`'
+  tags:
+  - code_mlip
+  - eng_lammps
+  - eng_vasp
+  data_files:
+  - key: project_note
+    path: data/IG_dpgen_dargs_waterbox_001_20260616/project_note.md
+    oss_url: ''
+    description: Water-box DP-GEN input-generation requirements.
+  reference_answers:
+  - key: param_output_artifact
+    value: param_output.json
+    workspace_resolve: root
+  - key: machine_output_artifact
+    value: machine_output.json
+    workspace_resolve: root
+  - key: param_output_dargs
+    workspace_resolve: root
+    value:
+      filename: param_output.json
+      check: schema
+      kind: param
+      strict: false
+  - key: machine_output_dargs
+    workspace_resolve: root
+    value:
+      filename: machine_output.json
+      check: runtime
+      kind: machine
+      strict: false
+  - key: param_water_vasp_lammps
+    value:
+      filename: param_output.json
+      tokens:
+      - '"type_map"'
+      - '"O"'
+      - '"H"'
+      - '"fp_style"'
+      - '"vasp"'
+      - '"model_devi_jobs"'
+      - '"numb_models"'
+      flags: is
+  - key: machine_deepmd_lammps_vasp
+    value:
+      filename: machine_output.json
+      tokens:
+      - '"train"'
+      - '"model_devi"'
+      - '"fp"'
+      - dp
+      - lmp
+      - vasp
+      flags: is
+  - key: turn_budget
+    value:
+      max: 10
+  scoring_checklist:
+  - id: param_output_artifact
+    criterion: Agent writes param_output.json at the workspace root.
+    axis: correctness
+    verify: artifact_exists
+  - id: machine_output_artifact
+    criterion: Agent writes machine_output.json at the workspace root.
+    axis: correctness
+    verify: artifact_exists
+  - id: param_output_dargs
+    criterion: param_output.json passes DP-GEN official dargs schema validation.
+    axis: correctness
+    verify: dpgen_dargs_check
+  - id: machine_output_dargs
+    criterion: machine_output.json passes DP-GEN runtime-compatible machine validation.
+    axis: correctness
+    verify: dpgen_dargs_check
+  - id: param_water_vasp_lammps
+    criterion: param_output.json encodes water elements plus DP-GEN model-deviation and VASP FP settings.
+    axis: correctness
+    verify: text_file_contains_all
+  - id: machine_deepmd_lammps_vasp
+    criterion: machine_output.json includes train, LAMMPS model-deviation, and VASP FP execution sections.
+    axis: correctness
+    verify: text_file_contains_all
+  - id: turn_budget
+    criterion: Agent completes the input generation within the turn budget.
+    axis: efficiency
+    verify: turn_budget
+- id: IG_dpgen_dargs_debug_002_20260616
+  capability: input_generation
+  domain: agnostic
+  intent: Debug and minimally repair DP-GEN param and machine JSON files (10 deliberate bugs) so both outputs pass official dargs schema validation.
+  human_prompt_seed: '这两个 DP-GEN 输入文件现在不能通过官方 dargs/schema 校验，里面各有 5 个故意埋的错误。请在不替换占位路径的前提下做最小修改，只输出修好的 `param_output.json` 和 `machine_output.json`。
+
+    输入文件：
+
+    - `param_input.json`: `data/IG_dpgen_dargs_debug_002_20260616/param_input.json`
+
+    - `machine_input.json`: `data/IG_dpgen_dargs_debug_002_20260616/machine_input.json`'
+  tags:
+  - code_mlip
+  - eng_lammps
+  - eng_vasp
+  data_files:
+  - key: param_input
+    path: data/IG_dpgen_dargs_debug_002_20260616/param_input.json
+    oss_url: ''
+    description: 'DP-GEN param input with 5 deliberate bugs: missing numb_models, type_map as flat string, sys_configs flat list (not nested), model_devi_f_trust_lo as string, mass_map items as strings.'
+  - key: machine_input
+    path: data/IG_dpgen_dargs_debug_002_20260616/machine_input.json
+    oss_url: ''
+    description: 'DP-GEN machine input with 5 deliberate bugs: group_size as string sixteen, api_version as float 1.0, fp has command_name instead of command, model_devi.command as list, train.cpu_per_node as string.'
+  reference_answers:
+  - key: param_output_artifact
+    value: param_output.json
+    workspace_resolve: root
+  - key: machine_output_artifact
+    value: machine_output.json
+    workspace_resolve: root
+  - key: param_output_dargs
+    workspace_resolve: root
+    value:
+      filename: param_output.json
+      check: schema
+      kind: param
+      strict: false
+  - key: machine_output_dargs
+    workspace_resolve: root
+    value:
+      filename: machine_output.json
+      check: runtime
+      kind: machine
+      strict: false
+  - key: param_numb_models
+    value:
+      filename: param_output.json
+      key: numb_models
+      expected: 4
+      tolerance: 0
+  - key: param_type_map_list
+    value:
+      filename: param_output.json
+      checks:
+      - key: type_map.0
+        contains: O
+      - key: type_map.1
+        contains: H
+  - key: param_mass_map_float
+    value:
+      filename: param_output.json
+      pattern: '"mass_map"\s*:\s*\[\s*15\.999\s*,\s*1\.008\s*\]'
+      flags: s
+  - key: param_trust_lo_float
+    value:
+      filename: param_output.json
+      key: model_devi_f_trust_lo
+      expected: 0.05
+      tolerance: 0.001
+  - key: machine_group_size_int
+    value:
+      filename: machine_output.json
+      key: model_devi.resources.group_size
+      expected: 16
+      tolerance: 0
+  - key: machine_api_version_str
+    value:
+      filename: machine_output.json
+      pattern: '"api_version"\s*:\s*"1\.0"'
+  - key: machine_fp_command_exists
+    value:
+      filename: machine_output.json
+      tokens:
+      - '"command"'
+      - '"vasp_std"'
+      flags: is
+  - key: machine_md_command_str
+    value:
+      filename: machine_output.json
+      tokens:
+      - lmp -in
+      - input.lammps
+      flags: is
+  - key: machine_train_cpu_int
+    value:
+      filename: machine_output.json
+      pattern: '"train"\s*:\s*\{.*"resources"\s*:\s*\{.*"cpu_per_node"\s*:\s*8\b'
+      flags: s
+  - key: placeholders_preserved
+    value:
+      filename: param_output.json
+      pattern: /path/to
+      flags: i
+  - key: turn_budget
+    value:
+      max: 12
+  scoring_checklist:
+  - id: param_output_artifact
+    criterion: Agent writes the repaired param_output.json at the workspace root.
+    axis: correctness
+    verify: artifact_exists
+  - id: machine_output_artifact
+    criterion: Agent writes the repaired machine_output.json at the workspace root.
+    axis: correctness
+    verify: artifact_exists
+  - id: param_output_dargs
+    criterion: >-
+      Repaired param_output.json passes DP-GEN official dargs schema validation
+      (catches all 5 param bugs: numb_models missing, type_map string to list,
+      sys_configs flat to nested, model_devi_f_trust_lo string to float,
+      mass_map [str] to [float]).
+    axis: correctness
+    verify: dpgen_dargs_check
+  - id: machine_output_dargs
+    criterion: >-
+      Repaired machine_output.json passes DP-GEN runtime-compatible machine validation
+      (catches all 5 machine bugs: group_size string to int, api_version float to str,
+      command_name to command, model_devi.command list to str,
+      cpu_per_node string to int).
+    axis: correctness
+    verify: dpgen_dargs_check
+  - id: param_numb_models
+    criterion: 'param_output.json includes numb_models: 4.'
+    axis: correctness
+    verify: json_file_numeric_range
+  - id: param_type_map_list
+    criterion: param_output.json has type_map as a list of elements.
+    axis: correctness
+    verify: json_file_key_values
+  - id: param_mass_map_float
+    criterion: param_output.json has mass_map as a list of floats.
+    axis: correctness
+    verify: text_file_regex
+  - id: param_trust_lo_float
+    criterion: param_output.json has model_devi_f_trust_lo as numeric 0.05.
+    axis: correctness
+    verify: json_file_numeric_range
+  - id: machine_group_size_int
+    criterion: machine_output.json has model_devi.resources.group_size as integer 16.
+    axis: correctness
+    verify: json_file_numeric_range
+  - id: machine_api_version_str
+    criterion: machine_output.json keeps api_version as string "1.0", not numeric 1.0.
+    axis: correctness
+    verify: text_file_regex
+  - id: machine_fp_command_exists
+    criterion: machine_output.json has fp.command (not command_name) set to vasp_std.
+    axis: correctness
+    verify: text_file_contains_all
+  - id: machine_md_command_str
+    criterion: machine_output.json has model_devi.command as a single string.
+    axis: correctness
+    verify: text_file_contains_all
+  - id: machine_train_cpu_int
+    criterion: machine_output.json has train.resources.cpu_per_node as integer 8.
+    axis: correctness
+    verify: text_file_regex
+  - id: placeholders_preserved
+    criterion: The repaired param keeps placeholder /path/to paths rather than inventing real local paths.
+    axis: grounding
+    verify: text_file_regex
+  - id: turn_budget
+    criterion: Agent completes the repair within the turn budget.
+    axis: efficiency
+    verify: turn_budget

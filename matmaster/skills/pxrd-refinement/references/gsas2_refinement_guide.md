@@ -312,7 +312,7 @@ In agent production runs, the scripts are executed in a Docker container via boh
 
 **Docker image:**
 ```
-registry.dp.tech/dptech/dp/native/prod-19853/xrd-app:dev-260119
+registry.dp.tech/dptech/matmaster:gsas2-slim-dev260618e
 ```
 
 GSAS-II is pre-installed in this image. The `--gsas2-path` default

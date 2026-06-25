@@ -42,7 +42,7 @@ A routing skill for composition-design workflows with explicit decision branches
    - Use the heuristic in [composition_to_structure_heuristics.md](reference/composition_to_structure_heuristics.md).
    - Generate candidate structures via `mat_struct_db_*` / `mat_sg_*` tools.
    - Ensure each structure has explicit lattice, coordinates, and atom-type mapping for downstream DPA tools.
-   - Validate each new structure using `retrieve-structure` (`assess_structure.py`).
+   - Validate each new structure using `inspect-atomic-structure`.
 
 5. **Report results**
    - Provide ranked candidate compositions and associated structures.
@@ -73,7 +73,7 @@ For the depth of literature search: keep it light when only seed data is needed;
 - Do not download/unzip/inspect `.pt`/`.zip` surrogate files with local shell before first CompDART attempt, unless CompDART returns explicit model-format incompatibility and asks for conversion.
 - Structure-generation and validation stack:
   - `mat_struct_db_*` / `mat_sg_*` for candidate structures
-  - `retrieve-structure` -> `assess_structure.py` for sanity checks
+  - `inspect-atomic-structure` for sanity checks
 
 ## Rules
 

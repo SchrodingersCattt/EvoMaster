@@ -1,6 +1,6 @@
 ---
 name: aissq-explorer
-description: "Use ONLY to search AIS Square (aissquare.com) for public MLIP checkpoints or DFT-labeled datasets when no source is given. Do NOT use for HuggingFace, figshare, GitHub, local paths, explicit URLs, or already-known models; use retrieve-structure + mlips instead."
+description: "Use ONLY to search AIS Square (aissquare.com) for public MLIP checkpoints or DFT-labeled datasets when no source is given. Do NOT use for HuggingFace, figshare, GitHub, local paths, explicit URLs, or already-known models; fetch from the stated source and use mlips instead."
 ---
 
 # aissq-explorer - MLIP Asset Discovery & Download

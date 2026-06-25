@@ -619,6 +619,8 @@ def check_text_file_contains_all_from_evidence(
         case_sensitive=case_sensitive,
         normalize_whitespace=bool(cfg.get("normalize_whitespace", True)),
         workspace_resolve=_workspace_resolve_from_ref(ref),
+        min_ratio=cfg.get("min_ratio"),
+        minimum_threshold=cfg.get("minimum_threshold"),
     )
 
 

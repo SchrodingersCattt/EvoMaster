@@ -103,8 +103,10 @@ structure.to(filename="structure.cif")
 ## Cross-Skill Refs
 
 - `inspect-atomic-structure`: mandatory validation.
-- `retrieve-structure`: known structures, molecular crystals, polyatomic ionic
-  crystals, database/DOI/SI sources, and incomplete coordinate data.
+- `mcp-mat-struct-db`: known structure lookup from database sources.
+- `inspect-atomic-structure`: validation for structures fetched from DOI/SI URLs
+  or other explicit files.
+- `operate-molecular-crystal`: molecular crystals and PBC molecule integrity.
 - `transform-atomic-structure`: supercells, strain, doping, defects.
 - `assemble-atomic-structure`: surfaces, interfaces, adsorbates, amorphous
   cells, and crosslinks.

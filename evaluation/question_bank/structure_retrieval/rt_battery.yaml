@@ -683,3 +683,208 @@ questions:
     verify: token_budget
     weight: 1.0
     criterion: '[Must] Use fewer than 80000 tokens total.'
+- id: SR_battery_na_p_o_phosphate_structures_20260614
+  capability: structure_retrieval
+  domain: battery
+  intent: Retrieve sodium phosphate material structures containing Na, P, and O for battery applications.
+  human_prompt_seed: 找一些含 Na、P、O 的磷酸盐材料结构，适合电池方向。
+  tags:
+  - meta_database
+  data_files: []
+  reference_answers:
+  - key: grounding_source
+    value: {}
+  - key: turn_budget
+    value:
+      max: 6
+  - key: duration_budget
+    value:
+      max: 180000
+  - key: token_budget_total
+    value:
+      max: 9000
+  scoring_checklist:
+  - id: grounding_source
+    criterion: The answer returns Na/P/O phosphate structure candidates relevant to battery materials and grounds formulas and source identifiers in retrieval results.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: no_retries
+    criterion: No repeated identical retrieval calls with the same parameters.
+    axis: efficiency
+    verify: no_retries
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Duration is within budget.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total tokens are within budget.
+    axis: efficiency
+    verify: token_budget
+- id: SR_battery_nfpp_sodium_cathode_cif_20260614
+  capability: structure_retrieval
+  domain: battery
+  intent: Retrieve the NFPP sodium-ion cathode crystal structure and CIF information if available.
+  human_prompt_seed: 帮我找一下 NFPP 钠电正极材料的晶体结构，最好能给 cif。
+  tags:
+  - meta_database
+  data_files: []
+  reference_answers:
+  - key: grounding_source
+    value: {}
+  - key: turn_budget
+    value:
+      max: 6
+  - key: duration_budget
+    value:
+      max: 180000
+  - key: token_budget_total
+    value:
+      max: 9000
+  scoring_checklist:
+  - id: grounding_source
+    criterion: The answer recognizes NFPP as a sodium cathode material, retrieves a plausible crystal structure, and provides CIF-access information or an honest availability note.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: no_retries
+    criterion: No repeated identical retrieval calls with the same parameters.
+    axis: efficiency
+    verify: no_retries
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Duration is within budget.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total tokens are within budget.
+    axis: efficiency
+    verify: token_budget
+- id: SR_battery_llzo_cubic_electrolyte_20260614
+  capability: structure_retrieval
+  domain: battery
+  intent: Retrieve the LLZO solid electrolyte structure, preferably the cubic phase.
+  human_prompt_seed: 我想要 LLZO 固态电解质结构，最好是立方相。
+  tags:
+  - meta_database
+  data_files: []
+  reference_answers:
+  - key: grounding_source
+    value: {}
+  - key: turn_budget
+    value:
+      max: 6
+  - key: duration_budget
+    value:
+      max: 180000
+  - key: token_budget_total
+    value:
+      max: 9000
+  scoring_checklist:
+  - id: grounding_source
+    criterion: The answer recognizes LLZO as a garnet solid electrolyte, prioritizes cubic-phase structures, and grounds formula/space-group/source information in retrieval results.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: no_retries
+    criterion: No repeated identical retrieval calls with the same parameters.
+    axis: efficiency
+    verify: no_retries
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Duration is within budget.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total tokens are within budget.
+    axis: efficiency
+    verify: token_budget
+- id: SR_battery_ncm811_cathode_structure_20260614
+  capability: structure_retrieval
+  domain: battery
+  intent: Retrieve NCM811-type layered ternary cathode material structures.
+  human_prompt_seed: 找一下 NCM811 这类三元正极材料结构。
+  tags:
+  - meta_database
+  data_files: []
+  reference_answers:
+  - key: grounding_source
+    value: {}
+  - key: turn_budget
+    value:
+      max: 6
+  - key: duration_budget
+    value:
+      max: 180000
+  - key: token_budget_total
+    value:
+      max: 9000
+  scoring_checklist:
+  - id: grounding_source
+    criterion: The answer recognizes NCM811 as a Ni-rich layered ternary cathode family and returns grounded structure candidates or explains compositional approximation uncertainty.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: no_retries
+    criterion: No repeated identical retrieval calls with the same parameters.
+    axis: efficiency
+    verify: no_retries
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Duration is within budget.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total tokens are within budget.
+    axis: efficiency
+    verify: token_budget
+- id: SR_battery_lfp_formula_uncertain_20260614
+  capability: structure_retrieval
+  domain: battery
+  intent: Retrieve the LFP battery cathode structure while resolving the likely chemical formula.
+  human_prompt_seed: 我需要 LFP 的结构，不确定具体化学式，你帮我找一下。
+  tags:
+  - meta_database
+  data_files: []
+  reference_answers:
+  - key: grounding_source
+    value: {}
+  - key: turn_budget
+    value:
+      max: 6
+  - key: duration_budget
+    value:
+      max: 180000
+  - key: token_budget_total
+    value:
+      max: 9000
+  scoring_checklist:
+  - id: grounding_source
+    criterion: The answer infers LFP as LiFePO4, retrieves grounded structure information, and clearly explains the formula resolution rather than assuming unsupported alternatives.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: no_retries
+    criterion: No repeated identical retrieval calls with the same parameters.
+    axis: efficiency
+    verify: no_retries
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Duration is within budget.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total tokens are within budget.
+    axis: efficiency
+    verify: token_budget

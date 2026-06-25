@@ -59,24 +59,44 @@ def check_text_file_contains_all(
     case_sensitive: bool = False,
     normalize_whitespace: bool = True,
     workspace_resolve: str = "recursive",
+    min_ratio: float | None = None,
+    minimum_threshold: int | None = None,
 ) -> tuple[bool, str]:
-    """Check that all tokens are present in a text file.
+    """Check that tokens are present in a text file.
 
-    If *filename* is a list, passes when ANY one file contains all tokens.
+    By default all tokens must be present. When ``min_ratio`` or
+    ``minimum_threshold`` is provided, the check passes when ANY one file
+    reaches the requested hit count. This keeps legacy exact-token checks
+    unchanged while supporting deterministic recommendation hit-rate checks.
     """
     root = Path(workspace_dir)
     filenames = [filename] if isinstance(filename, str) else filename
+    token_count = len(tokens)
+    required_hits = token_count
+    if minimum_threshold is not None:
+        required_hits = max(1, int(minimum_threshold))
+    if min_ratio is not None:
+        ratio_hits = int(token_count * float(min_ratio))
+        if token_count * float(min_ratio) > ratio_hits:
+            ratio_hits += 1
+        required_hits = max(
+            required_hits if minimum_threshold is not None else 1, ratio_hits
+        )
+    required_hits = min(required_hits, token_count)
 
     per_file_missing: dict[str, list[str]] = {}
+    per_file_hits: dict[str, int] = {}
     for fname in filenames:
         fpath = _resolve_file(root, fname, workspace_resolve=workspace_resolve)
         if fpath is None:
             per_file_missing[fname] = ["(file not found)"]
+            per_file_hits[fname] = 0
             continue
         try:
             raw = fpath.read_text(encoding="utf-8")
         except Exception as exc:
             per_file_missing[fname] = [f"(read error: {exc})"]
+            per_file_hits[fname] = 0
             continue
         haystack = _normalize(
             raw,
@@ -84,16 +104,20 @@ def check_text_file_contains_all(
             normalize_whitespace=normalize_whitespace,
         )
         missing: list[str] = []
+        hits = 0
         for token in tokens:
             needle = _normalize(
                 str(token),
                 case_sensitive=case_sensitive,
                 normalize_whitespace=normalize_whitespace,
             )
-            if needle and needle not in haystack:
+            if needle and needle in haystack:
+                hits += 1
+            elif needle:
                 missing.append(str(token))
-        if not missing:
-            return True, f"{fpath.name}: all {len(tokens)} tokens found"
+        per_file_hits[fname] = hits
+        if hits >= required_hits:
+            return True, f"{fpath.name}: {hits}/{len(tokens)} tokens found"
         per_file_missing[fname] = missing
 
     if len(filenames) == 1:
@@ -101,9 +125,16 @@ def check_text_file_contains_all(
         m = per_file_missing.get(fname, [])
         if m == ["(file not found)"]:
             return False, f"no file matching {fname!r} in {root}"
-        return False, f"{fname}: missing tokens: {m}"
-    details = "; ".join(f"{f}: missing {m}" for f, m in per_file_missing.items())
-    return False, f"no file contains all tokens — {details}"
+        hits = per_file_hits.get(fname, 0)
+        return (
+            False,
+            f"{fname}: {hits}/{len(tokens)} tokens found, need {required_hits}; missing tokens: {m}",
+        )
+    details = "; ".join(
+        f"{f}: {per_file_hits.get(f, 0)}/{len(tokens)} hits, missing {m}"
+        for f, m in per_file_missing.items()
+    )
+    return False, f"no file reaches {required_hits}/{len(tokens)} tokens — {details}"
 
 
 def check_text_file_excludes_all(

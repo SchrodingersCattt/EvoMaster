@@ -154,6 +154,7 @@ SKILL_TAG_MAP: dict[str, list[str]] = {
     "cp2k": ["eng_cp2k"],
     "gromacs": ["eng_gromacs"],
     "mlips": ["code_mlip"],
+    "dpgen": ["code_mlip"],
     "atomic-structure": [
         "struct_build",
         "struct_transform",

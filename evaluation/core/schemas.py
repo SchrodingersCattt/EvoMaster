@@ -107,6 +107,8 @@ VerifyLiteral = Literal[
     "gpumd_run_in_check",
     # GROMACS topology semantic checks
     "gromacs_top_check",
+    # DP-GEN official dargs schema checks
+    "dpgen_dargs_check",
     # CSV row count check
     "csv_row_count",
     # Tool call existence check
