@@ -12,7 +12,14 @@ DEFAULT_MACHINE = "c32_m128_cpu"
 DEFAULT_JOB_NAME = "matmaster-job"
 DEFAULT_DISK_SIZE = 50
 CMD_LOG_SUFFIX = "> log 2>&1"
-EDITABLE_FIELDS = ["input_dir", "image", "cmd", "machine", "job_name", "disk_size"]
+EDITABLE_FIELDS = [
+    "input_dir",
+    "image",
+    "cmd",
+    "machine",
+    "job_name",
+    "disk_size",
+]
 SUBMIT_FIELDS = [
     "action",
     "input_dir",
@@ -66,6 +73,9 @@ def oversized_submit_fields(args: Any) -> list[str]:
 
 def _canonicalize_submit_args(
     args: dict[str, Any],
+    *,
+    default_max_runtime_seconds: int | None = None,
+    include_runtime_policy: bool = True,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     canonical: dict[str, Any] = {key: args[key] for key in SUBMIT_FIELDS if key in args}
     changes: dict[str, Any] = {}
@@ -93,6 +103,9 @@ def _canonicalize_submit_args(
             changes["disk_size"] = {"from": raw_disk, "to": disk_size}
         canonical["disk_size"] = disk_size
 
+    if include_runtime_policy and default_max_runtime_seconds is not None:
+        canonical["max_runtime_seconds"] = default_max_runtime_seconds
+
     cmd = canonical.get("cmd")
     if cmd:
         stripped = str(cmd).rstrip()
@@ -107,7 +120,11 @@ def _canonicalize_submit_args(
     return canonical, changes
 
 
-def build_review_draft(model_args: Any) -> SubmitReviewDraft | None:
+def build_review_draft(
+    model_args: Any,
+    *,
+    default_max_runtime_seconds: int | None = None,
+) -> SubmitReviewDraft | None:
     """构造 submit_review 展示草稿；None 只表示非 submit。"""
     if not isinstance(model_args, dict) or model_args.get("action") != "submit":
         return None
@@ -118,7 +135,11 @@ def build_review_draft(model_args: Any) -> SubmitReviewDraft | None:
             f"submit argument(s) too long: {', '.join(oversized)}"
         )
 
-    canonical, changes = _canonicalize_submit_args(model_args)
+    canonical, changes = _canonicalize_submit_args(
+        model_args,
+        default_max_runtime_seconds=default_max_runtime_seconds,
+        include_runtime_policy=False,
+    )
     issues: list[dict[str, Any]] = []
     for field in ("input_dir", "image", "cmd"):
         if not model_args.get(field):
@@ -141,7 +162,11 @@ def build_review_draft(model_args: Any) -> SubmitReviewDraft | None:
     )
 
 
-def normalize_execution_args(args: Any) -> SubmitExecutionArgs:
+def normalize_execution_args(
+    args: Any,
+    *,
+    default_max_runtime_seconds: int | None = None,
+) -> SubmitExecutionArgs:
     """执行前严格、幂等、无副作用地规范化 submit 参数。"""
     oversized = oversized_submit_fields(args)
     if oversized:
@@ -149,7 +174,8 @@ def normalize_execution_args(args: Any) -> SubmitExecutionArgs:
             f"submit argument(s) too long: {', '.join(oversized)}"
         )
     canonical, changes = _canonicalize_submit_args(
-        dict(args) if isinstance(args, dict) else {}
+        dict(args) if isinstance(args, dict) else {},
+        default_max_runtime_seconds=default_max_runtime_seconds,
     )
     return SubmitExecutionArgs(arguments=canonical, normalization_changes=changes)
 
@@ -157,13 +183,22 @@ def normalize_execution_args(args: Any) -> SubmitExecutionArgs:
 class BohriumSubmitReviewProvider:
     """无状态 Bohrium submit review provider。"""
 
+    def __init__(self, *, default_max_runtime_seconds: int | None = None) -> None:
+        self._default_max_runtime_seconds = default_max_runtime_seconds
+
     def build_review_draft(
         self, model_args: dict[str, Any]
     ) -> SubmitReviewDraft | None:
-        return build_review_draft(model_args)
+        return build_review_draft(
+            model_args,
+            default_max_runtime_seconds=self._default_max_runtime_seconds,
+        )
 
     def normalize_execution_args(self, args: dict[str, Any]) -> SubmitExecutionArgs:
-        return normalize_execution_args(args)
+        return normalize_execution_args(
+            args,
+            default_max_runtime_seconds=self._default_max_runtime_seconds,
+        )
 
     def blocked_message(self, status: str) -> str:
         return _BLOCK_MESSAGES[status]

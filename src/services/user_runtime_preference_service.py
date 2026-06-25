@@ -24,6 +24,7 @@ class UserRuntimePreference:
     model: str | None = None
     org_id: str | None = None
     user_bohrium_submit_confirmation_required: bool | None = None
+    bohrium_job_max_runtime_seconds: int | None = None
 
 
 def _get_latest_org_id(
@@ -66,4 +67,5 @@ def get_user_runtime_preference(
         user_bohrium_submit_confirmation_required=(
             user_level.bohrium_submit_confirmation_required
         ),
+        bohrium_job_max_runtime_seconds=user_level.bohrium_job_max_runtime_seconds,
     )

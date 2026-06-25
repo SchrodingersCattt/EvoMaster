@@ -277,6 +277,7 @@ class ChatStreamService:
         byok_credential_id: str | None = None,
         bohrium_required: bool = False,
         bohrium_submit_confirmation_required: bool | None = None,
+        bohrium_job_max_runtime_seconds: int | None = None,
         workspace: str | None = None,
         origin: str | None = None,
         delivery: dict | None = None,
@@ -327,6 +328,7 @@ class ChatStreamService:
             'bohrium_submit_confirmation_required': (
                 bohrium_submit_confirmation_required
             ),
+            'bohrium_job_max_runtime_seconds': bohrium_job_max_runtime_seconds,
             'workspace': workspace_value,
             'origin': origin,
             'delivery': delivery,
@@ -905,6 +907,7 @@ class ChatStreamService:
             bohrium_submit_confirmation_required=(
                 effective_submit_confirmation_required
             ),
+            bohrium_job_max_runtime_seconds=req.bohrium_job_max_runtime_seconds,
             workspace=resolved_directory.remote_workdir,
             origin=None,
             delivery=None,

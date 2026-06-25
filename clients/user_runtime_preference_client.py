@@ -22,6 +22,7 @@ class UserLevelRuntimePreference:
     project_id: int | None = None
     model: str | None = None
     bohrium_submit_confirmation_required: bool | None = None
+    bohrium_job_max_runtime_seconds: int | None = None
 
 
 def _runtime_preference_url(user_id: str) -> str:
@@ -44,6 +45,16 @@ def _coerce_model(value: Any) -> str | None:
         return None
     model = str(value).strip()
     return model or None
+
+
+def _coerce_positive_int(value: Any) -> int | None:
+    if value is None or value == "":
+        return None
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return None
+    return parsed if parsed > 0 else None
 
 
 def get_user_level_runtime_preference(user_id: str) -> UserLevelRuntimePreference:
@@ -97,6 +108,9 @@ def get_user_level_runtime_preference(user_id: str) -> UserLevelRuntimePreferenc
             data.get("bohrium_submit_confirmation_required")
             if isinstance(data.get("bohrium_submit_confirmation_required"), bool)
             else None
+        ),
+        bohrium_job_max_runtime_seconds=_coerce_positive_int(
+            data.get("bohrium_job_max_runtime_seconds")
         ),
     )
 

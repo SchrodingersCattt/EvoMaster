@@ -20,6 +20,7 @@ def _make_ctx(
     execution_workdir: str | None = None,
     session_type: str = "local",
     metadata_source: str = "",
+    max_runtime_seconds: int | None = None,
 ) -> AgentRunContext:
     env_kwargs: dict = {
         "workdir": workdir,
@@ -32,7 +33,10 @@ def _make_ctx(
         env_kwargs["execution_workdir"] = execution_workdir
     return AgentRunContext(
         environment=ExecutionEnvironment(**env_kwargs),
-        request=AgentRunRequest(llm_provider=MockLLMProvider()),
+        request=AgentRunRequest(
+            llm_provider=MockLLMProvider(),
+            bohrium_job_max_runtime_seconds=max_runtime_seconds,
+        ),
     )
 
 
@@ -72,3 +76,9 @@ def test_bohrium_tool_uses_remote_workdir_for_ssh(tmp_path: Path) -> None:
 
     assert tool._allow_local_paths is False
     assert tool._workdir == Path("/share/session")
+
+
+def test_bohrium_tool_receives_run_max_runtime_default(tmp_path: Path) -> None:
+    tool = _build_bohrium_tool(_make_ctx(workdir=tmp_path, max_runtime_seconds=7200))
+
+    assert tool._default_max_runtime_seconds == 7200

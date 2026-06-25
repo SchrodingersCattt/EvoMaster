@@ -59,7 +59,6 @@ from .paths import resolve_download_target, resolve_input_source
 from .submit_review import (
     CMD_LOG_SUFFIX,
     BohriumSubmitReviewProvider,
-    normalize_execution_args,
 )
 from .transfers import (
     download_remote_results,
@@ -90,6 +89,7 @@ def submit_job_via_runtime(
     disk_size: int,
     workdir: Path,
     session,
+    max_runtime_seconds: int | None = None,
     session_id: str | None = None,
     invocation_id: str | None = None,
     allow_local_paths: bool = True,
@@ -100,6 +100,8 @@ def submit_job_via_runtime(
         span.set_attribute("bohrium.image", image)
         span.set_attribute("bohrium.machine", machine)
         span.set_attribute("bohrium.disk_size", disk_size)
+        if max_runtime_seconds is not None:
+            span.set_attribute("bohrium.max_runtime_seconds", max_runtime_seconds)
         try:
             if not cmd.rstrip().endswith(CMD_LOG_SUFFIX):
                 raise BohriumError(
@@ -129,6 +131,7 @@ def submit_job_via_runtime(
                 machine=machine,
                 job_name=job_name,
                 disk_size=disk_size,
+                max_runtime_seconds=max_runtime_seconds,
                 session_id=session_id,
                 round_id=invocation_id,
             )
@@ -319,6 +322,7 @@ class BohriumTool(BuiltinTool):
         session_id: str | None = None,
         invocation_id: str | None = None,
         allow_local_paths: bool = True,
+        default_max_runtime_seconds: int | None = None,
     ) -> None:
         super().__init__(
             session=session,
@@ -329,6 +333,10 @@ class BohriumTool(BuiltinTool):
         self._session_id = session_id
         self._invocation_id = invocation_id
         self._allow_local_paths = allow_local_paths
+        self._default_max_runtime_seconds = default_max_runtime_seconds
+        self.submit_review_provider = BohriumSubmitReviewProvider(
+            default_max_runtime_seconds=default_max_runtime_seconds
+        )
 
     # prompt() keeps workflow + cross-skill rules only. Per-software image/machine/cmd
     # belong in matmaster/skills/<name>/SKILL.md — do not paste full default tables here
@@ -502,7 +510,9 @@ class BohriumTool(BuiltinTool):
 
     def _submit(self, args: dict[str, Any]) -> ToolResult:
         try:
-            exec_args = normalize_execution_args(args).arguments
+            exec_args = self.submit_review_provider.normalize_execution_args(
+                args
+            ).arguments
         except ValueError as exc:
             return ToolResult(
                 status="error", content=f"Submit arguments rejected: {exc}"
@@ -526,6 +536,7 @@ class BohriumTool(BuiltinTool):
         machine = exec_args["machine"]
         job_name = exec_args["job_name"]
         disk_size = exec_args["disk_size"]
+        max_runtime_seconds = exec_args.get("max_runtime_seconds")
 
         ctx: BohriumContext | None = None
         try:
@@ -538,6 +549,7 @@ class BohriumTool(BuiltinTool):
                 machine=str(machine),
                 job_name=str(job_name),
                 disk_size=disk_size,
+                max_runtime_seconds=max_runtime_seconds,
                 workdir=self._workdir or Path("."),
                 session=self._session,
                 session_id=self._session_id,

@@ -752,6 +752,9 @@ class Exp:
                 session_id=ctx.environment.session_id,
                 invocation_id=ctx.request.invocation_id,
                 allow_local_paths=bohrium_allow_local_paths,
+                default_max_runtime_seconds=(
+                    ctx.request.bohrium_job_max_runtime_seconds
+                ),
             ),
         ]
 
