@@ -269,6 +269,7 @@ class AgentRunService:
         cancel_controller: CancellationController | None = None,
         submit_confirmation_enabled: bool = False,
         bohrium_job_max_runtime_seconds: int | None = None,
+        bohrium_node_sku_id: int | None = None,
     ) -> tuple[bool | tuple[bool, str], int, dict[str, Any] | None]:
         """Execute agent pipeline using generator event stream with fanout dispatch.
 
@@ -369,6 +370,7 @@ class AgentRunService:
                 run_started_at=run_started_at,
                 bohrium_required=bohrium_required,
                 workspace=workspace,
+                bohrium_node_sku_id=bohrium_node_sku_id,
             )
             bohrium_svc = stage_result.bohrium_svc
             if stage_result.abort_result is not None:

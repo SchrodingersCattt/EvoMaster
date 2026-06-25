@@ -22,6 +22,7 @@ def _run_one_round(
     origin=None,
     submit_confirmation_required=False,
     max_runtime_seconds=None,
+    node_sku_id=None,
 ):
     """注入全部外部依赖，跑一轮循环，返回 (有序调用名列表, run_agent 收到的 kwargs)。"""
     calls: list[str] = []
@@ -36,6 +37,7 @@ def _run_one_round(
         "origin": origin,
         "bohrium_submit_confirmation_required": submit_confirmation_required,
         "bohrium_job_max_runtime_seconds": max_runtime_seconds,
+        "bohrium_node_sku_id": node_sku_id,
     }
 
     fake_redis = MagicMock()
@@ -167,3 +169,14 @@ def test_bohrium_job_max_runtime_passed_to_run_agent(monkeypatch):
     )
 
     assert received["bohrium_job_max_runtime_seconds"] == 7200
+
+
+def test_bohrium_node_sku_id_passed_to_run_agent(monkeypatch):
+    _, received = _run_one_round(
+        monkeypatch,
+        snapshot_obj=object(),
+        run_result=True,
+        node_sku_id="12345",
+    )
+
+    assert received["bohrium_node_sku_id"] == 12345
