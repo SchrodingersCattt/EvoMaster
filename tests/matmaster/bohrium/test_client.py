@@ -307,7 +307,7 @@ def test_list_machines_sandbox_uses_backend_api(
                         "price": "0.20 RMB/h",
                     }
                 ],
-            }
+            },
         }
 
     monkeypatch.setattr(
