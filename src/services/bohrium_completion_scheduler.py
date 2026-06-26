@@ -138,6 +138,7 @@ class BohriumCompletionScheduler:
             "skipped_busy": 0,
             "skipped_failed": 0,
             "skipped_redis": 0,
+            "frozen": 0,
             "errors": 0,
             "tick_failed": 0,
         }
@@ -179,6 +180,11 @@ class BohriumCompletionScheduler:
                     session_id,
                     exc_info=True,
                 )
+        try:
+            summary["frozen"] = self._jobs_table.count_frozen_delivery_units()
+        except Exception:  # noqa: BLE001
+            # 观测旁路：计数失败不阻断本轮交付，也不破坏 tick 绝不抛契约
+            logger.warning("bohrium frozen unit count failed", exc_info=True)
         if summary["skipped_failed"]:
             # 停摆唯一的发现通道（run 级失败不自动重试，下一次用户交互自愈）
             logger.warning(

@@ -432,6 +432,7 @@ class BohriumJobsTable(BaseTable):
                 WHERE s.session_id = t.session_id
                   AND s.user_id    = t.user_id
                   AND s.org_id     = t.org_id
+                  AND s.status     <> 'failed'
             )
             GROUP BY t.user_id, t.org_id, t.session_id, t.workspace,
                      COALESCE(t.invocation_id, '')
@@ -467,6 +468,34 @@ class BohriumJobsTable(BaseTable):
             "max_pending_terminal_id": int(row["max_pending_terminal_id"]),
             "first_pending_terminal_at": row["first_pending_terminal_at"],
         }
+
+    def count_frozen_delivery_units(self) -> int:
+        """被冻结的交付单元数：session=failed 且仍有 pending 终态行的 distinct 单元。
+
+        scan_delivery_units 在 SQL 层排除了 failed session（3.1），其 skipped_failed
+        计数随之退化为竞态偶发；本计数是僵尸堆积的独立观测通道，与 scan 同口径
+        （distinct 五元组），frozen 持续增长即僵尸堆积信号（3.4）。
+        """
+        sql = f"""
+            SELECT COUNT(*) AS frozen FROM (
+                SELECT DISTINCT t.user_id, t.org_id, t.session_id, t.workspace,
+                       COALESCE(t.invocation_id, '') AS invocation_key
+                FROM {self.table_name} t
+                WHERE t.terminal_at IS NOT NULL AND t.handled_at IS NULL
+                  AND EXISTS (
+                      SELECT 1 FROM evo_chat_sessions s
+                      WHERE s.session_id = t.session_id
+                        AND s.user_id    = t.user_id
+                        AND s.org_id     = t.org_id
+                        AND s.status     = 'failed'
+                  )
+            ) frozen_units
+        """
+        with self.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(sql)
+                row = cur.fetchone()
+        return int(row["frozen"])
 
     def list_pending_terminal_snapshot(
         self, *, user_id: str, org_id: str, session_id: str, workspace: str

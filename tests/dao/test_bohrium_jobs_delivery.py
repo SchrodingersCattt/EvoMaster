@@ -11,8 +11,9 @@ import pytest
 
 @pytest.fixture()
 def sessions_shadow(bohrium_jobs_db_config):
-    """scan_delivery_units 的 EXISTS 谓词只点查 user_id/org_id/session_id，
-    建最小影子表足够（测试库名由 conftest 强制 *_test，DROP 安全）。"""
+    """scan_delivery_units 的 EXISTS 谓词点查 user_id/org_id/session_id/status，
+    建最小影子表足够（测试库名由 conftest 强制 *_test，DROP 安全）。
+    status 列贴近生产：VARCHAR(32) NOT NULL DEFAULT 'idle'。"""
     conn = pymysql.connect(**bohrium_jobs_db_config)
     try:
         with conn.cursor() as cur:
@@ -22,7 +23,8 @@ def sessions_shadow(bohrium_jobs_db_config):
                     `id` BIGINT AUTO_INCREMENT PRIMARY KEY,
                     `user_id` VARCHAR(255) NULL,
                     `org_id` VARCHAR(255) NULL,
-                    `session_id` VARCHAR(255) NOT NULL UNIQUE
+                    `session_id` VARCHAR(255) NOT NULL UNIQUE,
+                    `status` VARCHAR(32) NOT NULL DEFAULT 'idle'
                 )
                 """)
         conn.commit()
@@ -31,13 +33,14 @@ def sessions_shadow(bohrium_jobs_db_config):
         conn.close()
 
 
-def _register_session(conn, *, session="sess-1", user="u1", org="o1"):
+def _register_session(conn, *, session="sess-1", user="u1", org="o1", status="idle"):
     with conn.cursor() as cur:
         cur.execute(
-            "INSERT INTO evo_chat_sessions (user_id, org_id, session_id) "
-            "VALUES (%s, %s, %s) "
-            "ON DUPLICATE KEY UPDATE user_id=VALUES(user_id), org_id=VALUES(org_id)",
-            (user, org, session),
+            "INSERT INTO evo_chat_sessions (user_id, org_id, session_id, status) "
+            "VALUES (%s, %s, %s, %s) "
+            "ON DUPLICATE KEY UPDATE user_id=VALUES(user_id), "
+            "org_id=VALUES(org_id), status=VALUES(status)",
+            (user, org, session, status),
         )
     conn.commit()
 
@@ -122,6 +125,71 @@ def test_scan_excludes_owner_mismatch_rows(jobs_table, sessions_shadow):
     _seed_job(jobs_table, org="o1", job_id="101", status="finished")
 
     assert jobs_table.scan_delivery_units(limit=10) == []
+
+
+def test_scan_freezes_failed_session_units(jobs_table, sessions_shadow):
+    # session=failed → 其终态未交付单元被 EXISTS 冻结，不占 scan 名额（spec 3.1）
+    _register_session(sessions_shadow, status="failed")
+    _seed_job(jobs_table, job_id="101", status="finished")
+
+    assert jobs_table.scan_delivery_units(limit=10) == []
+
+
+@pytest.mark.parametrize("status", ["idle", "active", "waiting"])
+def test_scan_includes_non_failed_session_units(jobs_table, sessions_shadow, status):
+    # 仅冻结 failed；idle/active/waiting 照常进 scan（短暂态，run 结束即回 idle）
+    _register_session(sessions_shadow, status=status)
+    _seed_job(jobs_table, job_id="101", status="finished")
+
+    units = jobs_table.scan_delivery_units(limit=10)
+    assert [u["session_id"] for u in units] == ["sess-1"]
+
+
+def test_scan_failed_unit_reappears_after_recovery(jobs_table, sessions_shadow):
+    # failed→idle（用户交互自愈）后单元重回 scan，由 decide 补交付（spec 3.2）
+    _register_session(sessions_shadow, status="failed")
+    _seed_job(jobs_table, job_id="101", status="finished")
+    assert jobs_table.scan_delivery_units(limit=10) == []
+
+    _register_session(sessions_shadow, status="idle")
+
+    units = jobs_table.scan_delivery_units(limit=10)
+    assert [u["session_id"] for u in units] == ["sess-1"]
+
+
+def test_count_frozen_units_zero_when_no_failed_sessions(jobs_table, sessions_shadow):
+    # 只数 failed；idle session 的 pending 单元不算冻结（spec 3.4）
+    _register_session(sessions_shadow, status="idle")
+    _seed_job(jobs_table, job_id="101", status="finished")
+
+    assert jobs_table.count_frozen_delivery_units() == 0
+
+
+def test_count_frozen_units_counts_failed_pending_units(jobs_table, sessions_shadow):
+    # failed session 两个 invocation 各有 pending 终态 → 计 2 个冻结单元（按单元口径）
+    _register_session(sessions_shadow, status="failed")
+    _seed_job(jobs_table, inv="inv-1", job_id="101", status="finished")
+    _seed_job(jobs_table, inv="inv-2", job_id="201", status="finished")
+
+    assert jobs_table.count_frozen_delivery_units() == 2
+
+
+def test_count_frozen_units_excludes_fully_handled(jobs_table, sessions_shadow):
+    # failed session 但终态行已全部 ack（handled）→ 无 pending，不计冻结
+    _register_session(sessions_shadow, status="failed")
+    _seed_job(jobs_table, job_id="101", status="finished")
+    rows = jobs_table.list_pending_terminal_snapshot(
+        user_id="u1", org_id="o1", session_id="sess-1", workspace="/share/project"
+    )
+    jobs_table.mark_handled_by_ids(
+        user_id="u1",
+        org_id="o1",
+        session_id="sess-1",
+        workspace="/share/project",
+        row_ids=[r["id"] for r in rows],
+    )
+
+    assert jobs_table.count_frozen_delivery_units() == 0
 
 
 def test_scan_orders_oldest_pending_first_and_limits(jobs_table, sessions_shadow):

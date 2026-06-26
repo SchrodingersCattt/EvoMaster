@@ -169,16 +169,20 @@ def test_reason_priority_order_for_session_merge():
 
 
 class _FakeJobsTable:
-    """只实现 scheduler 用到的两个读方法；任何写方法被调用都会 AttributeError，
+    """只实现 scheduler 用到的读方法；任何写方法被调用都会 AttributeError，
     这本身就是「enqueued 后不写任何持久状态」的守护。"""
 
-    def __init__(self, units=()):
+    def __init__(self, units=(), frozen=0):
         self.units = list(units)
         self.scan_limits: list[int] = []
+        self.frozen = frozen
 
     def scan_delivery_units(self, *, limit):
         self.scan_limits.append(limit)
         return list(self.units)
+
+    def count_frozen_delivery_units(self):
+        return self.frozen
 
 
 class _FakeSessions:
@@ -395,6 +399,17 @@ def test_tick_status_gate_failed_counts_and_warns_with_session_list(caplog):
     # 停摆唯一的发现通道：WARN + session 清单
     warn = [r for r in caplog.records if "stalled" in r.getMessage()]
     assert warn and "s1" in warn[0].getMessage()
+
+
+def test_tick_reports_frozen_count():
+    # frozen（被冻结的 failed 僵尸单元数）写入 summary，供 monitor 日志输出（spec 3.4）
+    units = [_unit(active=0, pending_terminal=1)]
+    table = _FakeJobsTable(units, frozen=7)
+    sched, _, _, _, _ = _scheduler(units, table=table)
+
+    summary = sched.tick()
+
+    assert summary["frozen"] == 7
 
 
 def test_tick_nx_false_skips_as_busy():
