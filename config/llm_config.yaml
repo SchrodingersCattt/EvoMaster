@@ -43,8 +43,8 @@ profiles:
     provider: litellm-qwen
     model: matmaster/qwen3.7-max
     reasoning_effort: high
-    context_limit: 3000000
-    supports_vision: true
+    context_limit: 300000
+    supports_vision: false
     timeout: 1200
     stream_timeout: 120
     stream_idle_timeout: 60
