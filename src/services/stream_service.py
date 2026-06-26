@@ -24,6 +24,11 @@ from src.services.llm_profile_validation import (
     resolve_trigger_model_profile,
     validate_platform_model_profile,
 )
+from src.services.run_interruption import (
+    build_run_interrupted_history_content,
+    build_run_interrupted_message,
+    build_run_interrupted_meta,
+)
 from src.services.session_directory_service import (
     SessionDirectoryResolver,
     normalize_remote_workspace_path,
@@ -234,14 +239,6 @@ class ChatStreamService:
             "content": "",
             "session_id": session_id,
         }
-
-    @staticmethod
-    def _build_run_interrupted_message(reason: str) -> str:
-        if reason == "restart":
-            return "上一轮任务因服务重启中断，请重新发送以继续。"
-        if reason == "deploy":
-            return "上一轮任务因服务升级中断，请重新发送以继续。"
-        return "上一轮任务因服务部署/重启中断，请重新发送以继续。"
 
     def _get_pre_turn_history_event_id(self, session_id: str) -> int | None:
         try:
@@ -619,18 +616,10 @@ class ChatStreamService:
                 previous_version,
                 current_version,
             )
-            run_interrupted_content = self._build_run_interrupted_message(reason)
+            run_interrupted_content = build_run_interrupted_message(reason)
             last_user_content = (last_query or {}).get("content", "")
             # 共享的可选元数据字段，SSE payload 和入库内容都需要
-            _meta: dict = {}
-            if current_version:
-                _meta["current_version"] = current_version
-            if previous_version:
-                _meta["previous_version"] = previous_version
-            if reason_meta.get("note"):
-                _meta["reason_note"] = reason_meta["note"]
-            if reason in ("restart", "deploy"):
-                _meta["treat_as_failure"] = True
+            _meta = build_run_interrupted_meta(reason, reason_meta)
             run_interrupted_payload = {
                 "source": "System",
                 "type": "run_interrupted",
@@ -643,12 +632,11 @@ class ChatStreamService:
             yield self.sse_format(run_interrupted_payload)
             # 入库，便于历史/导出（如 CSV）中有重启记录；task_id 指向被中断的那一轮
             interrupted_task_id = payload.get("last_task_id")
-            history_content = {
-                "message": run_interrupted_content,
-                "reason": reason,
-                "last_user_content": last_user_content,
-                **_meta,
-            }
+            history_content = build_run_interrupted_history_content(
+                reason=reason,
+                reason_meta=reason_meta,
+                last_user_content=last_user_content,
+            )
             self._events_service.add_history_event(
                 sid,
                 {

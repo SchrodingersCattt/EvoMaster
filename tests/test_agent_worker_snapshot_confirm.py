@@ -60,6 +60,7 @@ def _run_one_round(
     async def fake_run_agent(**kwargs):
         calls.append("run_agent")
         received.update(kwargs)
+        agent_worker._drain_requested = True
         if run_agent_exc is not None:
             raise run_agent_exc
         return (run_result, 5, None)
@@ -91,7 +92,7 @@ def _run_one_round(
     monkeypatch.setattr(agent_worker, "UserService", fake_user_service)
     monkeypatch.setattr(agent_worker, "get_worker_registry_service", MagicMock())
     monkeypatch.setattr(agent_worker, "notify_post_async", lambda *a, **k: None)
-    monkeypatch.setattr(agent_worker, "_drain_requested", True)
+    monkeypatch.setattr(agent_worker, "_drain_requested", False)
 
     agent_worker._run_worker_loop()
     return calls, received

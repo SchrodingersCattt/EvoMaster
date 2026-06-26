@@ -333,6 +333,35 @@ class ChatSessionsTable(BaseTable):
             logger.error(f"设置会话 status 失败: {e}")
             return False
 
+    def set_session_status_if_current(
+        self, session_id: str, *, current_status: str, new_status: str
+    ) -> bool:
+        """仅当当前 status 仍为预期值时更新状态，用于跨进程修复前后的竞态保护。"""
+        try:
+            with self.get_connection() as conn:
+                with conn.cursor() as cursor:
+                    cursor.execute(
+                        f"""
+                        UPDATE {self.table_name}
+                        SET status = %s, updated_at = NOW()
+                        WHERE session_id = %s
+                          AND status = %s
+                          AND deleted_at IS NULL
+                        """,
+                        (new_status, session_id, current_status),
+                    )
+                    conn.commit()
+                    return cursor.rowcount > 0
+        except Error as e:
+            logger.error(
+                "conditional session status update failed session_id=%s %s->%s: %s",
+                session_id,
+                current_status,
+                new_status,
+                e,
+            )
+            return False
+
     def set_session_last_task(self, session_id: str, task_id: str) -> bool:
         """设置会话的最后一个 task_id"""
         with self.get_connection() as conn:
@@ -603,6 +632,33 @@ class ChatSessionsTable(BaseTable):
                     ORDER BY updated_at DESC
                 """
                 cursor.execute(sql, tuple(params))
+                return list(cursor.fetchall() or [])
+
+    def list_stale_reconcile_candidates(
+        self, *, limit: int, min_age_seconds: int
+    ) -> list[dict[str, Any]]:
+        """返回足够久未更新的 active/waiting 会话，供 monitor 复核 Redis 后修复。"""
+        safe_limit = max(1, min(1000, int(limit or 100)))
+        safe_age = max(0, int(min_age_seconds or 0))
+        with self.get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    f"""
+                    SELECT session_id,
+                           user_id,
+                           project_id,
+                           status,
+                           last_task_id,
+                           updated_at
+                    FROM {self.table_name}
+                    WHERE status IN ('active', 'waiting')
+                      AND deleted_at IS NULL
+                      AND updated_at <= DATE_SUB(NOW(), INTERVAL %s SECOND)
+                    ORDER BY updated_at ASC, session_id ASC
+                    LIMIT %s
+                    """,
+                    (safe_age, safe_limit),
+                )
                 return list(cursor.fetchall() or [])
 
     def reset_all_active_to_idle(self) -> int:
