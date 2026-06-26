@@ -518,6 +518,17 @@ class RedisDao:
             return None
         return bool(result)
 
+    def release_reservation(self, key: str, value: str) -> bool:
+        """compare-and-delete：仅当前 key 值仍等于 value 时释放占位/锁。"""
+        client = self.get_command_client()
+        if not client:
+            return False
+        try:
+            return bool(client.eval(_RELEASE_ACTIVE_LUA, 1, key, value))
+        except Exception as e:
+            logger.warning("Redis release_reservation failed key=%s: %s", key, e)
+            return False
+
     def delete_session_run_queued(self, session_id: str) -> None:
         """Worker try_acquire 时删除，表示已接手。"""
         client = self.get_command_client()
