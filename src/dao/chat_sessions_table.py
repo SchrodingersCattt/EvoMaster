@@ -578,6 +578,41 @@ class ChatSessionsTable(BaseTable):
                 rows = cursor.fetchall()
                 return [str(r["session_id"]) for r in rows if r.get("session_id")]
 
+    def list_runtime_sessions(self, user_id: str | None = None) -> list[dict[str, Any]]:
+        """返回当前仍标记为运行/排队的未删除会话，可按用户过滤，用于 Redis 运行态复核。"""
+        uid = (user_id or "").strip() if user_id is not None else None
+        with self.get_connection() as conn:
+            with conn.cursor() as cursor:
+                where_clauses = [
+                    "status IN ('active', 'waiting')",
+                    "deleted_at IS NULL",
+                ]
+                params: list[object] = []
+                if uid:
+                    where_clauses.append("user_id = %s")
+                    params.append(uid)
+                where_sql = " AND ".join(where_clauses)
+                sql = f"""
+                    SELECT session_id,
+                           user_id,
+                           project_id,
+                           status,
+                           session_title,
+                           (SELECT e2.content
+                            FROM evo_chat_events e2
+                            WHERE e2.session_id = {self.table_name}.session_id
+                              AND e2.source = 'User'
+                              AND e2.type = 'query'
+                            ORDER BY e2.created_at ASC
+                            LIMIT 1) as first_message,
+                           updated_at
+                    FROM {self.table_name}
+                    WHERE {where_sql}
+                    ORDER BY updated_at DESC
+                """
+                cursor.execute(sql, tuple(params))
+                return list(cursor.fetchall() or [])
+
     def reset_all_active_to_idle(self) -> int:
         """
         将当前所有 status='active' 的会话重置为 'idle'。

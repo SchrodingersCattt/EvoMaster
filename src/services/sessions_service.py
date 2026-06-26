@@ -46,6 +46,23 @@ def _decode_session_list_cursor(token: str) -> tuple[datetime, str] | None:
         return None
 
 
+def _runtime_session_title(row: dict) -> str | None:
+    """运行态管理列表标题：优先 session_title，缺失时回退首条用户消息。"""
+    title = str(row.get("session_title") or "").strip()
+    if title:
+        return title
+    first_message = row.get("first_message")
+    if first_message is None:
+        return None
+    try:
+        parsed = json.loads(first_message)
+        if isinstance(parsed, str):
+            return parsed.strip() or None
+        return str(parsed).strip() or None
+    except (json.JSONDecodeError, TypeError):
+        return str(first_message).strip() or None
+
+
 class RedisStopSubscriber:
     """Redis 停止订阅：在独立线程中监听 channel。run 仅在 Worker 上，停止由 Worker 轮询 Redis stop key 处理，API 收到消息无需动作，仅保留订阅以维持连接。"""
 
@@ -633,6 +650,98 @@ class ChatSessionsService:
     def set_session_status(self, session_id: str, status: str) -> bool:
         """设置会话状态（idle=空闲, active=运行中, waiting=已入队等待 worker 接手）。供入队等逻辑使用。"""
         return self.table.set_session_status(session_id.strip(), status)
+
+    def _build_user_run_status(self, user_id: str, rows: list[dict]) -> dict:
+        """将某用户的 DB 候选会话复核为真实 running/queued/stale 运行态。"""
+        running_sessions: list[dict] = []
+        queued_sessions: list[dict] = []
+        stale_sessions: list[dict] = []
+        registry = get_worker_registry_service()
+
+        def _item(row: dict, *, worker_id: str | None = None) -> dict:
+            updated_at = row.get("updated_at")
+            item = {
+                "session_id": str(row.get("session_id") or ""),
+                "project_id": row.get("project_id"),
+                "status": row.get("status") or None,
+                "title": _runtime_session_title(row),
+                "worker_id": worker_id,
+            }
+            if updated_at is not None:
+                item["updated_at"] = int(updated_at.timestamp() * 1000)
+            return item
+
+        for row in rows:
+            sid = str(row.get("session_id") or "").strip()
+            status = str(row.get("status") or "").strip()
+            if not sid:
+                continue
+            if status == "active":
+                owner = registry.get_session_run_owner(sid) if REDIS_URL else None
+                if owner and registry.is_worker_alive(owner):
+                    running_sessions.append(_item(row, worker_id=owner))
+                else:
+                    stale_sessions.append(_item(row, worker_id=owner))
+                continue
+            if status == "waiting":
+                if REDIS_URL and get_redis_dao().is_session_run_queued(sid):
+                    queued_sessions.append(_item(row))
+                else:
+                    stale_sessions.append(_item(row))
+
+        return {
+            "user_id": user_id,
+            "redis_enabled": bool(REDIS_URL),
+            "running_count": len(running_sessions),
+            "queued_count": len(queued_sessions),
+            "stale_count": len(stale_sessions),
+            "running_sessions": running_sessions,
+            "queued_sessions": queued_sessions,
+            "stale_sessions": stale_sessions,
+        }
+
+    def list_user_run_statuses(
+        self,
+        *,
+        user_id: str | None = None,
+        page: int = 1,
+        page_size: int = 20,
+    ) -> dict:
+        """分页列出当前有运行态候选会话的用户，可按 user_id 精确筛选。"""
+        uid = (user_id or "").strip() or None
+        rows = self.table.list_runtime_sessions(uid)
+        grouped: dict[str, list[dict]] = {}
+        for row in rows:
+            row_uid = str(row.get("user_id") or "").strip()
+            if row_uid:
+                grouped.setdefault(row_uid, []).append(row)
+
+        items = []
+        for row_uid, user_rows in grouped.items():
+            status = self._build_user_run_status(row_uid, user_rows)
+            latest_updated_at = max(
+                (
+                    int(row["updated_at"].timestamp() * 1000)
+                    for row in user_rows
+                    if row.get("updated_at") is not None
+                ),
+                default=None,
+            )
+            status["latest_updated_at"] = latest_updated_at
+            items.append(status)
+
+        items.sort(key=lambda item: item.get("latest_updated_at") or 0, reverse=True)
+        safe_page = max(1, int(page or 1))
+        safe_page_size = max(1, min(100, int(page_size or 20)))
+        start = (safe_page - 1) * safe_page_size
+        end = start + safe_page_size
+        return {
+            "items": items[start:end],
+            "total": len(items),
+            "page": safe_page,
+            "page_size": safe_page_size,
+            "redis_enabled": bool(REDIS_URL),
+        }
 
     def discard_session_run_from_this_pod(self, session_id: str) -> None:
         """仅从本进程 _sessions_in_run 移除，不改 DB 与 Redis run_owner。
