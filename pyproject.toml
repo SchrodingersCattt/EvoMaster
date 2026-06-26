@@ -57,7 +57,7 @@ calculation = [
     "dpdata>=0.2.18",
     "dpgen==0.13.3",
     "cp2k-input-tools>=0.9.0",
-    "molcrys-kit",
+    "molcrys-kit>=0.5.1,<0.6",
     "mace-torch>=0.3.0",
     # DeepMD 栈及常见传递依赖（版本锁定便于复现；不含 pip）
     "array-api-compat==1.14.0",
