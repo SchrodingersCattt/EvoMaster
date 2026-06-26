@@ -177,6 +177,7 @@ class TestAgentWorkerCancellationIntegration:
         with (
             patch.object(mod, "_drain_requested", True),
             patch.object(mod, "get_redis_dao", return_value=redis_dao),
+            patch.object(mod, "get_sessions_service", return_value=MagicMock()),
             patch.object(mod, "get_agent_run_service", return_value=agent_run_service),
         ):
             mod._run_worker_loop()
