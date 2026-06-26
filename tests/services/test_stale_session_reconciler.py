@@ -25,9 +25,10 @@ class _FakeTable:
 
 
 class _FakeRedis:
-    def __init__(self, *, reserve=True, queued=None):
+    def __init__(self, *, reserve=True, queued=None, queued_unknown=None):
         self.reserve = reserve
         self.queued = set(queued or [])
+        self.queued_unknown = set(queued_unknown or [])
         self.released: list[tuple[str, str]] = []
 
     def try_reserve_nx(self, key, value, ttl_sec):
@@ -38,20 +39,30 @@ class _FakeRedis:
         self.released.append((key, value))
         return True
 
-    def is_session_run_queued(self, session_id):
+    def get_session_run_queued_state(self, session_id):
+        if session_id in self.queued_unknown:
+            return None
         return session_id in self.queued
 
 
 class _FakeRegistry:
-    def __init__(self, *, owners=None, alive=None):
+    def __init__(
+        self, *, owners=None, alive=None, owner_unknown=None, alive_unknown=None
+    ):
         self.owners = dict(owners or {})
         self.alive = set(alive or [])
+        self.owner_unknown = set(owner_unknown or [])
+        self.alive_unknown = set(alive_unknown or [])
         self.deleted: list[str] = []
 
-    def get_session_run_owner(self, session_id):
-        return self.owners.get(session_id)
+    def get_session_run_owner_state(self, session_id):
+        if session_id in self.owner_unknown:
+            return False, None
+        return True, self.owners.get(session_id)
 
-    def is_worker_alive(self, worker_id):
+    def get_worker_alive_state(self, worker_id):
+        if worker_id in self.alive_unknown:
+            return None
         return worker_id in self.alive
 
     def delete_session_run_owner(self, session_id):
@@ -189,4 +200,33 @@ def test_tick_resets_stale_waiting_to_idle_without_history_event():
     assert summary["fixed_waiting"] == 1
     assert rows[0]["status"] == "idle"
     assert registry.deleted == ["sid-waiting"]
+    assert events.added == []
+
+
+def test_tick_skips_when_runtime_state_is_unknown():
+    rows = [
+        {
+            "session_id": "sid-active",
+            "user_id": "user-1",
+            "status": "active",
+            "last_task_id": "task-1",
+        },
+        {
+            "session_id": "sid-waiting",
+            "user_id": "user-1",
+            "status": "waiting",
+            "last_task_id": "task-2",
+        },
+    ]
+    redis = _FakeRedis(queued_unknown={"sid-waiting"})
+    registry = _FakeRegistry(owner_unknown={"sid-active"})
+    events = _FakeEvents()
+    reconciler = _reconciler(rows, redis=redis, registry=registry, events=events)
+
+    summary = reconciler.tick()
+
+    assert summary["skipped_redis"] == 2
+    assert rows[0]["status"] == "active"
+    assert rows[1]["status"] == "waiting"
+    assert registry.deleted == []
     assert events.added == []

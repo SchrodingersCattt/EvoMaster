@@ -13,6 +13,7 @@ import uuid
 from dataclasses import dataclass
 from typing import Any
 
+from src.services.run_interruption import build_run_interrupted_history_content
 from src.utils.constant import env_int
 from src.utils.worker_id import get_worker_id
 
@@ -37,14 +38,6 @@ class StaleSessionReconcilerConfig:
             min_age_seconds=env_int("STALE_SESSION_RECONCILER_MIN_AGE_SEC", 120),
             lock_ttl_seconds=env_int("STALE_SESSION_RECONCILER_LOCK_TTL_SEC", 90),
         )
-
-
-def _build_run_interrupted_message(reason: str) -> str:
-    if reason == "restart":
-        return "上一轮任务因服务重启中断，请重新发送以继续。"
-    if reason == "deploy":
-        return "上一轮任务因服务升级中断，请重新发送以继续。"
-    return "上一轮任务因服务部署/重启中断，请重新发送以继续。"
 
 
 class StaleSessionReconciler:
@@ -150,9 +143,11 @@ class StaleSessionReconciler:
             summary["skipped_status"] += 1
             return
 
-        owner = self._registry.get_session_run_owner(session_id)
-        owner_alive = bool(owner and self._registry.is_worker_alive(owner))
-        queued = bool(self._redis.is_session_run_queued(session_id))
+        runtime_state = self._read_runtime_state(session_id)
+        if runtime_state is None:
+            summary["skipped_redis"] += 1
+            return
+        owner_alive, queued = runtime_state
 
         if status == "active":
             if owner_alive or queued:
@@ -179,31 +174,34 @@ class StaleSessionReconciler:
         else:
             summary["skipped_status"] += 1
 
+    def _read_runtime_state(self, session_id: str) -> tuple[bool, bool] | None:
+        owner_ok, owner = self._registry.get_session_run_owner_state(session_id)
+        if not owner_ok:
+            return None
+        if owner:
+            alive_state = self._registry.get_worker_alive_state(owner)
+            if alive_state is None:
+                return None
+            owner_alive = bool(alive_state)
+        else:
+            owner_alive = False
+        queued_state = self._redis.get_session_run_queued_state(session_id)
+        if queued_state is None:
+            return None
+        return owner_alive, bool(queued_state)
+
     def _add_run_interrupted_event(self, row: dict[str, Any]) -> None:
         session_id = str(row.get("session_id") or "").strip()
         reason, reason_meta = self._deploy_state_service.classify_restart_reason(
             session_id
         )
-        content = _build_run_interrupted_message(reason)
         last_query = self._events_service.get_last_user_query(session_id)
         last_user_content = (last_query or {}).get("content", "")
-        meta: dict[str, Any] = {}
-        current_version = reason_meta.get("current_version")
-        previous_version = reason_meta.get("previous_version")
-        if current_version:
-            meta["current_version"] = current_version
-        if previous_version:
-            meta["previous_version"] = previous_version
-        if reason_meta.get("note"):
-            meta["reason_note"] = reason_meta["note"]
-        if reason in ("restart", "deploy"):
-            meta["treat_as_failure"] = True
-        history_content = {
-            "message": content,
-            "reason": reason,
-            "last_user_content": last_user_content,
-            **meta,
-        }
+        history_content = build_run_interrupted_history_content(
+            reason=reason,
+            reason_meta=reason_meta,
+            last_user_content=last_user_content,
+        )
         task_id = str(row.get("last_task_id") or "").strip() or None
         self._events_service.add_history_event(
             session_id,

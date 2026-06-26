@@ -545,9 +545,13 @@ class RedisDao:
 
     def is_session_run_queued(self, session_id: str) -> bool:
         """该会话是否处于「已入队、Worker 尚未接手」状态。"""
+        return bool(self.get_session_run_queued_state(session_id))
+
+    def get_session_run_queued_state(self, session_id: str) -> bool | None:
+        """三态读取 queued 标记：True=存在 / False=不存在 / None=Redis 不可用或异常。"""
         client = self.get_command_client()
         if not client:
-            return False
+            return None
         try:
             return client.exists(_session_run_queued_key(session_id)) > 0
         except Exception as e:
@@ -556,7 +560,7 @@ class RedisDao:
                 session_id,
                 e,
             )
-            return False
+            return None
 
     # ---------- 用户停止（Worker 轮询）----------
 
