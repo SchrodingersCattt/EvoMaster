@@ -132,17 +132,14 @@ def normalize_response_sse_payload(payload: dict[str, Any]) -> dict[str, Any]:
 
 
 def normalize_replayed_terminal_payload(payload: dict[str, Any]) -> dict[str, Any]:
-    """Lift persisted run_result/finish content fields back to the live SSE shape.
+    """Strip persist-only model identity from replayed terminal content.
 
-    The live path lifts these fields to the top level via
-    ``_carry_top_level_fields``, but persistence stores only the ``content`` dict
-    produced by ``_public_content_for_event``, so replay reconstructs the
-    top-level shape here. Counterpart of ``normalize_response_sse_payload`` for
-    terminal event payloads.
-
-    Persistence retains the terminal model identity for backend analysis, so
-    replay strips ``_MODEL_IDENTITY_KEYS`` from the content and skips lifting it
-    to the top level before the download reaches the frontend.
+    Replay and live share one contract: business fields stay in ``content``
+    only and are never duplicated at the top level. Persistence retains the
+    terminal model identity for backend analysis, so replay strips
+    ``_MODEL_IDENTITY_KEYS`` from the content before the download reaches the
+    frontend. Counterpart of ``normalize_response_sse_payload`` for terminal
+    event payloads.
     """
     if payload.get('type') not in _TERMINAL_EVENT_TYPES:
         return payload
@@ -154,16 +151,6 @@ def normalize_replayed_terminal_payload(payload: dict[str, Any]) -> dict[str, An
     normalized = dict(payload)
     content = {k: v for k, v in content.items() if k not in _MODEL_IDENTITY_KEYS}
     normalized['content'] = content
-    normalized['final_content'] = content.get('content') or ''
-    for key in (
-        'status',
-        'reason',
-        'finish_detail',
-        'num_turns',
-        'usage',
-    ):
-        if content.get(key) is not None:
-            normalized[key] = content[key]
     return normalized
 
 

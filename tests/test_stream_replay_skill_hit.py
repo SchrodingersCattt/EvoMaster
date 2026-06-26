@@ -90,7 +90,7 @@ def test_normalize_replayed_event_unpacks_structured_response_content() -> None:
     assert out["turn_index"] == 1
 
 
-def test_normalize_replayed_event_lifts_structured_run_result_content() -> None:
+def test_normalize_replayed_event_keeps_run_result_fields_in_content() -> None:
     from src.services.stream_service import _normalize_replayed_event
 
     out = _normalize_replayed_event(
@@ -110,10 +110,10 @@ def test_normalize_replayed_event_lifts_structured_run_result_content() -> None:
         }
     )
     assert out["source"] == "MatMaster"
-    assert out["final_content"] == "answer"
-    assert out["status"] == "completed"
-    assert out["reason"] == "natural"
-    assert out["usage"] == {"total_tokens": 20}
+    assert out["content"]["content"] == "answer"
+    assert out["content"]["status"] == "completed"
+    assert out["content"]["reason"] == "natural"
+    assert out["content"]["usage"] == {"total_tokens": 20}
     # model identity is persist-only: replay strips it from both top level and content
     assert "model" not in out
     assert "model" not in out["content"]
