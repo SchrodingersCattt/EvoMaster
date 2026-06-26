@@ -75,7 +75,6 @@ class AdminRunSessionSummary(BaseModel):
     session_id: str
     project_id: int | None = None
     status: str | None = None
-    title: str | None = None
     worker_id: str | None = None
     updated_at: int | None = None
 

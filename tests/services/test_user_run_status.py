@@ -20,8 +20,6 @@ def test_list_user_run_statuses_filter_rechecks_redis_runtime_state():
             "user_id": "user-1",
             "project_id": 1,
             "status": "waiting",
-            "session_title": "",
-            "first_message": '"Fallback title"',
             "updated_at": datetime(2026, 1, 2, tzinfo=timezone.utc),
         },
         {
@@ -69,7 +67,6 @@ def test_list_user_run_statuses_filter_rechecks_redis_runtime_state():
     assert item["running_sessions"][0]["session_id"] == "running-1"
     assert item["running_sessions"][0]["worker_id"] == "worker-a"
     assert item["queued_sessions"][0]["session_id"] == "queued-1"
-    assert item["queued_sessions"][0]["title"] == "Fallback title"
     assert item["stale_sessions"][0]["session_id"] == "stale-1"
 
 
@@ -81,7 +78,6 @@ def test_list_user_run_statuses_groups_users_and_supports_filter():
             "user_id": "user-2",
             "project_id": 2,
             "status": "active",
-            "session_title": "User 2",
             "updated_at": datetime(2026, 1, 3, tzinfo=timezone.utc),
         },
         {
@@ -89,7 +85,6 @@ def test_list_user_run_statuses_groups_users_and_supports_filter():
             "user_id": "user-1",
             "project_id": 1,
             "status": "active",
-            "session_title": "User 1",
             "updated_at": datetime(2026, 1, 1, tzinfo=timezone.utc),
         },
         {
@@ -97,7 +92,6 @@ def test_list_user_run_statuses_groups_users_and_supports_filter():
             "user_id": "user-1",
             "project_id": 1,
             "status": "waiting",
-            "session_title": "User 1 queued",
             "updated_at": datetime(2026, 1, 2, tzinfo=timezone.utc),
         },
     ]

@@ -46,23 +46,6 @@ def _decode_session_list_cursor(token: str) -> tuple[datetime, str] | None:
         return None
 
 
-def _runtime_session_title(row: dict) -> str | None:
-    """运行态管理列表标题：优先 session_title，缺失时回退首条用户消息。"""
-    title = str(row.get("session_title") or "").strip()
-    if title:
-        return title
-    first_message = row.get("first_message")
-    if first_message is None:
-        return None
-    try:
-        parsed = json.loads(first_message)
-        if isinstance(parsed, str):
-            return parsed.strip() or None
-        return str(parsed).strip() or None
-    except (json.JSONDecodeError, TypeError):
-        return str(first_message).strip() or None
-
-
 class RedisStopSubscriber:
     """Redis 停止订阅：在独立线程中监听 channel。run 仅在 Worker 上，停止由 Worker 轮询 Redis stop key 处理，API 收到消息无需动作，仅保留订阅以维持连接。"""
 
@@ -664,7 +647,6 @@ class ChatSessionsService:
                 "session_id": str(row.get("session_id") or ""),
                 "project_id": row.get("project_id"),
                 "status": row.get("status") or None,
-                "title": _runtime_session_title(row),
                 "worker_id": worker_id,
             }
             if updated_at is not None:

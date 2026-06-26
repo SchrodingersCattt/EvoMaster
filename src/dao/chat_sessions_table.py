@@ -597,14 +597,6 @@ class ChatSessionsTable(BaseTable):
                            user_id,
                            project_id,
                            status,
-                           session_title,
-                           (SELECT e2.content
-                            FROM evo_chat_events e2
-                            WHERE e2.session_id = {self.table_name}.session_id
-                              AND e2.source = 'User'
-                              AND e2.type = 'query'
-                            ORDER BY e2.created_at ASC
-                            LIMIT 1) as first_message,
                            updated_at
                     FROM {self.table_name}
                     WHERE {where_sql}
