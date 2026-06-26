@@ -46,7 +46,7 @@ profiles:
     context_limit: 300000
     supports_vision: false
     timeout: 1200
-    stream_timeout: 120
+    stream_timeout: 480
     stream_idle_timeout: 60
     max_retries: 3
     retry_delay: 1.0
@@ -59,7 +59,7 @@ profiles:
     context_limit: 200000
     supports_vision: true
     timeout: 1200
-    stream_timeout: 120
+    stream_timeout: 480
     stream_idle_timeout: 60
     max_retries: 3
     retry_delay: 1.0
@@ -83,7 +83,7 @@ profiles:
     context_limit: 256000
     supports_vision: true
     timeout: 1200
-    stream_timeout: 120
+    stream_timeout: 480
     stream_idle_timeout: 60
     max_retries: 3
     retry_delay: 1.0
@@ -94,7 +94,7 @@ profiles:
     reasoning_effort: max
     context_limit: 200000
     timeout: 1200
-    stream_timeout: 120
+    stream_timeout: 480
     stream_idle_timeout: 60
     max_retries: 3
     retry_delay: 1.0
@@ -105,7 +105,7 @@ profiles:
     reasoning_effort: max
     context_limit: 200000
     timeout: 1200
-    stream_timeout: 120
+    stream_timeout: 480
     stream_idle_timeout: 60
     max_retries: 3
     retry_delay: 1.0
@@ -118,7 +118,7 @@ profiles:
     supports_vision: true
     max_tokens: 32000
     timeout: 1200
-    stream_timeout: 120
+    stream_timeout: 480
     stream_idle_timeout: 60
     max_retries: 3
     retry_delay: 1.0
