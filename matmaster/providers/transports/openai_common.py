@@ -44,7 +44,7 @@ class OpenAISDKTransport(Transport):
             return LLMError(str(exc), retryable=True, error_category="rate_limit")
         if isinstance(exc, openai.InternalServerError):
             return LLMError(str(exc), retryable=True, error_category="server")
-        if isinstance(exc, _httpx.ReadTimeout):
+        if isinstance(exc, _httpx.TimeoutException):
             return LLMError(str(exc), retryable=True, error_category="timeout")
         if isinstance(exc, (openai.AuthenticationError, openai.PermissionDeniedError)):
             return LLMError(str(exc), retryable=False, error_category="auth")
