@@ -16,6 +16,8 @@ async def test_check_quota_status_maps_client_data(monkeypatch):
             'photon_remaining': 3,
             'photon_overflow_enabled': True,
             'available_micro': 1_250_000,
+            'debt_micro': 0,
+            'settlement_blocked': False,
         }
 
     monkeypatch.setattr(mod, 'fetch_quota_info', _fake_fetch_quota_info)
@@ -27,11 +29,50 @@ async def test_check_quota_status_maps_client_data(monkeypatch):
     assert status.photon_remaining == 3.0
     assert status.photon_overflow_enabled is True
     assert status.available_micro == 1_250_000
+    assert status.debt_micro == 0
+    assert status.settlement_blocked is False
+
+
+async def test_check_quota_status_maps_settlement_block(monkeypatch):
+    from src.services import quota_service as mod
+
+    async def _fake_fetch_quota_info(user_id):
+        assert user_id == 'u1'
+        return {
+            'credit_remaining': 10.0,
+            'photon_remaining': 100,
+            'photon_overflow_enabled': True,
+            'available_micro': 0,
+            'debt_micro': 50_000,
+            'settlement_blocked': True,
+            'settlement_block_reason': 'debt_unpaid',
+        }
+
+    monkeypatch.setattr(mod, 'fetch_quota_info', _fake_fetch_quota_info)
+
+    status = await mod.check_quota_status('u1')
+
+    assert status.debt_micro == 50_000
+    assert status.settlement_blocked is True
+    assert status.settlement_block_reason == 'debt_unpaid'
+    assert status.is_exhausted is True
 
 
 class TestIsExhausted:
     def test_free_credit_available_not_exhausted(self):
         assert QuotaStatus(remaining_yuan=1.0).is_exhausted is False
+
+    def test_debt_blocks_even_with_free_credit_and_photon(self):
+        assert (
+            QuotaStatus(
+                remaining_yuan=1.0,
+                photon_remaining=5.0,
+                photon_overflow_enabled=True,
+                debt_micro=100,
+                settlement_blocked=True,
+            ).is_exhausted
+            is True
+        )
 
     def test_free_zero_no_photon_field_exhausted(self):
         # 未启用光子（photon_remaining 默认 None）：退化为只看金额额度。
