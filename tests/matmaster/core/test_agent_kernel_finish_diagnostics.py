@@ -331,7 +331,6 @@ class TestInvalidFinishDetailClassifier:
         assert detail.has_visible_content is True
         assert detail.has_reasoning is True
         assert detail.last_turn_usage["completion_tokens"] == 4096
-        assert detail.last_turn_usage_vendor["outputTokens"] == 4096
         assert detail.truncation_risk is True
 
     @pytest.mark.parametrize(

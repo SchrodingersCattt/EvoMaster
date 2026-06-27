@@ -80,7 +80,6 @@ def _build_finish_detail_inner(
         "has_tool_calls": bool(tool_calls),
         "tool_call_count": len(tool_calls),
         "last_turn_usage": dict(response.usage or {}),
-        "last_turn_usage_vendor": dict(response.usage_vendor or {}),
     }
 
     if finish_reason == "length":

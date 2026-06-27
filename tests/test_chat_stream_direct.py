@@ -732,8 +732,8 @@ def test_generate_send_stream_replay_prefers_run_result_over_response():
         "run_result",
         "query",
     ]
-    assert frames[2]["final_content"] == "old answer"
-    assert frames[2]["status"] == "completed"
+    assert frames[2]["content"]["content"] == "old answer"
+    assert frames[2]["content"]["status"] == "completed"
     assert frames[3]["content"] == "new question"
     events_service.get_session_events.assert_called_with(
         "sess-1", include_spawn=True, exclude_types=REPLAY_DISCARDED_EVENT_TYPES
@@ -849,7 +849,7 @@ def test_generate_send_stream_replay_keeps_intermediate_response():
         "query",
     ]
     assert frames[2]["content"] == "let me check the files"
-    assert frames[5]["final_content"] == "old answer"
+    assert frames[5]["content"]["content"] == "old answer"
     assert frames[6]["content"] == "new question"
 
 

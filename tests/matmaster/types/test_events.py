@@ -230,14 +230,12 @@ class TestFinishDetail:
             has_visible_content=True,
             has_reasoning=True,
             last_turn_usage={"completion_tokens": 4096},
-            last_turn_usage_vendor={"outputTokens": 4096},
             truncation_risk=True,
         )
 
         dumped = detail.model_dump(mode="json")
         assert dumped["kind"] == "output_length_exceeded"
         assert dumped["last_turn_usage"]["completion_tokens"] == 4096
-        assert dumped["last_turn_usage_vendor"]["outputTokens"] == 4096
         assert dumped["truncation_risk"] is True
 
     def test_finish_detail_rejects_unknown_kind(self) -> None:
