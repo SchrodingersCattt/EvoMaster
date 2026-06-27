@@ -39,12 +39,16 @@ class QuotaStatus:
     photon_overflow_enabled: 用户是否开启「免费额度耗尽后扣光子」代扣偏好（opt-in，
         默认 False）。仅当为 True 时光子余额才计入放行——与 tools-server 实扣侧
         （PhotonSource 未开偏好则 skip）口径一致，避免「有光子但没开代扣」被误放行后漏扣。
+    settlement_blocked: tools-server 判定存在未清偿欠费等结算阻断时为 True。
     """
 
     remaining_yuan: float
     reset_at: str | None = None
     photon_remaining: float | None = None
     photon_overflow_enabled: bool = False
+    debt_micro: int = 0
+    settlement_blocked: bool = False
+    settlement_block_reason: str | None = None
     available_micro: int | None = None
     """可用额度（micro CNY）= 免费额度 +（仅开代扣）光子折算，与发送前闸口/实扣同口径。
 
@@ -62,6 +66,8 @@ class QuotaStatus:
         漏扣，故必须同时要求 photon_overflow_enabled。未启用光子 / 没开代扣 / 余额为 0
         时退化为只看金额额度。
         """
+        if self.settlement_blocked or self.debt_micro > 0:
+            return True
         if self.remaining_yuan > 0:
             return False
         if (
@@ -78,6 +84,8 @@ class QuotaStatus:
         有刷新日期则带出恢复时间；否则用调用方给的兜底措辞
         （网页端、飞书端等差异在此参数化）。
         """
+        if self.settlement_blocked or self.debt_micro > 0:
+            return "存在未清偿账单，请先完成扣费后再继续使用。"
         if self.reset_at:
             return f"免费额度已用完，将于 {self.reset_at} 恢复。"
         return fallback
@@ -106,22 +114,37 @@ async def check_quota_status(user_id: str) -> QuotaStatus:
     photon_remaining = _coerce_number(inner.get("photon_remaining"))
     # 光子代扣偏好（opt-in，默认 False）：缺失/非法按 False，闸口不把光子计入放行。
     photon_overflow_enabled = bool(inner.get("photon_overflow_enabled"))
+    debt_raw = inner.get("debt_micro")
+    debt_micro = int(debt_raw) if isinstance(debt_raw, int) else 0
+    settlement_blocked = bool(inner.get("settlement_blocked")) or debt_micro > 0
+    settlement_block_reason = inner.get("settlement_block_reason")
+    settlement_block_reason = (
+        settlement_block_reason
+        if isinstance(settlement_block_reason, str) and settlement_block_reason
+        else None
+    )
     # 可用额度（micro）：旧 tools-server 不返回则为 None（关闭 in-run 熔断）。
     available_raw = inner.get("available_micro")
     available_micro = int(available_raw) if isinstance(available_raw, int) else None
     logger.info(
         "check_quota_status response: user_id=%s remaining=%s reset_at=%s "
-        "photon_remaining=%s photon_overflow_enabled=%s",
+        "photon_remaining=%s photon_overflow_enabled=%s debt_micro=%s "
+        "settlement_blocked=%s",
         user_id,
         remaining,
         reset_at,
         photon_remaining,
         photon_overflow_enabled,
+        debt_micro,
+        settlement_blocked,
     )
     return QuotaStatus(
         remaining_yuan=remaining,
         reset_at=reset_at,
         photon_remaining=photon_remaining,
         photon_overflow_enabled=photon_overflow_enabled,
+        debt_micro=debt_micro,
+        settlement_blocked=settlement_blocked,
+        settlement_block_reason=settlement_block_reason,
         available_micro=available_micro,
     )
