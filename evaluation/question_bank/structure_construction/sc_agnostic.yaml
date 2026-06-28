@@ -4032,3 +4032,176 @@ questions:
     criterion: Total token usage stays within budget.
     axis: efficiency
     verify: token_budget
+- id: SC_molcrys_cluster_001_20260628
+  capability: structure_construction
+  domain: agnostic
+  intent: Carve a non-periodic QM cluster model with complete Zn coordination from a MAF-4 molecular crystal.
+  human_prompt_seed: 基于 `MAF-4_ordered.cif` 将 MAF-4 切出完整配位的 Zn 的非周期性簇，导出 `maf-4-cluster.xyz`
+    文件地址：`https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/evomaster/evaluation/SC_molcrys_cluster_001/MAF-4_ordered.cif`
+  tags:
+  - struct_molcrys
+  data_files:
+  - key: maf4_cif
+    path: data/SC_molcrys_cluster_001/MAF-4_ordered.cif
+    oss_url: https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/evomaster/evaluation/SC_molcrys_cluster_001/MAF-4_ordered.cif
+    description: MAF-4 (ZIF-8 analogue) ordered CIF with 12 Zn centres.
+  reference_answers:
+  - key: file_exists
+    value: maf-4-cluster.xyz__group0.xyz
+  - key: cluster_atoms
+    value:
+      filename: maf-4-cluster.xyz__group0.xyz
+      expected: 49
+      tolerance: 0
+  - key: zn_count
+    value:
+      filename: maf-4-cluster.xyz__group0.xyz
+      element: Zn
+      expected: 1
+      tolerance: 0
+  - key: cluster_elements
+    value:
+      filename: maf-4-cluster.xyz__group0.xyz
+      elements:
+      - Zn
+      - C
+      - N
+      - H
+  - key: turn_budget
+    value:
+      max: 20
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 24000
+  scoring_checklist:
+  - id: file_exists
+    criterion: The output file `maf-4-cluster.xyz__group0.xyz` exists.
+    axis: correctness
+    verify: artifact_exists
+  - id: cluster_atoms
+    criterion: The carved cluster contains exactly 49 atoms (Zn + four imidazolate ligands).
+    axis: correctness
+    verify: struct_file_atom_count
+  - id: zn_count
+    criterion: The carved cluster contains exactly 1 Zn atom (single Zn centre, complete
+      coordination sphere).
+    axis: correctness
+    verify: struct_file_atom_count
+  - id: cluster_elements
+    criterion: The carved cluster contains only Zn, C, N, H (no solvent or unexpected
+      elements).
+    axis: correctness
+    verify: struct_file_elements_present
+  - id: grounding_source
+    criterion: Agent uses `mck operate cluster` CLI (not hand-written Python), seeds
+      on Zn, and reports cluster composition.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: no_retries
+    criterion: No repeated identical cluster operations with wrong parameters.
+    axis: efficiency
+    verify: no_retries
+  - id: turn_budget
+    criterion: Agent completes within the turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: efficiency_judge
+    criterion: Cluster carving completes without excessive exploratory calls.
+    axis: efficiency
+    verify: llm_binary_judge
+  - id: duration_budget
+    criterion: Wall-clock run duration within benchmark ceiling.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage within budget.
+    axis: efficiency
+    verify: token_budget
+- id: SC_molcrys_interp_001_20260628
+  capability: structure_construction
+  domain: agnostic
+  intent: Construct a 6-frame interpolation trajectory between two molecular-crystal
+    conformations and verify frame-level chemical integrity.
+  human_prompt_seed: 构造 `1-HTP_enumerate_0.cif` 到 `1-HTP_enumerate_1.cif` 描述分子旋转的插值轨迹 6 帧，导出 `traj.extxyz`
+    文件地址：[0] `https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/evomaster/evaluation/SC_molcrys_interp_001/1-HTP_enumerate_0.cif`
+    [1] `https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/evomaster/evaluation/SC_molcrys_interp_001/1-HTP_enumerate_1.cif`
+  tags:
+  - struct_molcrys
+  data_files:
+  - key: htp_enumerate_0
+    path: data/SC_molcrys_interp_001/1-HTP_enumerate_0.cif
+    oss_url: https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/evomaster/evaluation/SC_molcrys_interp_001/1-HTP_enumerate_0.cif
+    description: 1-HTP molecular crystal conformation state 0.
+  - key: htp_enumerate_1
+    path: data/SC_molcrys_interp_001/1-HTP_enumerate_1.cif
+    oss_url: https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/evomaster/evaluation/SC_molcrys_interp_001/1-HTP_enumerate_1.cif
+    description: 1-HTP molecular crystal conformation state 1.
+  reference_answers:
+  - key: file_exists
+    value: traj.extxyz
+  - key: traj_formula
+    value:
+      filename: traj.extxyz
+      formula: C30H48Fe2N16O6
+  - key: traj_atoms
+    value:
+      filename: traj.extxyz
+      expected: 102
+      tolerance: 0
+  - key: turn_budget
+    value:
+      max: 20
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 24000
+  scoring_checklist:
+  - id: file_exists
+    criterion: The output file `traj.extxyz` exists.
+    axis: correctness
+    verify: artifact_exists
+  - id: traj_formula
+    criterion: The reduced chemical formula of frame 0 is C30H48Fe2N16O6, matching
+      both input endpoints.
+    axis: correctness
+    verify: struct_file_formula
+  - id: traj_atoms
+    criterion: Each frame contains exactly 102 atoms, matching both input endpoints.
+    axis: correctness
+    verify: struct_file_atom_count
+  - id: frames_complete
+    criterion: The trajectory contains exactly 6 frames (including endpoints), and
+      every frame preserves the same chemical formula and atom count as the endpoints.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: grounding_source
+    criterion: Agent uses `mck operate interpolate` CLI (not hand-written Python),
+      specifies `--n-images 6`, and confirms frame integrity via `mck io info` or
+      equivalent inspection.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: no_retries
+    criterion: No repeated identical interpolation operations with wrong parameters.
+    axis: efficiency
+    verify: no_retries
+  - id: turn_budget
+    criterion: Agent completes within the turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: efficiency_judge
+    criterion: Interpolation completes directly without excessive exploratory calls.
+    axis: efficiency
+    verify: llm_binary_judge
+  - id: duration_budget
+    criterion: Wall-clock run duration within benchmark ceiling.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage within budget.
+    axis: efficiency
+    verify: token_budget
