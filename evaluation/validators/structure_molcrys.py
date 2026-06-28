@@ -475,3 +475,96 @@ def _check_chemenv(molecules: list) -> list[str]:
                     )
 
     return issues
+
+
+# ---------------------------------------------------------------------------
+# Molecule-formula list verification (CIF / ExtXYZ)
+# ---------------------------------------------------------------------------
+
+
+def check_molcrys_molecule_formulas(
+    workspace_dir: str | Path,
+    *,
+    filename: str = '*.cif',
+    expected_formulas: list[str],
+    all_frames: bool = False,
+) -> tuple[bool, str]:
+    """Verify per-molecule chemical formulas via MolCrysKit.
+
+    For CIF files: parse with ``read_mol_crystal``, extract sorted molecule
+    formula list, compare against *expected_formulas* (also sorted).
+
+    For ExtXYZ (multi-frame) with ``all_frames=True``: every frame must
+    match the expected formula list.
+    """
+    try:
+        from molcrys_kit.io.cif import read_mol_crystal
+        from molcrys_kit.structures.crystal import MolecularCrystal
+    except ImportError:
+        return (
+            False,
+            'molcrys-kit not installed; install with: uv sync --extra calculation',
+        )
+
+    root = Path(workspace_dir)
+    if not root.is_dir():
+        return False, f'workspace not a directory: {workspace_dir}'
+
+    # Resolve file
+    import glob as _glob
+
+    matches = sorted(_glob.glob(str(root / filename)))
+    if not matches:
+        # Try recursive
+        matches = sorted(root.rglob(filename.lstrip('*').lstrip('/')))
+        matches = [str(m) for m in matches]
+    if not matches:
+        return False, f'no file matching {filename!r} in {root}'
+    fpath = matches[0]
+
+    expected_sorted = sorted(expected_formulas)
+
+    if fpath.endswith('.extxyz') and all_frames:
+        import ase.io
+
+        try:
+            frames = ase.io.read(fpath, index=':')
+        except Exception as exc:
+            return False, f'could not read extxyz {fpath}: {exc}'
+        if not frames:
+            return False, f'no frames in {fpath}'
+        failures: list[str] = []
+        for i, atoms in enumerate(frames):
+            try:
+                mc = MolecularCrystal.from_ase_atoms(atoms)
+                actual = sorted(m.get_chemical_formula() for m in mc.molecules)
+            except Exception as exc:
+                failures.append(f'frame {i}: parse error: {exc}')
+                continue
+            if actual != expected_sorted:
+                failures.append(f'frame {i}: got {actual}, expected {expected_sorted}')
+        if failures:
+            return False, '; '.join(failures[:3])
+        return True, (
+            f'all {len(frames)} frames match expected molecule formulas '
+            f'{expected_sorted}'
+        )
+    else:
+        # Single structure (CIF or first frame)
+        try:
+            if fpath.endswith('.cif') or fpath.endswith('.CIF'):
+                crystal = read_mol_crystal(fpath)
+            else:
+                import ase.io
+
+                atoms = ase.io.read(fpath)
+                crystal = MolecularCrystal.from_ase_atoms(atoms)
+            actual = sorted(m.get_chemical_formula() for m in crystal.molecules)
+        except Exception as exc:
+            return False, f'could not parse {fpath}: {exc}'
+        if actual != expected_sorted:
+            return False, (
+                f'{Path(fpath).name}: molecule formulas {actual} '
+                f'!= expected {expected_sorted}'
+            )
+        return True, (f'{Path(fpath).name}: molecule formulas match: {actual}')

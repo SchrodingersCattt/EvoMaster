@@ -31,6 +31,14 @@ mck io convert input.cif -o output.cif
 mck operate slab input.cif -o slab_PUBMUU03_110.cif \
    --miller 1 1 0 --layers 4 --vacuum 15 --terminations tasker_preferred
 
+# carve finite H-capped QM cluster around seed
+mck operate cluster input.cif -o cluster.xyz \
+   --seed-element element_name --max-atoms 500 --freeze-shell 1
+
+# interpolate crystal images between two structures
+mck operate interpolate start.cif end.cif -o output.extxyz \
+   --n-images image_number --method se3_screw
+
 # remove whole solvent molecules
 mck operate desolvate input.cif -o dry.cif --targets H2O --targets CH3OH
 
@@ -51,6 +59,7 @@ mck analyze polyhedra input.cif --central Fe --ligand O --level atom --json
 
 Notes:
 - `mck io convert` writes the whole structure; it does **not** extract one molecule.
+- `mck operate cluster` emits per-group files: `output__group0.xyz`, `output__group1.xyz`, etc.
 - For ordinary non-molecular slabs, use `assemble-atomic-structure`; never silently
    fall back to ASE slab cutting for molecular crystals.
 - Do not handcraft emitters around `scan_cif_disorder` / `DisorderInfo`; that path
