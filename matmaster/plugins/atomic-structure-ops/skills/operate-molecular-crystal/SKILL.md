@@ -31,13 +31,13 @@ mck io convert input.cif -o output.cif
 mck operate slab input.cif -o slab_PUBMUU03_110.cif \
    --miller 1 1 0 --layers 4 --vacuum 15 --terminations tasker_preferred
 
-# carve finite H-capped QM cluster around Zn
+# carve finite H-capped QM cluster around seed
 mck operate cluster input.cif -o cluster.xyz \
-   --seed-element Zn --max-atoms 500 --freeze-shell 1
+   --seed-element element_name --max-atoms 500 --freeze-shell 1
 
 # interpolate crystal images between two structures
-mck operate interpolate start.cif end.cif -o traj.extxyz \
-   --n-images 6 --method se3_screw
+mck operate interpolate start.cif end.cif -o output.extxyz \
+   --n-images image_number --method se3_screw
 
 # remove whole solvent molecules
 mck operate desolvate input.cif -o dry.cif --targets H2O --targets CH3OH
