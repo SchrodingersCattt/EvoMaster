@@ -5,6 +5,7 @@ from __future__ import annotations
 import inspect
 import json
 import logging
+from typing import Any
 
 from matmaster.core.hooks import HookEvent, HookExecutor
 from matmaster.types.run_metadata import RunIdentity
