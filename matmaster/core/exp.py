@@ -34,12 +34,12 @@ from matmaster.context.user_turn_context import (
     USER_CONTEXT_RENDER_VERSION,
     USER_TURN_CONTEXT_SCHEMA_VERSION,
 )
-from matmaster.core.hooks import HookEvent, HookExecutor
+from matmaster.core.hooks import HookExecutor
 from matmaster.core.path_access import derive_path_access_roots
 from matmaster.core.run_context import AgentRunContext
+from matmaster.core.run_identity import build_run_identity
 from matmaster.tools.tool_registry import ToolRegistry
 from matmaster.types.cancellation import CancellationToken
-from matmaster.types.run_metadata import RunIdentity
 from matmaster.types.runtime import (
     AgentKernelResources,
     AgentKernelRuntime,
@@ -50,7 +50,6 @@ from matmaster.types.runtime import (
 from matmaster.types.runtime_ports import (
     EmptySessionEventHistory,
     KernelRuntimePorts,
-    ToolTimeoutNotice,
     UserTurnContextWriteRequest,
 )
 
@@ -193,69 +192,6 @@ class Exp:
             )
 
         return child_run_factory
-
-    @staticmethod
-    def _build_run_identity(
-        ctx: AgentRunContext,
-        *,
-        spawn_id: str | None,
-    ) -> RunIdentity:
-        return RunIdentity(
-            task_id=ctx.environment.metadata.task_id,
-            session_id=ctx.environment.session_id,
-            spawn_id=spawn_id,
-        )
-
-    @staticmethod
-    def _tool_arguments_preview(
-        arguments: dict[str, Any], *, max_chars: int = 1000
-    ) -> str:
-        try:
-            text = json.dumps(
-                arguments, ensure_ascii=False, sort_keys=True, default=str
-            )
-        except (TypeError, ValueError):
-            text = str(arguments)
-        if len(text) > max_chars:
-            return text[:max_chars] + "...<truncated>"
-        return text
-
-    @staticmethod
-    def _install_tool_timeout_observer_hooks(
-        *,
-        hook_executor: HookExecutor,
-        observer: Any,
-        run_identity: RunIdentity,
-        logger: logging.Logger,
-    ) -> None:
-        async def _observe_tool_timeout(ctx) -> None:
-            result = getattr(ctx, "result", None)
-            if getattr(result, "status", None) != "timeout":
-                return
-            notice = ToolTimeoutNotice(
-                session_id=run_identity.session_id,
-                task_id=run_identity.task_id,
-                spawn_id=run_identity.spawn_id,
-                tool_name=ctx.tool_name,
-                tool_call_id=ctx.tool_call_id,
-                turn=ctx.turn,
-                result_content=getattr(result, "content", "") or "",
-                arguments_preview=Exp._tool_arguments_preview(ctx.arguments),
-            )
-            try:
-                maybe_awaitable = observer(notice)
-                if inspect.isawaitable(maybe_awaitable):
-                    await maybe_awaitable
-            except Exception:
-                logger.warning(
-                    "tool timeout observer failed session_id=%s task_id=%s tool=%s",
-                    notice.session_id,
-                    notice.task_id,
-                    notice.tool_name,
-                    exc_info=True,
-                )
-
-        hook_executor.on(HookEvent.POST_TOOL_CALL, _observe_tool_timeout)
 
     @staticmethod
     def _derive_active_planes(
@@ -435,13 +371,17 @@ class Exp:
         capability_policy = DefaultCapabilityPolicy()
         scheduler = ToolScheduler()
         runner_state = ToolRunnerState()
-        run_identity = self._build_run_identity(ctx, spawn_id=spawn_id)
+        run_identity = build_run_identity(ctx, spawn_id=spawn_id)
         figure_upload_config = request.ports.figure_upload.config
         if figure_upload_config is not None:
             runner_state.set("figure_upload_config", figure_upload_config)
         tool_timeout_observer = request.ports.tool_timeout_observer
         if tool_timeout_observer is not None:
-            self._install_tool_timeout_observer_hooks(
+            from matmaster.core.tool_timeout_observer import (
+                install_tool_timeout_observer_hooks,
+            )
+
+            install_tool_timeout_observer_hooks(
                 hook_executor=hook_executor,
                 observer=tool_timeout_observer,
                 run_identity=run_identity,
