@@ -8,16 +8,16 @@ import re
 import uuid
 from typing import Any
 
-from src.dao.feishu_app_config_table import FeishuAppConfig, get_feishu_app_config_table
-from src.dao.feishu_binding_table import get_feishu_binding_table
-from src.dao.redis_dao import get_redis_dao
-from src.models.chat import ChatSendRequest
-from src.services.feishu_open_api import (
+from clients.feishu.open_api import (
     add_reaction,
     get_tenant_access_token,
     remove_reaction,
     reply_text_message,
 )
+from src.dao.feishu_app_config_table import FeishuAppConfig, get_feishu_app_config_table
+from src.dao.feishu_binding_table import get_feishu_binding_table
+from src.dao.redis_dao import get_redis_dao
+from src.models.chat import ChatSendRequest
 from src.services.quota_service import check_quota_status
 from src.services.stream_service import get_stream_service
 from src.services.user_runtime_preference_service import get_user_runtime_preference

@@ -9,10 +9,10 @@ from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, Path, Query
 from pydantic import BaseModel
 
+from clients.tools_server.allowlist import is_user_in_admin_allowlist
 from src.dao.chat_events_table import ChatEventsTable
 from src.dao.chat_sessions_table import ChatSessionsTable
 from src.services.sessions_service import ChatSessionsService, get_sessions_service
-from src.services.tools_server_allowlist import is_user_in_admin_allowlist
 from src.services.user_service import UserService
 from src.utils.exceptions import ForbiddenErrorResponse
 

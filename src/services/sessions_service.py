@@ -6,6 +6,7 @@ from collections import defaultdict
 from datetime import datetime
 from functools import lru_cache
 
+from clients.tools_server.allowlist import is_user_in_admin_allowlist
 from src.dao.chat_sessions_table import (
     WORKSPACE_PREF_UNSET,
     ChatSessionsTable,
@@ -13,7 +14,6 @@ from src.dao.chat_sessions_table import (
     session_row_to_item,
 )
 from src.dao.redis_dao import get_redis_dao
-from src.services.tools_server_allowlist import is_user_in_admin_allowlist
 from src.services.worker_registry_service import get_worker_registry_service
 from src.utils.constant import REDIS_URL
 from src.utils.exceptions import BadRequestErrorResponse
