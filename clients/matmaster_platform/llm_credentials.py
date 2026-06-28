@@ -1,4 +1,4 @@
-"""BYOK 凭证下发客户端：向 matmaster-tools-server 取解密后的凭证。
+"""BYOK 凭证下发客户端：向 MatMaster 平台取解密后的凭证。
 
 仅在运行时按 user_id + credential_id 拉取，凭证只在本次 run 内存使用、不落盘、不长缓存。
 鉴权用 Nacos byok.service_api_keys 对应的服务 Bearer（MATMASTER_TOOLS_BYOK_BEARER）。
@@ -26,7 +26,7 @@ class ByokCredential:
     base_url: str
     api_key: str
     context_limit: int | None = None
-    # 黑盒透传参数（来自 tools-server model_params），原样作为 extra_body 合并进请求体。
+    # 黑盒透传参数（来自平台 model_params），原样作为 extra_body 合并进请求体。
     extra_body: dict[str, Any] = field(default_factory=dict)
 
 

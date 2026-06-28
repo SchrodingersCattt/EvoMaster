@@ -1,4 +1,4 @@
-"""matmaster-tools-server 用户运行偏好客户端。"""
+"""MatMaster 平台用户运行偏好客户端。"""
 
 from __future__ import annotations
 
@@ -59,7 +59,7 @@ def _coerce_positive_int(value: Any) -> int | None:
 
 
 def get_user_level_runtime_preference(user_id: str) -> UserLevelRuntimePreference:
-    """从 tools-server 读取用户级运行偏好。
+    """从平台读取用户级运行偏好。
 
     fail-soft：调用方可在偏好服务抖动时继续运行，仅回退为不带默认项目/模型。
     """
@@ -77,7 +77,7 @@ def get_user_level_runtime_preference(user_id: str) -> UserLevelRuntimePreferenc
             response = client.get(url, headers={"X-User-Id": uid})
         if response.status_code >= 400:
             logger.warning(
-                "tools-server runtime preference HTTP %s user_id=%s body=%s",
+                "platform runtime preference HTTP %s user_id=%s body=%s",
                 response.status_code,
                 uid,
                 (response.text or "")[:256],
@@ -86,7 +86,7 @@ def get_user_level_runtime_preference(user_id: str) -> UserLevelRuntimePreferenc
         body = response.json()
     except (httpx.HTTPError, OSError, ValueError) as exc:
         logger.warning(
-            "tools-server runtime preference failed user_id=%s error=%s",
+            "platform runtime preference failed user_id=%s error=%s",
             uid,
             exc,
             exc_info=True,
@@ -95,7 +95,7 @@ def get_user_level_runtime_preference(user_id: str) -> UserLevelRuntimePreferenc
 
     if body.get("code") != 0:
         logger.warning(
-            "tools-server runtime preference non-zero user_id=%s code=%s msg=%s",
+            "platform runtime preference non-zero user_id=%s code=%s msg=%s",
             uid,
             body.get("code"),
             body.get("msg"),

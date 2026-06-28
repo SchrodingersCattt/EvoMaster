@@ -1,17 +1,17 @@
-"""配额服务：调用 matmaster-tools-server 的 quota 接口。
+"""配额服务：调用 MatMaster 平台的 quota 接口。
 
 - check_quota_status: 发送前查询余额（GET /api/v1/quota/info）。
   计价化后只读金额额度 ``credit_remaining``（元）与 ``credit_reset_at``
   （下次额度刷新日期）；旧的次数 ``remaining`` 字段已不再使用。
 
-  分层计费：tools-server 启用真实光子后，还会附带 ``photon_remaining``（光子余额）
+  分层计费：MatMaster 平台启用真实光子后，还会附带 ``photon_remaining``（光子余额）
   与 ``photon_overflow_enabled``（用户光子代扣偏好，opt-in）。发送前闸口语义为「免费
   额度耗尽，且（用户没开光子代扣 或 光子也耗尽）才拦截」——免费额度用完后，只有
   **开启了代扣且仍有光子余额**的用户才继续（溢出走光子）。光子代扣是 opt-in：没开代扣
   时实扣侧会 skip，故闸口必须同时看 overflow 偏好，否则会把这类用户误放行导致漏扣。
   未启用光子时 photon_remaining 为 None，闸口退化为只看金额额度，行为与之前一致。
 
-扣费由 billing usage 上报在 tools-server 侧按金额实时完成，evo 不再做按次扣减
+扣费由 billing usage 上报在 MatMaster 平台侧按金额实时完成，evo 不再做按次扣减
 （已移除 use_quota）；模型级次数限制并入金额额度（已移除 check_model_quota）。
 
 异常不在此处捕获，由调用方/全局 error handler 统一处理。
@@ -23,7 +23,7 @@ import logging
 from dataclasses import dataclass
 from typing import Any
 
-from clients.quota_client import fetch_quota_info
+from clients.matmaster_platform.quota import fetch_quota_info
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -35,11 +35,11 @@ class QuotaStatus:
 
     remaining_yuan: 剩余金额额度（元）。
     reset_at: 下次额度刷新日期（ISO，如 ``2026-06-09``），无则 None。
-    photon_remaining: 真实光子余额；tools-server 未启用光子或查询失败为 None。
+    photon_remaining: 真实光子余额；MatMaster 平台未启用光子或查询失败为 None。
     photon_overflow_enabled: 用户是否开启「免费额度耗尽后扣光子」代扣偏好（opt-in，
-        默认 False）。仅当为 True 时光子余额才计入放行——与 tools-server 实扣侧
+        默认 False）。仅当为 True 时光子余额才计入放行——与平台实扣侧
         （PhotonSource 未开偏好则 skip）口径一致，避免「有光子但没开代扣」被误放行后漏扣。
-    settlement_blocked: tools-server 判定存在未清偿欠费等结算阻断时为 True。
+    settlement_blocked: MatMaster 平台判定存在未清偿欠费等结算阻断时为 True。
     """
 
     remaining_yuan: float
@@ -53,7 +53,7 @@ class QuotaStatus:
     """可用额度（micro CNY）= 免费额度 +（仅开代扣）光子折算，与发送前闸口/实扣同口径。
 
     仅供「一次 run 内成本熔断」取预算快照用，不参与发送前闸口判定（is_exhausted）。
-    旧 tools-server 不返回该字段时为 None（调用方据此关闭熔断、退化为只靠发送前闸口）。
+    旧平台接口不返回该字段时为 None（调用方据此关闭熔断、退化为只靠发送前闸口）。
     """
 
     @property
@@ -123,7 +123,7 @@ async def check_quota_status(user_id: str) -> QuotaStatus:
         if isinstance(settlement_block_reason, str) and settlement_block_reason
         else None
     )
-    # 可用额度（micro）：旧 tools-server 不返回则为 None（关闭 in-run 熔断）。
+    # 可用额度（micro）：旧平台接口不返回则为 None（关闭 in-run 熔断）。
     available_raw = inner.get("available_micro")
     available_micro = int(available_raw) if isinstance(available_raw, int) else None
     logger.info(

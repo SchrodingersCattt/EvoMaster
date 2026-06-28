@@ -1,4 +1,4 @@
-"""matmaster-tools-server quota HTTP 客户端。"""
+"""MatMaster 平台 quota HTTP 客户端。"""
 
 from __future__ import annotations
 

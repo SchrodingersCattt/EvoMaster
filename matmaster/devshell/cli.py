@@ -156,7 +156,7 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         metavar="MODE",
         help=(
-            "Enable per-call usage reporting to tools-server with this billing_mode "
+            "Enable per-call usage reporting to MatMaster platform with this billing_mode "
             "(e.g. 'eval'; 'eval'/'byok' do not debit credits). Omit to disable."
         ),
     )
@@ -221,12 +221,12 @@ def _bootstrap_runner(args: argparse.Namespace) -> tuple[Any, Any, Any, Any, Any
         sys.exit(1)
 
     # Collect per-call usage (root + subagent + compaction share this instance).
-    # When --billing-mode is set, also report each call to tools-server and
+    # When --billing-mode is set, also report each call to MatMaster platform and
     # back-fill per-call cost (eval/byok do not debit credits).
     reporter = None
     billing_mode = (getattr(args, "billing_mode", None) or "").strip() or None
     if billing_mode:
-        from clients.billing import (
+        from clients.matmaster_platform.billing import (
             BillingRunContext,
             BillingUsageReporter,
             get_billing_service,

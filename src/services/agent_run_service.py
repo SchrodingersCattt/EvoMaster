@@ -16,7 +16,10 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
-from clients.billing.client import BillingRunContext, get_billing_service
+from clients.matmaster_platform.billing.client import (
+    BillingRunContext,
+    get_billing_service,
+)
 from matmaster.config.loader import load_agents_general_llm
 from matmaster.context.sources.turn_input import TurnInput
 from matmaster.core.playground import PlaygroundManager
@@ -51,6 +54,7 @@ from src.services.history_checkpoint_service import HistoryCheckpointService
 from src.services.image_input_service import get_image_input_service
 from src.services.quota_service import check_quota_status
 from src.services.sessions_service import get_sessions_service
+from src.services.tool_timeout_alert_service import FeishuToolTimeoutObserver
 from src.services.user_turn_context_service import (
     write_user_turn_context_event as _persist_utc_event,
 )
@@ -73,7 +77,7 @@ async def _resolve_run_budget_micro(user_id: str) -> int | None:
     """查启动时可用额度作 in-run 成本熔断预算（含宽限）；不可用返回 None（不熔断）。
 
     预算 = available_micro ×(1 + COST_GUARD_GRACE_RATIO)。available_micro 为 None
-    （旧 tools-server / 查询失败）或查询抛错时返回 None：熔断退化关闭，仍由发送前闸口
+    （旧平台接口 / 查询失败）或查询抛错时返回 None：熔断退化关闭，仍由发送前闸口
     兜底，绝不因预算查询失败阻断 run。
     """
     try:
@@ -396,8 +400,8 @@ class AgentRunService:
 
             byok_id = (byok_credential_id or "").strip() or None
             if byok_id:
-                # BYOK：凭证由 tools-server 下发，绕开 llm_config / routes，用户自付不扣额度。
-                from clients.llm_credential_client import (
+                # BYOK：凭证由 MatMaster 平台下发，绕开 llm_config / routes，用户自付不扣额度。
+                from clients.matmaster_platform.llm_credentials import (
                     ByokCredentialError,
                     fetch_byok_credential,
                 )
@@ -442,7 +446,7 @@ class AgentRunService:
                 billing_mode = "platform"
             llm_provider = llm_bundle.provider
             # in-run 成本熔断预算（防线二）：仅 platform 计费且有取消句柄时启用。
-            # 预算查询失败/旧 tools-server 不返回 available_micro -> None（不熔断，
+            # 预算查询失败/旧平台接口不返回 available_micro -> None（不熔断，
             # 退化为只靠发送前闸口），绝不阻断 run。
             budget_micro = None
             if billing_mode == "platform" and cancel_controller is not None and user_id:
@@ -601,6 +605,7 @@ class AgentRunService:
                         bohrium_job_ledger=bohrium_ledger_port,
                         workspace_jobs=bohrium_jobs_port,
                         submit_approval_gate=submit_approval_gate,
+                        tool_timeout_observer=FeishuToolTimeoutObserver(),
                     ),
                 ),
             )
@@ -685,7 +690,7 @@ class AgentRunService:
                     )
                 )
                 if run_result_event.status == "completed":
-                    # 扣费由 tools-server 侧按金额实时完成（billing usage 上报），
+                    # 扣费由 MatMaster 平台侧按金额实时完成（billing usage 上报），
                     # evo 不再做按次扣减。
                     return (True, _elapsed_ms(), usage_summary)
                 fail_reason = (

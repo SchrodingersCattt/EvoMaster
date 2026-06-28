@@ -2,7 +2,7 @@
 
 import pytest
 
-from clients.billing import BillingRunContext, BillingService
+from clients.matmaster_platform.billing import BillingRunContext, BillingService
 
 
 class _FakeResponse:
@@ -62,7 +62,9 @@ async def test_price_llm_usage_posts_expected_payload(monkeypatch):
     session_cls = _make_session_cls(
         200, {"code": 0, "data": {"recorded": True, "pricing_status": "priced"}}
     )
-    monkeypatch.setattr("clients.billing.client.aiohttp.ClientSession", session_cls)
+    monkeypatch.setattr(
+        "clients.matmaster_platform.billing.client.aiohttp.ClientSession", session_cls
+    )
 
     service = BillingService(base_url="https://tools.example.com")
     data = await service.price_llm_usage(
@@ -98,7 +100,9 @@ async def test_price_llm_usage_posts_expected_payload(monkeypatch):
 @pytest.mark.asyncio
 async def test_price_llm_usage_skips_empty_usage(monkeypatch):
     session_cls = _make_session_cls(200, {"code": 0, "data": {"recorded": True}})
-    monkeypatch.setattr("clients.billing.client.aiohttp.ClientSession", session_cls)
+    monkeypatch.setattr(
+        "clients.matmaster_platform.billing.client.aiohttp.ClientSession", session_cls
+    )
     session_cls.last_post = {}
 
     service = BillingService(base_url="https://tools.example.com")
@@ -121,7 +125,9 @@ async def test_price_llm_usage_reuses_provided_session(monkeypatch):
     def _boom(*_args, **_kwargs):
         raise AssertionError("should not create a new ClientSession")
 
-    monkeypatch.setattr("clients.billing.client.aiohttp.ClientSession", _boom)
+    monkeypatch.setattr(
+        "clients.matmaster_platform.billing.client.aiohttp.ClientSession", _boom
+    )
 
     shared_cls = _make_session_cls(200, {"code": 0, "data": {"recorded": True}})
     shared = shared_cls()
@@ -146,7 +152,9 @@ async def test_price_llm_usage_reuses_provided_session(monkeypatch):
 @pytest.mark.asyncio
 async def test_price_llm_usage_swallows_server_error(monkeypatch):
     session_cls = _make_session_cls(500, {"code": -1, "msg": "boom"})
-    monkeypatch.setattr("clients.billing.client.aiohttp.ClientSession", session_cls)
+    monkeypatch.setattr(
+        "clients.matmaster_platform.billing.client.aiohttp.ClientSession", session_cls
+    )
 
     service = BillingService(base_url="https://tools.example.com")
     data = await service.price_llm_usage(

@@ -38,6 +38,8 @@ __all__ = [
     "PreCompactionBarrier",
     "SessionEventHistoryPort",
     "SubmitApprovalGate",
+    "ToolTimeoutNotice",
+    "ToolTimeoutObserver",
     "UserTurnContextWriteRequest",
     "UserTurnContextWriter",
 ]
@@ -163,6 +165,31 @@ class UserTurnContextWriter(Protocol):
 
 
 @dataclass(frozen=True)
+class ToolTimeoutNotice:
+    session_id: str
+    task_id: str | None
+    spawn_id: str | None
+    tool_name: str
+    tool_call_id: str
+    turn: int
+    result_content: str
+    arguments_preview: str
+
+
+@runtime_checkable
+class ToolTimeoutObserver(Protocol):
+    """Observe tool timeouts after tool execution.
+
+    Consumer: service-layer observability integrations such as Feishu alerting.
+    Timing: invoked from the POST_TOOL_CALL observer path after result rewrites.
+    Return: ignored; the observer is for side effects only.
+    Exceptions: implementations should swallow failures; callers also guard and log.
+    """
+
+    def __call__(self, notice: ToolTimeoutNotice) -> Awaitable[None] | None: ...
+
+
+@dataclass(frozen=True)
 class AgentRunPorts:
     """Narrow runtime capability ports carried by AgentRunRequest.
 
@@ -183,6 +210,7 @@ class AgentRunPorts:
     bohrium_job_ledger: BohriumJobLedgerPort | None = None
     workspace_jobs: WorkspaceJobsPort | None = None
     submit_approval_gate: SubmitApprovalGate | None = None
+    tool_timeout_observer: ToolTimeoutObserver | None = None
 
 
 @dataclass(frozen=True)

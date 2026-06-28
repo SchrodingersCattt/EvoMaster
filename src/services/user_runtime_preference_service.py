@@ -1,6 +1,6 @@
 """用户运行偏好组合服务。
 
-用户级偏好由根目录 clients 层从 matmaster-tools-server 读取；evo 本地只补充
+用户级偏好由根目录 clients 层从 MatMaster 平台读取；evo 本地只补充
 会话运行态上下文（例如最近 org_id），避免业务入口直接依赖 user_preference 表结构。
 """
 
@@ -11,7 +11,9 @@ from dataclasses import dataclass
 
 from pymysql import Error
 
-from clients.user_runtime_preference_client import get_user_level_runtime_preference
+from clients.matmaster_platform.runtime_preference import (
+    get_user_level_runtime_preference,
+)
 from src.dao.chat_sessions_table import ChatSessionsTable, get_chat_sessions_table
 
 logger = logging.getLogger(__name__)
