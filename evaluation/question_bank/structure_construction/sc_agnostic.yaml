@@ -4142,6 +4142,10 @@ questions:
       filename: traj.extxyz
       expected: 102
       tolerance: 0
+  - key: traj_min_dist
+    value:
+      filename: traj.extxyz
+      min_distance_A: 0.5
   - key: turn_budget
     value:
       max: 20
@@ -4165,6 +4169,11 @@ questions:
     criterion: Each frame contains exactly 102 atoms, matching both input endpoints.
     axis: correctness
     verify: struct_file_atom_count
+  - id: traj_min_dist
+    criterion: The minimum interatomic distance across all frames in traj.extxyz is
+      at least 0.5 A (no atom overlaps from incorrect interpolation).
+    axis: correctness
+    verify: struct_file_min_interatomic_distance
   - id: no_retries
     criterion: No repeated identical interpolation operations with wrong parameters.
     axis: efficiency
