@@ -4067,6 +4067,32 @@ questions:
       - C
       - N
       - H
+  - key: cluster_molecule_formulas
+    value:
+      filename: MAF-4_ordered.cif
+      expected_formulas:
+      - C96H120N48Zn12
+      - H2O
+      - H2O
+      - H2O
+      - H2O
+      - H2O
+      - H2O
+      - H2O
+      - H2O
+      - H2O
+      - H2O
+      - H2O
+      - H2O
+      - H2O
+      - H2O
+      - H2O
+      - H2O
+      - H2O
+      - H2O
+      - H2O
+      - H2O
+      - H2O
   - key: turn_budget
     value:
       max: 20
@@ -4095,6 +4121,11 @@ questions:
       elements).
     axis: correctness
     verify: struct_file_elements_present
+  - id: cluster_molecule_formulas
+    criterion: The input CIF parsed by MolCrysKit identifies a single framework
+      molecule (C96H120N48Zn12) plus 21 guest H2O molecules.
+    axis: correctness
+    verify: molcrys_molecule_formulas
   - id: no_retries
     criterion: No repeated identical cluster operations with wrong parameters.
     axis: efficiency
@@ -4146,6 +4177,17 @@ questions:
     value:
       filename: traj.extxyz
       min_distance_A: 0.5
+  - key: traj_molecule_formulas
+    value:
+      filename: traj.extxyz
+      all_frames: true
+      expected_formulas:
+      - C5FeN6O
+      - C5FeN6O
+      - C5H12NO
+      - C5H12NO
+      - C5H12NO
+      - C5H12NO
   - key: turn_budget
     value:
       max: 20
@@ -4174,6 +4216,13 @@ questions:
       at least 0.5 A (no atom overlaps from incorrect interpolation).
     axis: correctness
     verify: struct_file_min_interatomic_distance
+  - id: traj_molecule_formulas
+    criterion: Every frame in traj.extxyz preserves the same per-molecule chemical
+      formulas as both input endpoints (2× C5FeN6O + 4× C5H12NO), verified via
+      MolCrysKit graph-based molecule identification.
+    axis: correctness
+    verify: molcrys_molecule_formulas
+    weight: 2.0
   - id: no_retries
     criterion: No repeated identical interpolation operations with wrong parameters.
     axis: efficiency

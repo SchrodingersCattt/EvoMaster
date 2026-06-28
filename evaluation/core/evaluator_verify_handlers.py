@@ -180,6 +180,25 @@ def _h_molcrys_env(ctx):
     )
 
 
+@_R("molcrys_molecule_formulas")
+def _h_molcrys_mol_formulas(ctx):
+    from evaluation.core.evaluator_wiring import _cfg, _get_workspace
+    from evaluation.validators.structure_molcrys import (
+        check_molcrys_molecule_formulas,
+    )
+
+    ws, err = _get_workspace(ctx["evidence"])
+    if err:
+        return False, err
+    cfg = _cfg(ctx["ref"])
+    return check_molcrys_molecule_formulas(
+        ws,
+        filename=cfg.get("filename", "*.cif"),
+        expected_formulas=list(cfg.get("expected_formulas", [])),
+        all_frames=bool(cfg.get("all_frames", False)),
+    )
+
+
 @_R("checkcif_no_a_alerts")
 def _h_checkcif(ctx):
     return check_checkcif_alerts(evidence=ctx["evidence"], ref=ctx["ref"])
