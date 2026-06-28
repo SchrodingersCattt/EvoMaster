@@ -4047,21 +4047,21 @@ questions:
     description: MAF-4 (ZIF-8 analogue) ordered CIF with 12 Zn centres.
   reference_answers:
   - key: file_exists
-    value: maf-4-cluster.xyz__group0.xyz
+    value: maf-4-cluster.xyz
   - key: cluster_atoms
     value:
-      filename: maf-4-cluster.xyz__group0.xyz
+      filename: maf-4-cluster*
       expected: 49
       tolerance: 0
   - key: zn_count
     value:
-      filename: maf-4-cluster.xyz__group0.xyz
+      filename: maf-4-cluster*
       element: Zn
       expected: 1
       tolerance: 0
   - key: cluster_elements
     value:
-      filename: maf-4-cluster.xyz__group0.xyz
+      filename: maf-4-cluster*
       elements:
       - Zn
       - C
@@ -4069,30 +4069,9 @@ questions:
       - H
   - key: cluster_molecule_formulas
     value:
-      filename: MAF-4_ordered.cif
+      filename: maf-4-cluster*
       expected_formulas:
-      - C96H120N48Zn12
-      - H2O
-      - H2O
-      - H2O
-      - H2O
-      - H2O
-      - H2O
-      - H2O
-      - H2O
-      - H2O
-      - H2O
-      - H2O
-      - H2O
-      - H2O
-      - H2O
-      - H2O
-      - H2O
-      - H2O
-      - H2O
-      - H2O
-      - H2O
-      - H2O
+      - C16H24N8Zn
   - key: turn_budget
     value:
       max: 20
@@ -4104,7 +4083,7 @@ questions:
       max: 24000
   scoring_checklist:
   - id: file_exists
-    criterion: The output file `maf-4-cluster.xyz__group0.xyz` exists.
+    criterion: The output file `maf-4-cluster.xyz` exists.
     axis: correctness
     verify: artifact_exists
   - id: cluster_atoms
@@ -4122,10 +4101,11 @@ questions:
     axis: correctness
     verify: struct_file_elements_present
   - id: cluster_molecule_formulas
-    criterion: The input CIF parsed by MolCrysKit identifies a single framework
-      molecule (C96H120N48Zn12) plus 21 guest H2O molecules.
+    criterion: The carved cluster parsed by MolCrysKit is a single connected molecule
+      with formula C16H24N8Zn (1 Zn + 4 complete imidazolate ligands + 4 cap H).
     axis: correctness
     verify: molcrys_molecule_formulas
+    weight: 2.0
   - id: no_retries
     criterion: No repeated identical cluster operations with wrong parameters.
     axis: efficiency
