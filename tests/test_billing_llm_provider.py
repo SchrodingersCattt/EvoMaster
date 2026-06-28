@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
-from clients.billing.client import BillingRunContext
+from clients.matmaster_platform.billing.client import BillingRunContext
 from matmaster.types.cancellation import CancellationController
 from src.services.billing_llm_provider import BillingLLMProvider
 

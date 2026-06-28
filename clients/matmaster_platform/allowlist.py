@@ -1,4 +1,4 @@
-"""调用 matmaster-tools-server 白名单接口（与 Nacos allowlist 规则名一致）。"""
+"""调用 MatMaster 平台白名单接口（与 Nacos allowlist 规则名一致）。"""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ from utils.env import MATMASTER_TOOLS_SERVER
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
-# 与 matmaster-tools-server ``src/integrations/nacos.ADMIN_ALLOWLIST_RULE`` 一致
+# 与平台 ``src/integrations/nacos.ADMIN_ALLOWLIST_RULE`` 一致
 ALLOWLIST_RULE_ADMIN = "admin"
 
 
@@ -26,7 +26,7 @@ def _allowlist_url(user_id: str) -> str:
 
 
 def _fetch_is_in_admin_allowlist_uncached(user_id: str) -> bool:
-    """请求 tools-server；失败或未命中时返回 False（fail-closed）。"""
+    """请求平台；失败或未命中时返回 False（fail-closed）。"""
     uid = (user_id or "").strip()
     if not uid:
         return False
@@ -42,18 +42,18 @@ def _fetch_is_in_admin_allowlist_uncached(user_id: str) -> bool:
             r = client.post(url, json=payload, headers=headers)
     except (httpx.HTTPError, OSError) as e:
         logger.warning(
-            "tools-server allowlist 请求失败 user_id=%s error=%s",
+            "platform allowlist 请求失败 user_id=%s error=%s",
             uid,
             e,
             exc_info=True,
         )
         return False
     if r.status_code == 401:
-        logger.warning("tools-server allowlist 401（需 X-User-Id）user_id=%s", uid)
+        logger.warning("platform allowlist 401（需 X-User-Id）user_id=%s", uid)
         return False
     if r.status_code >= 400:
         logger.warning(
-            "tools-server allowlist HTTP %s user_id=%s body=%s",
+            "platform allowlist HTTP %s user_id=%s body=%s",
             r.status_code,
             uid,
             (r.text or "")[:256],
@@ -62,7 +62,7 @@ def _fetch_is_in_admin_allowlist_uncached(user_id: str) -> bool:
     try:
         body = r.json()
     except ValueError:
-        logger.warning("tools-server allowlist 非 JSON user_id=%s", uid)
+        logger.warning("platform allowlist 非 JSON user_id=%s", uid)
         return False
     # AllowlistCheckResponse: code 0 成功；1 配置/用户信息失败
     if body.get("code") != 0:
@@ -82,7 +82,7 @@ def is_user_in_admin_allowlist_cached(user_id: str, bucket: int) -> bool:
 
 
 def is_user_in_admin_allowlist(user_id: str) -> bool:
-    """当前用户是否在 tools-server Nacos ``allowlist.admin`` 中。"""
+    """当前用户是否在平台 Nacos ``allowlist.admin`` 中。"""
     uid = (user_id or "").strip()
     if not uid:
         return False

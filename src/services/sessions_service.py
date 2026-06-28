@@ -6,7 +6,7 @@ from collections import defaultdict
 from datetime import datetime
 from functools import lru_cache
 
-from clients.tools_server.allowlist import is_user_in_admin_allowlist
+from clients.matmaster_platform.allowlist import is_user_in_admin_allowlist
 from src.dao.chat_sessions_table import (
     WORKSPACE_PREF_UNSET,
     ChatSessionsTable,
@@ -120,7 +120,7 @@ class ChatSessionsService:
         是否可访问该会话：
         - 会话不存在：仅登录用户可访问（用于新会话，后续 ensure_session 会创建）
         - 会话已分享：任何人可访问（含未登录）
-        - 会话未分享：仅会话所有者可访问；若 ``allow_admin_read`` 且用户在 tools-server
+        - 会话未分享：仅会话所有者可访问；若 ``allow_admin_read`` 且用户在 MatMaster 平台
           ``allowlist.admin`` 中，则允许只读场景（订阅 SSE、查看分享状态等）
         """
         row = self.table.get_session(session_id, include_deleted=True)

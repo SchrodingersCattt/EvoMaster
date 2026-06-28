@@ -30,7 +30,7 @@ class _FakeClient:
 def test_get_user_runtime_preference_combines_tools_preference_and_latest_org(
     monkeypatch,
 ):
-    from clients import user_runtime_preference_client as client_mod
+    from clients.matmaster_platform import runtime_preference as client_mod
     from src.services import user_runtime_preference_service as service_mod
 
     fake_client = _FakeClient(
@@ -72,7 +72,7 @@ def test_get_user_runtime_preference_combines_tools_preference_and_latest_org(
 def test_get_user_runtime_preference_fail_soft_when_tools_server_fails(
     monkeypatch,
 ):
-    from clients import user_runtime_preference_client as client_mod
+    from clients.matmaster_platform import runtime_preference as client_mod
     from src.services import user_runtime_preference_service as service_mod
 
     def _raise_client(timeout):

@@ -7,8 +7,8 @@ from __future__ import annotations
 
 import pytest
 
-from clients import llm_credential_client as mod
-from clients.llm_credential_client import (
+from clients.matmaster_platform import llm_credentials as mod
+from clients.matmaster_platform.llm_credentials import (
     ByokCredentialError,
     fetch_byok_credential,
 )

@@ -1,4 +1,4 @@
-"""UsageReporter 实现：把每次 LLM 调用 usage 上报 tools-server 并取回当次金额。
+"""UsageReporter 实现：把每次 LLM 调用 usage 上报平台并取回当次金额。
 
 实现 ``matmaster.types.usage_reporter.UsageReporter`` 窄端口，供
 ``UsageCollectingProvider`` 在评测 run 内实时上报使用。一次 run 内复用一个
@@ -11,11 +11,11 @@ from typing import Any
 
 import aiohttp
 
-from clients.billing.client import BillingRunContext, BillingService
+from clients.matmaster_platform.billing.client import BillingRunContext, BillingService
 
 
 class BillingUsageReporter:
-    """把每次 usage 以 ``billing_mode`` 上报 tools-server，返回当次定价 data。"""
+    """把每次 usage 以 ``billing_mode`` 上报平台，返回当次定价 data。"""
 
     def __init__(
         self,

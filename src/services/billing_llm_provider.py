@@ -1,4 +1,4 @@
-"""LLMProvider wrapper that reports billing usage to tools-server."""
+"""LLMProvider wrapper that reports billing usage to MatMaster platform."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from typing import Any
 
 import aiohttp
 
-from clients.billing.client import BillingRunContext, BillingService
+from clients.matmaster_platform.billing.client import BillingRunContext, BillingService
 from matmaster.types.cancellation import CancellationController
 from matmaster.types.llm_provider import LLMProvider
 from matmaster.types.messages import LLMResponse, Message, StreamChunk

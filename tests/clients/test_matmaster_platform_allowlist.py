@@ -1,6 +1,6 @@
 from unittest.mock import MagicMock, patch
 
-from clients.tools_server.allowlist import (
+from clients.matmaster_platform.allowlist import (
     ALLOWLIST_RULE_ADMIN,
     _fetch_is_in_admin_allowlist_uncached,
     is_user_in_admin_allowlist,
@@ -16,14 +16,14 @@ def test_fetch_parses_success_true():
         "data": {"is_in_allowlist": True},
         "msg": "拥有权限",
     }
-    with patch("clients.tools_server.allowlist.httpx.Client") as client_cls:
+    with patch("clients.matmaster_platform.allowlist.httpx.Client") as client_cls:
         client = MagicMock()
         client.__enter__.return_value = client
         client.__exit__.return_value = None
         client.post.return_value = mock_resp
         client_cls.return_value = client
         with patch(
-            "clients.tools_server.allowlist.MATMASTER_TOOLS_SERVER",
+            "clients.matmaster_platform.allowlist.MATMASTER_TOOLS_SERVER",
             "https://ts.example.com",
         ):
             assert _fetch_is_in_admin_allowlist_uncached("u1") is True
@@ -40,14 +40,14 @@ def test_fetch_code_nonzero_false():
         "data": {"is_in_allowlist": False},
         "msg": "err",
     }
-    with patch("clients.tools_server.allowlist.httpx.Client") as client_cls:
+    with patch("clients.matmaster_platform.allowlist.httpx.Client") as client_cls:
         client = MagicMock()
         client.__enter__.return_value = client
         client.__exit__.return_value = None
         client.post.return_value = mock_resp
         client_cls.return_value = client
         with patch(
-            "clients.tools_server.allowlist.MATMASTER_TOOLS_SERVER",
+            "clients.matmaster_platform.allowlist.MATMASTER_TOOLS_SERVER",
             "https://ts.example.com",
         ):
             assert _fetch_is_in_admin_allowlist_uncached("u1") is False
@@ -61,11 +61,11 @@ def test_is_user_in_admin_allowlist_respects_cache(monkeypatch):
         return True
 
     monkeypatch.setattr(
-        "clients.tools_server.allowlist._fetch_is_in_admin_allowlist_uncached",
+        "clients.matmaster_platform.allowlist._fetch_is_in_admin_allowlist_uncached",
         fake_uncached,
     )
     monkeypatch.setattr(
-        "clients.tools_server.allowlist._cache_bucket",
+        "clients.matmaster_platform.allowlist._cache_bucket",
         lambda: 42,
     )
     is_user_in_admin_allowlist_cached.cache_clear()

@@ -1,4 +1,4 @@
-from clients import quota_client as mod
+from clients.matmaster_platform import quota as mod
 
 
 class _FakeResponse:

@@ -1,6 +1,6 @@
 """Admin-only endpoints for session trajectory analysis.
 
-All endpoints require the caller to be in the tools-server ``allowlist.admin``.
+All endpoints require the caller to be in MatMaster platform ``allowlist.admin``.
 """
 
 import logging
@@ -9,7 +9,7 @@ from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, Path, Query
 from pydantic import BaseModel
 
-from clients.tools_server.allowlist import is_user_in_admin_allowlist
+from clients.matmaster_platform.allowlist import is_user_in_admin_allowlist
 from src.dao.chat_events_table import ChatEventsTable
 from src.dao.chat_sessions_table import ChatSessionsTable
 from src.services.sessions_service import ChatSessionsService, get_sessions_service
