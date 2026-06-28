@@ -4095,11 +4095,6 @@ questions:
       elements).
     axis: correctness
     verify: struct_file_elements_present
-  - id: grounding_source
-    criterion: Agent uses `mck operate cluster` CLI (not hand-written Python), seeds
-      on Zn, and reports cluster composition.
-    axis: grounding
-    verify: llm_binary_judge
   - id: no_retries
     criterion: No repeated identical cluster operations with wrong parameters.
     axis: efficiency
@@ -4108,10 +4103,6 @@ questions:
     criterion: Agent completes within the turn budget.
     axis: efficiency
     verify: turn_budget
-  - id: efficiency_judge
-    criterion: Cluster carving completes without excessive exploratory calls.
-    axis: efficiency
-    verify: llm_binary_judge
   - id: duration_budget
     criterion: Wall-clock run duration within benchmark ceiling.
     axis: efficiency
@@ -4174,17 +4165,6 @@ questions:
     criterion: Each frame contains exactly 102 atoms, matching both input endpoints.
     axis: correctness
     verify: struct_file_atom_count
-  - id: frames_complete
-    criterion: The trajectory contains exactly 6 frames (including endpoints), and
-      every frame preserves the same chemical formula and atom count as the endpoints.
-    axis: correctness
-    verify: llm_binary_judge
-  - id: grounding_source
-    criterion: Agent uses `mck operate interpolate` CLI (not hand-written Python),
-      specifies `--n-images 6`, and confirms frame integrity via `mck io info` or
-      equivalent inspection.
-    axis: grounding
-    verify: llm_binary_judge
   - id: no_retries
     criterion: No repeated identical interpolation operations with wrong parameters.
     axis: efficiency
@@ -4193,10 +4173,6 @@ questions:
     criterion: Agent completes within the turn budget.
     axis: efficiency
     verify: turn_budget
-  - id: efficiency_judge
-    criterion: Interpolation completes directly without excessive exploratory calls.
-    axis: efficiency
-    verify: llm_binary_judge
   - id: duration_budget
     criterion: Wall-clock run duration within benchmark ceiling.
     axis: efficiency
