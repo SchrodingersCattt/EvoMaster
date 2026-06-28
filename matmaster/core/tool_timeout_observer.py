@@ -5,11 +5,10 @@ from __future__ import annotations
 import inspect
 import json
 import logging
-from typing import Any
 
 from matmaster.core.hooks import HookEvent, HookExecutor
 from matmaster.types.run_metadata import RunIdentity
-from matmaster.types.runtime_ports import ToolTimeoutNotice
+from matmaster.types.runtime_ports import ToolTimeoutNotice, ToolTimeoutObserver
 
 
 def _tool_arguments_preview(arguments: dict[str, Any], *, max_chars: int = 1000) -> str:
@@ -25,7 +24,7 @@ def _tool_arguments_preview(arguments: dict[str, Any], *, max_chars: int = 1000)
 def install_tool_timeout_observer_hooks(
     *,
     hook_executor: HookExecutor,
-    observer: Any,
+    observer: ToolTimeoutObserver,
     run_identity: RunIdentity,
     logger: logging.Logger,
 ) -> None:
