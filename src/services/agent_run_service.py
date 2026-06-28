@@ -51,6 +51,7 @@ from src.services.history_checkpoint_service import HistoryCheckpointService
 from src.services.image_input_service import get_image_input_service
 from src.services.quota_service import check_quota_status
 from src.services.sessions_service import get_sessions_service
+from src.services.tool_timeout_alert_service import FeishuToolTimeoutObserver
 from src.services.user_turn_context_service import (
     write_user_turn_context_event as _persist_utc_event,
 )
@@ -601,6 +602,7 @@ class AgentRunService:
                         bohrium_job_ledger=bohrium_ledger_port,
                         workspace_jobs=bohrium_jobs_port,
                         submit_approval_gate=submit_approval_gate,
+                        tool_timeout_observer=FeishuToolTimeoutObserver(),
                     ),
                 ),
             )
