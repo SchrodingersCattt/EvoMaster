@@ -542,9 +542,7 @@ def check_molcrys_molecule_formulas(
                 failures.append(f'frame {i}: parse error: {exc}')
                 continue
             if actual != expected_sorted:
-                failures.append(
-                    f'frame {i}: got {actual}, expected {expected_sorted}'
-                )
+                failures.append(f'frame {i}: got {actual}, expected {expected_sorted}')
         if failures:
             return False, '; '.join(failures[:3])
         return True, (
@@ -569,6 +567,4 @@ def check_molcrys_molecule_formulas(
                 f'{Path(fpath).name}: molecule formulas {actual} '
                 f'!= expected {expected_sorted}'
             )
-        return True, (
-            f'{Path(fpath).name}: molecule formulas match: {actual}'
-        )
+        return True, (f'{Path(fpath).name}: molecule formulas match: {actual}')
