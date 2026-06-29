@@ -28,6 +28,8 @@ class QuestionTag(StrEnum):
     eng_deepmd = 'eng_deepmd'
     # 代码库/工具链
     code_mlip = 'code_mlip'
+    # 材料类型
+    cof = 'cof'
     # 结构操作
     struct_surface = 'struct_surface'
     struct_build = 'struct_build'

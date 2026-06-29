@@ -15,8 +15,7 @@ questions:
   tags:
   - struct_build
   - cof
-  data_files:
-  - COF-5.cif
+  data_files: []
   reference_answers:
   - key: cof_structure_artifact
     value: COF5_structure.cif
@@ -155,8 +154,7 @@ questions:
   tags:
   - struct_build
   - cof
-  data_files:
-  - COF-LZU1.cif
+  data_files: []
   reference_answers:
   - key: pristine_artifact
     value: COF_LZU1_pristine.cif
@@ -287,8 +285,7 @@ questions:
   tags:
   - struct_build
   - cof
-  data_files:
-  - CTF-1.cif
+  data_files: []
   reference_answers:
   - key: pristine_artifact
     value: CTF1_pristine.cif
@@ -422,8 +419,7 @@ questions:
   tags:
   - struct_build
   - cof
-  data_files:
-  - COF-LZU1.cif
+  data_files: []
   reference_answers:
   - key: hcb_artifact
     value: COF_hcb_original.cif
@@ -552,8 +548,7 @@ questions:
   tags:
   - struct_build
   - cof
-  data_files:
-  - TpPa-1.cif
+  data_files: []
   reference_answers:
   - key: planar_artifact
     value: COF_TpPa1_planar.cif
@@ -677,8 +672,7 @@ questions:
   tags:
   - struct_build
   - cof
-  data_files:
-  - COF-5.cif
+  data_files: []
   reference_answers:
   - key: aa_artifact
     value: COF5_AA_stacking.cif
@@ -792,8 +786,7 @@ questions:
   tags:
   - struct_build
   - cof
-  data_files:
-  - COF-LZU1.cif
+  data_files: []
   reference_answers:
   - key: bare_artifact
     value: COF_LZU1_bare.cif
@@ -912,8 +905,7 @@ questions:
   tags:
   - struct_build
   - cof
-  data_files:
-  - COF-300.cif
+  data_files: []
   reference_answers:
   - key: cof300_artifact
     value: COF300_3D.cif
@@ -1023,8 +1015,7 @@ questions:
   tags:
   - struct_build
   - cof
-  data_files:
-  - COF-LZU1.cif
+  data_files: []
   reference_answers:
   - key: perfect_artifact
     value: COF_LZU1_2x2_perfect.cif
