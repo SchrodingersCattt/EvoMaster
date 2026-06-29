@@ -37,6 +37,13 @@ MATMASTER_TOOLS_EVALUATION_BEARER: str | None = _eval_bearer or None
 _byok_bearer = os.getenv("MATMASTER_TOOLS_BYOK_BEARER", "").strip()
 MATMASTER_TOOLS_BYOK_BEARER: str | None = _byok_bearer or None
 
+# 调用 matmaster-tools-server 内网机器接口（如 /billing/usage、/billing/usage/summary）的
+# 统一服务 Bearer，与 ``require_internal_service_token`` 对齐（Nacos internal.service_api_keys）。
+# 迁移期回落到现成的 BYOK bearer：tools-server 的 internal 鉴权兼容 byok.service_api_keys，
+# 故未单独配 MATMASTER_TOOLS_INTERNAL_BEARER 时复用 BYOK bearer 即可打通，无需先改 Nacos。
+_internal_bearer = os.getenv("MATMASTER_TOOLS_INTERNAL_BEARER", "").strip()
+MATMASTER_TOOLS_INTERNAL_BEARER: str | None = _internal_bearer or _byok_bearer or None
+
 
 def _parse_grace_ratio(raw: str) -> float:
     """解析 in-run 成本熔断宽限比例；非法/负值回落默认 0.2。"""
