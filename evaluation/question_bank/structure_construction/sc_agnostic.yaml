@@ -4032,3 +4032,190 @@ questions:
     criterion: Total token usage stays within budget.
     axis: efficiency
     verify: token_budget
+- id: SC_molcrys_cluster_001_20260628
+  capability: structure_construction
+  domain: agnostic
+  intent: Carve a non-periodic QM cluster model with complete Zn coordination from a MAF-4 molecular crystal.
+  human_prompt_seed: 基于 `MAF-4_ordered.cif` 将 MAF-4 切出完整配位的 Zn 的非周期性簇，导出 `maf-4-cluster.xyz`
+    文件地址：`https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/evomaster/evaluation/SC_molcrys_cluster_001/MAF-4_ordered.cif`
+  tags:
+  - struct_molcrys
+  data_files:
+  - key: maf4_cif
+    path: data/SC_molcrys_cluster_001/MAF-4_ordered.cif
+    oss_url: https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/evomaster/evaluation/SC_molcrys_cluster_001/MAF-4_ordered.cif
+    description: MAF-4 (ZIF-8 analogue) ordered CIF with 12 Zn centres.
+  reference_answers:
+  - key: file_exists
+    value: maf-4-cluster.xyz
+  - key: cluster_atoms
+    value:
+      filename: maf-4-cluster*
+      expected: 49
+      tolerance: 0
+  - key: zn_count
+    value:
+      filename: maf-4-cluster*
+      element: Zn
+      expected: 1
+      tolerance: 0
+  - key: cluster_elements
+    value:
+      filename: maf-4-cluster*
+      elements:
+      - Zn
+      - C
+      - N
+      - H
+  - key: cluster_molecule_formulas
+    value:
+      filename: maf-4-cluster*
+      expected_formulas:
+      - C16H24N8Zn
+  - key: turn_budget
+    value:
+      max: 20
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 24000
+  scoring_checklist:
+  - id: file_exists
+    criterion: The output file `maf-4-cluster.xyz` exists.
+    axis: correctness
+    verify: artifact_exists
+  - id: cluster_atoms
+    criterion: The carved cluster contains exactly 49 atoms (Zn + four imidazolate ligands).
+    axis: correctness
+    verify: struct_file_atom_count
+  - id: zn_count
+    criterion: The carved cluster contains exactly 1 Zn atom (single Zn centre, complete
+      coordination sphere).
+    axis: correctness
+    verify: struct_file_atom_count
+  - id: cluster_elements
+    criterion: The carved cluster contains only Zn, C, N, H (no solvent or unexpected
+      elements).
+    axis: correctness
+    verify: struct_file_elements_present
+  - id: cluster_molecule_formulas
+    criterion: The carved cluster parsed by MolCrysKit is a single connected molecule
+      with formula C16H24N8Zn (1 Zn + 4 complete imidazolate ligands + 4 cap H).
+    axis: correctness
+    verify: molcrys_molecule_formulas
+    weight: 2.0
+  - id: no_retries
+    criterion: No repeated identical cluster operations with wrong parameters.
+    axis: efficiency
+    verify: no_retries
+  - id: turn_budget
+    criterion: Agent completes within the turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock run duration within benchmark ceiling.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage within budget.
+    axis: efficiency
+    verify: token_budget
+- id: SC_molcrys_interp_001_20260628
+  capability: structure_construction
+  domain: agnostic
+  intent: Construct a 6-frame interpolation trajectory between two molecular-crystal
+    conformations and verify frame-level chemical integrity.
+  human_prompt_seed: 构造 `1-HTP_enumerate_0.cif` 到 `1-HTP_enumerate_1.cif` 描述分子旋转的插值轨迹 6 帧，导出 `traj.extxyz`
+    文件地址：[0] `https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/evomaster/evaluation/SC_molcrys_interp_001/1-HTP_enumerate_0.cif`
+    [1] `https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/evomaster/evaluation/SC_molcrys_interp_001/1-HTP_enumerate_1.cif`
+  tags:
+  - struct_molcrys
+  data_files:
+  - key: htp_enumerate_0
+    path: data/SC_molcrys_interp_001/1-HTP_enumerate_0.cif
+    oss_url: https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/evomaster/evaluation/SC_molcrys_interp_001/1-HTP_enumerate_0.cif
+    description: 1-HTP molecular crystal conformation state 0.
+  - key: htp_enumerate_1
+    path: data/SC_molcrys_interp_001/1-HTP_enumerate_1.cif
+    oss_url: https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/evomaster/evaluation/SC_molcrys_interp_001/1-HTP_enumerate_1.cif
+    description: 1-HTP molecular crystal conformation state 1.
+  reference_answers:
+  - key: file_exists
+    value: traj.extxyz
+  - key: traj_formula
+    value:
+      filename: traj.extxyz
+      formula: C30H48Fe2N16O6
+  - key: traj_atoms
+    value:
+      filename: traj.extxyz
+      expected: 102
+      tolerance: 0
+  - key: traj_min_dist
+    value:
+      filename: traj.extxyz
+      min_distance_A: 0.5
+  - key: traj_molecule_formulas
+    value:
+      filename: traj.extxyz
+      all_frames: true
+      expected_formulas:
+      - C5FeN6O
+      - C5FeN6O
+      - C5H12NO
+      - C5H12NO
+      - C5H12NO
+      - C5H12NO
+  - key: turn_budget
+    value:
+      max: 20
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 24000
+  scoring_checklist:
+  - id: file_exists
+    criterion: The output file `traj.extxyz` exists.
+    axis: correctness
+    verify: artifact_exists
+  - id: traj_formula
+    criterion: The reduced chemical formula of frame 0 is C30H48Fe2N16O6, matching
+      both input endpoints.
+    axis: correctness
+    verify: struct_file_formula
+  - id: traj_atoms
+    criterion: Each frame contains exactly 102 atoms, matching both input endpoints.
+    axis: correctness
+    verify: struct_file_atom_count
+  - id: traj_min_dist
+    criterion: The minimum interatomic distance across all frames in traj.extxyz is
+      at least 0.5 A (no atom overlaps from incorrect interpolation).
+    axis: correctness
+    verify: struct_file_min_interatomic_distance
+  - id: traj_molecule_formulas
+    criterion: Every frame in traj.extxyz preserves the same per-molecule chemical
+      formulas as both input endpoints (2× C5FeN6O + 4× C5H12NO), verified via
+      MolCrysKit graph-based molecule identification.
+    axis: correctness
+    verify: molcrys_molecule_formulas
+    weight: 2.0
+  - id: no_retries
+    criterion: No repeated identical interpolation operations with wrong parameters.
+    axis: efficiency
+    verify: no_retries
+  - id: turn_budget
+    criterion: Agent completes within the turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock run duration within benchmark ceiling.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage within budget.
+    axis: efficiency
+    verify: token_budget

@@ -77,14 +77,14 @@ def _start_redis_channel_subscription(
                 msg = pubsub.get_message(timeout=1.0)
                 if not msg:
                     continue
-                msg_type = msg.get('type')
-                if msg_type == 'subscribe':
+                msg_type = msg.get("type")
+                if msg_type == "subscribe":
                     subscribe_ready.set()
                     continue
-                if msg_type != 'message':
+                if msg_type != "message":
                     continue
                 try:
-                    data = json.loads(msg['data'])
+                    data = json.loads(msg["data"])
                     loop.call_soon_threadsafe(redis_queue.put_nowait, data)
                 except (json.JSONDecodeError, TypeError):
                     pass
@@ -203,11 +203,11 @@ class ChatStreamService:
             buf.append(frame)
             buf_len += len(frame)
             if buf_len >= self.REPLAY_BATCH_MAX_BYTES:
-                yield ''.join(buf)
+                yield "".join(buf)
                 buf = []
                 buf_len = 0
         if buf:
-            yield ''.join(buf)
+            yield "".join(buf)
 
     def _iter_history_replay_batches(
         self, session_id: str, *, exclude_task_id: str | None = None
@@ -229,19 +229,19 @@ class ChatStreamService:
     @staticmethod
     def _ping_payload(session_id: str) -> dict:
         return {
-            'source': 'System',
-            'type': 'ping',
-            'content': '',
-            'session_id': session_id,
+            "source": "System",
+            "type": "ping",
+            "content": "",
+            "session_id": session_id,
         }
 
     @staticmethod
     def _build_run_interrupted_message(reason: str) -> str:
-        if reason == 'restart':
-            return '上一轮任务因服务重启中断，请重新发送以继续。'
-        if reason == 'deploy':
-            return '上一轮任务因服务升级中断，请重新发送以继续。'
-        return '上一轮任务因服务部署/重启中断，请重新发送以继续。'
+        if reason == "restart":
+            return "上一轮任务因服务重启中断，请重新发送以继续。"
+        if reason == "deploy":
+            return "上一轮任务因服务升级中断，请重新发送以继续。"
+        return "上一轮任务因服务部署/重启中断，请重新发送以继续。"
 
     def _get_pre_turn_history_event_id(self, session_id: str) -> int | None:
         try:
@@ -277,6 +277,8 @@ class ChatStreamService:
         byok_credential_id: str | None = None,
         bohrium_required: bool = False,
         bohrium_submit_confirmation_required: bool | None = None,
+        bohrium_job_max_runtime_seconds: int | None = None,
+        bohrium_node_sku_id: int | None = None,
         workspace: str | None = None,
         origin: str | None = None,
         delivery: dict | None = None,
@@ -299,7 +301,7 @@ class ChatStreamService:
         if pre_event_hook is not None:
             pre_event_hook()
         task_id = id_prefix + uuid.uuid4().hex[:16]
-        invocation_id = 'inv_' + uuid.uuid4().hex[:16]
+        invocation_id = "inv_" + uuid.uuid4().hex[:16]
         self._sessions_service.set_session_last_task(sid, task_id, user_id=user_id)
         self._deploy_state_service.record_session_version(sid)
         pre_turn_history_event_id = self._get_pre_turn_history_event_id(sid) or 0
@@ -313,24 +315,26 @@ class ChatStreamService:
         )
         event = event_writer(task_id, invocation_id)
         job = {
-            'session_id': sid,
-            'task_id': task_id,
-            'invocation_id': invocation_id,
-            'user_prompt': turn_input.user_text,
-            'mode': mode,
-            'model': model,
-            'byok_credential_id': byok_credential_id,
-            'turn_input': turn_input.to_payload(),
-            'images': list(images or []),
+            "session_id": sid,
+            "task_id": task_id,
+            "invocation_id": invocation_id,
+            "user_prompt": turn_input.user_text,
+            "mode": mode,
+            "model": model,
+            "byok_credential_id": byok_credential_id,
+            "turn_input": turn_input.to_payload(),
+            "images": list(images or []),
             # 纯用户/会话意图；workspace ⇒ 必须上 Bohrium 的推导统一在 run_bohrium_stage
-            'bohrium_required': bool(bohrium_required),
-            'bohrium_submit_confirmation_required': (
+            "bohrium_required": bool(bohrium_required),
+            "bohrium_submit_confirmation_required": (
                 bohrium_submit_confirmation_required
             ),
-            'workspace': workspace_value,
-            'origin': origin,
-            'delivery': delivery,
-            'submitted_at': datetime.now(timezone.utc).isoformat(),
+            "bohrium_job_max_runtime_seconds": bohrium_job_max_runtime_seconds,
+            "bohrium_node_sku_id": bohrium_node_sku_id,
+            "workspace": workspace_value,
+            "origin": origin,
+            "delivery": delivery,
+            "submitted_at": datetime.now(timezone.utc).isoformat(),
         }
         return RunHandle(
             task_id=task_id,
@@ -346,38 +350,38 @@ class ChatStreamService:
             session_user_id = self._sessions_service.get_session_user_id(sid)
             user_info = UserService.get_user_info_for_display(session_user_id)
             user_info_display = f"{user_info['user_id']} | {user_info['nickname']} | {user_info['email']}"
-            env = (SERVICE_ENV or '').strip().lower()
+            env = (SERVICE_ENV or "").strip().lower()
             session_url = f"https://matmaster{'' if not env or env == 'prod' else f'.{env}'}.bohrium.com/matmaster/chat-evo/{sid}"
             queue_len = get_redis_dao().llen_agent_run_queue()
             active_count = get_worker_registry_service().count_active_runs()
-            user_question = (job.get('user_prompt') or '').strip()
+            user_question = (job.get("user_prompt") or "").strip()
             if len(user_question) > 500:
-                user_question = user_question[:500] + '…'
+                user_question = user_question[:500] + "…"
             notify_post_async(
-                '任务进入排队',
+                "任务进入排队",
                 [
-                    ('会话ID', sid),
-                    ('会话地址', session_url),
-                    ('用户', user_info_display),
-                    ('模型', format_llm_model_for_notify(job.get('model'))),
-                    ('用户问题', user_question or '-'),
-                    ('排队数', str(queue_len)),
-                    ('执行中', str(active_count)),
+                    ("会话ID", sid),
+                    ("会话地址", session_url),
+                    ("用户", user_info_display),
+                    ("模型", format_llm_model_for_notify(job.get("model"))),
+                    ("用户问题", user_question or "-"),
+                    ("排队数", str(queue_len)),
+                    ("执行中", str(active_count)),
                 ],
                 template=CARD_TEMPLATE_ORANGE,
             )
         except Exception as e:
-            logger.warning('Feishu 进入排队通知发送失败 session_id=%s: %s', sid, e)
+            logger.warning("Feishu 进入排队通知发送失败 session_id=%s: %s", sid, e)
 
     def _enqueue_run(self, session_id: str, job: dict) -> bool:
         """共享入队：set waiting、标记 queued、脱离本 pod 占用、通知、lpush。"""
         sid = session_id.strip()
-        self._sessions_service.set_session_status(sid, 'waiting')
+        self._sessions_service.set_session_status(sid, "waiting")
         get_redis_dao().set_session_run_queued(sid)
         self._sessions_service.discard_session_run_from_this_pod(sid)
         self._notify_run_queued(sid, job)
         if not get_redis_dao().lpush_agent_run_job(job):
-            self._sessions_service.set_session_status(sid, 'idle')
+            self._sessions_service.set_session_status(sid, "idle")
             get_redis_dao().delete_session_run_queued(sid)
             return False
         return True
@@ -441,7 +445,7 @@ class ChatStreamService:
             return TriggerResult(status="deduped", dedup_key=dedup_key)
 
         resolved_mode = self._resolve_mode(mode)
-        model_val = (model or '').strip() or None
+        model_val = (model or "").strip() or None
         inherited_model = None
         if model_val is None:
             inherited_model = self._events_service.get_last_resolved_model_profile(sid)
@@ -454,12 +458,12 @@ class ChatStreamService:
 
         def _system_event_writer(task_id: str, invocation_id: str) -> dict:
             event = {
-                'source': 'System',
-                'type': 'trigger',
-                'content': {'text': prompt, 'origin': origin},
-                'session_id': sid,
-                'task_id': task_id,
-                'invocation_id': invocation_id,
+                "source": "System",
+                "type": "trigger",
+                "content": {"text": prompt, "origin": origin},
+                "session_id": sid,
+                "task_id": task_id,
+                "invocation_id": invocation_id,
             }
             self._events_service.add_history_event(sid, event, user_id=owner)
             return event
@@ -472,7 +476,7 @@ class ChatStreamService:
             images=None,
             workspace_paths=None,
             event_writer=_system_event_writer,
-            id_prefix='trig_',
+            id_prefix="trig_",
             mode=resolved_mode,
             model=model_val,
             byok_credential_id=None,
@@ -554,7 +558,7 @@ class ChatStreamService:
         # 部署/重启后：DB 仍为 active 但本进程没有该 session 的 run → 视为上一轮在别的 pod 上被中断
         # 若 Redis 显示该 session 的 run 在别的 worker 上，则是「切会话后落到另一实例」，不是重启，不当作 stale
         # 若任务已入队但 Worker 尚未接手（worker 满等情况），run_owner 可能仍为 API 进程且不刷新 worker_alive，此时也不应视为 stale
-        status = payload.get('status')
+        status = payload.get("status")
         is_running_on_this_pod = self._sessions_service.is_session_running_on_this_pod(
             sid
         )
@@ -563,14 +567,14 @@ class ChatStreamService:
         )
         is_run_queued = bool(REDIS_URL and get_redis_dao().is_session_run_queued(sid))
         is_stale = (
-            status == 'active'
+            status == "active"
             and not is_running_on_this_pod
             and not is_run_on_another_pod
             and not is_run_queued
         )
         run_owner = (
             get_worker_registry_service().get_session_run_owner(sid)
-            if status == 'active'
+            if status == "active"
             else None
         )
         owner_alive = (
@@ -579,8 +583,8 @@ class ChatStreamService:
             else None
         )
         logger.info(
-            'subscribe: session_id=%s status=%s is_running_on_this_pod=%s '
-            'is_run_on_another_pod=%s is_run_queued=%s is_stale=%s run_owner=%s owner_alive=%s worker_id=%s',
+            "subscribe: session_id=%s status=%s is_running_on_this_pod=%s "
+            "is_run_on_another_pod=%s is_run_queued=%s is_stale=%s run_owner=%s owner_alive=%s worker_id=%s",
             sid,
             status,
             is_running_on_this_pod,
@@ -598,91 +602,91 @@ class ChatStreamService:
             reason, reason_meta = self._deploy_state_service.classify_restart_reason(
                 sid
             )
-            if reason in ('restart', 'deploy'):
-                self._sessions_service.set_session_status(sid, 'failed')
+            if reason in ("restart", "deploy"):
+                self._sessions_service.set_session_status(sid, "failed")
             else:
                 self._sessions_service.reset_session_status_to_idle_in_db(sid)
             payload = self._sessions_service.get_session_status_payload(sid)
             last_query = self._events_service.get_last_user_query(sid)
             yield self.sse_format(payload)
-            current_version = reason_meta.get('current_version')
-            previous_version = reason_meta.get('previous_version')
+            current_version = reason_meta.get("current_version")
+            previous_version = reason_meta.get("previous_version")
             logger.info(
-                'run_interrupted: stale session detected reason=%s '
-                'session_id=%s prev=%s curr=%s',
+                "run_interrupted: stale session detected reason=%s "
+                "session_id=%s prev=%s curr=%s",
                 reason,
                 sid,
                 previous_version,
                 current_version,
             )
             run_interrupted_content = self._build_run_interrupted_message(reason)
-            last_user_content = (last_query or {}).get('content', '')
+            last_user_content = (last_query or {}).get("content", "")
             # 共享的可选元数据字段，SSE payload 和入库内容都需要
             _meta: dict = {}
             if current_version:
-                _meta['current_version'] = current_version
+                _meta["current_version"] = current_version
             if previous_version:
-                _meta['previous_version'] = previous_version
-            if reason_meta.get('note'):
-                _meta['reason_note'] = reason_meta['note']
-            if reason in ('restart', 'deploy'):
-                _meta['treat_as_failure'] = True
+                _meta["previous_version"] = previous_version
+            if reason_meta.get("note"):
+                _meta["reason_note"] = reason_meta["note"]
+            if reason in ("restart", "deploy"):
+                _meta["treat_as_failure"] = True
             run_interrupted_payload = {
-                'source': 'System',
-                'type': 'run_interrupted',
-                'content': run_interrupted_content,
-                'session_id': sid,
-                'reason': reason,
-                'last_user_content': last_user_content,
+                "source": "System",
+                "type": "run_interrupted",
+                "content": run_interrupted_content,
+                "session_id": sid,
+                "reason": reason,
+                "last_user_content": last_user_content,
                 **_meta,
             }
             yield self.sse_format(run_interrupted_payload)
             # 入库，便于历史/导出（如 CSV）中有重启记录；task_id 指向被中断的那一轮
-            interrupted_task_id = payload.get('last_task_id')
+            interrupted_task_id = payload.get("last_task_id")
             history_content = {
-                'message': run_interrupted_content,
-                'reason': reason,
-                'last_user_content': last_user_content,
+                "message": run_interrupted_content,
+                "reason": reason,
+                "last_user_content": last_user_content,
                 **_meta,
             }
             self._events_service.add_history_event(
                 sid,
                 {
-                    'source': 'System',
-                    'type': 'run_interrupted',
-                    'content': history_content,
-                    'session_id': sid,
-                    'task_id': interrupted_task_id,
+                    "source": "System",
+                    "type": "run_interrupted",
+                    "content": history_content,
+                    "session_id": sid,
+                    "task_id": interrupted_task_id,
                 },
                 user_id=self._sessions_service.get_session_user_id(sid),
             )
             # reason=restart 或 deploy 时按失败处理：直接结束流并推送 stream_closed，不再等待
-            if reason in ('restart', 'deploy'):
+            if reason in ("restart", "deploy"):
                 end_reason = (
-                    'run_interrupted_restart'
-                    if reason == 'restart'
-                    else 'run_interrupted_deploy'
+                    "run_interrupted_restart"
+                    if reason == "restart"
+                    else "run_interrupted_deploy"
                 )
                 yield self.sse_format(
                     {
-                        'source': 'System',
-                        'type': 'stream_closed',
-                        'content': run_interrupted_content,
-                        'session_id': sid,
-                        'end_reason': end_reason,
-                        'treat_as_failure': True,
+                        "source": "System",
+                        "type": "stream_closed",
+                        "content": run_interrupted_content,
+                        "session_id": sid,
+                        "end_reason": end_reason,
+                        "treat_as_failure": True,
                     }
                 )
                 return
             # 不再自动重跑上次用户输入，由用户自行决定是否重新发送
-        elif status == 'waiting' and not is_run_queued:
+        elif status == "waiting" and not is_run_queued:
             # DB 为 waiting 且 Redis 无 queued：若已有 run_owner 且存活则视为 active 不重置、继续流，否则重置为 idle 并结束流
             run_owner = get_worker_registry_service().get_session_run_owner(sid)
             owner_alive = bool(
                 run_owner and get_worker_registry_service().is_worker_alive(run_owner)
             )
             if owner_alive:
-                payload = {**payload, 'status': 'active'}
+                payload = {**payload, "status": "active"}
                 yield self.sse_format(payload)
             else:
                 self._sessions_service.reset_session_status_to_idle_in_db(sid)
@@ -780,7 +784,7 @@ class ChatStreamService:
             return None
         req_fields = req.model_dump(exclude_unset=True)
         self._sessions_service.ensure_session(sid, user_id=user_id)
-        user_content = (req.content or '').strip()
+        user_content = (req.content or "").strip()
 
         resolved_directory = SessionDirectoryResolver(self._sessions_service).resolve(
             session_id=sid,
@@ -819,9 +823,9 @@ class ChatStreamService:
         mode = self._resolve_mode(req.mode)
 
         model = (
-            req.model or ''
+            req.model or ""
         ).strip() or None  # 本轮模型名，如 matmaster/qwen3.7-max / claude-sonnet-4-6
-        byok_credential_id = (req.byok_credential_id or '').strip() or None
+        byok_credential_id = (req.byok_credential_id or "").strip() or None
         if byok_credential_id is None:
             model = validate_platform_model_profile(model)
 
@@ -842,11 +846,11 @@ class ChatStreamService:
         def _run_pre_event_hook() -> None:
             if req.replace_last_turn:
                 last_query_ev = self._events_service.get_last_user_query_event(sid)
-                if last_query_ev and last_query_ev.get('id'):
-                    self._events_service.delete_events_from_id(sid, last_query_ev['id'])
+                if last_query_ev and last_query_ev.get("id"):
+                    self._events_service.delete_events_from_id(sid, last_query_ev["id"])
                     logger.info(
                         "replace_last_turn: deleted events from id=%s session_id=%s",
-                        last_query_ev['id'],
+                        last_query_ev["id"],
                         sid,
                     )
             if req.bohrium_project_id is not None or org_id is not None:
@@ -867,22 +871,22 @@ class ChatStreamService:
 
         def _user_event_writer(task_id: str, invocation_id: str) -> dict:
             user_msg = {
-                'source': 'User',
-                'type': 'query',
-                'content': user_content,
-                'mode': mode,
-                'session_id': sid,
-                'task_id': task_id,
-                'invocation_id': invocation_id,
+                "source": "User",
+                "type": "query",
+                "content": user_content,
+                "mode": mode,
+                "session_id": sid,
+                "task_id": task_id,
+                "invocation_id": invocation_id,
             }
             if model:
-                user_msg['requested_model'] = model
+                user_msg["requested_model"] = model
             if req.files:
-                user_msg['files'] = list(req.files)
+                user_msg["files"] = list(req.files)
             if req.images:
-                user_msg['images'] = list(req.images)
+                user_msg["images"] = list(req.images)
             if req.workspace_paths:
-                user_msg['workspace_paths'] = list(req.workspace_paths)
+                user_msg["workspace_paths"] = list(req.workspace_paths)
             if resolved_directory.source != "none":
                 user_msg["session_directory"] = resolved_directory.remote_workdir
                 user_msg["session_directory_source"] = resolved_directory.source
@@ -897,7 +901,7 @@ class ChatStreamService:
             images=req.images,
             workspace_paths=req.workspace_paths,
             event_writer=_user_event_writer,
-            id_prefix='sse_',
+            id_prefix="sse_",
             mode=mode,
             model=model,
             byok_credential_id=byok_credential_id,
@@ -905,6 +909,8 @@ class ChatStreamService:
             bohrium_submit_confirmation_required=(
                 effective_submit_confirmation_required
             ),
+            bohrium_job_max_runtime_seconds=req.bohrium_job_max_runtime_seconds,
+            bohrium_node_sku_id=req.bohrium_node_sku_id,
             workspace=resolved_directory.remote_workdir,
             origin=None,
             delivery=None,
@@ -943,7 +949,7 @@ class ChatStreamService:
         """
         sid = session_id.strip()
         logger.info(
-            'generate_send_stream: start session_id=%s task_id=%s mode=%s',
+            "generate_send_stream: start session_id=%s task_id=%s mode=%s",
             sid,
             ctx.task_id,
             ctx.mode,
@@ -968,7 +974,7 @@ class ChatStreamService:
         """内部 HTTP trigger 流：订阅就绪后才入队，再转发 Worker 实时事件。"""
         sid = session_id.strip()
         logger.info(
-            'generate_internal_trigger_stream: start session_id=%s task_id=%s',
+            "generate_internal_trigger_stream: start session_id=%s task_id=%s",
             sid,
             ctx.task_id,
         )

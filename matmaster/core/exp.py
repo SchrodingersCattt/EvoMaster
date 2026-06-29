@@ -702,6 +702,8 @@ class Exp:
         env = ctx.environment
         exec_wd = Path(env.execution_workdir)
         has_session = env.session is not None
+        bohrium_allow_local_paths = env.metadata.source == "devshell"
+        bohrium_workdir = exec_wd if env.session_type == "ssh" else env.workdir
         search_path_roots = tuple(
             root.root
             for root in path_access_roots
@@ -745,10 +747,14 @@ class Exp:
             WebFetchTool(workdir=env.workdir),
             BohriumTool(
                 session=env.session,
-                workdir=env.workdir,
+                workdir=bohrium_workdir,
                 job_ledger=ctx.request.ports.bohrium_job_ledger,
                 session_id=ctx.environment.session_id,
                 invocation_id=ctx.request.invocation_id,
+                allow_local_paths=bohrium_allow_local_paths,
+                default_max_runtime_seconds=(
+                    ctx.request.bohrium_job_max_runtime_seconds
+                ),
             ),
         ]
 

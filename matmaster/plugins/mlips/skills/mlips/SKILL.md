@@ -30,14 +30,14 @@ These are execution stop rules, not suggestions. User requests like "do not ask 
 
 | Model | Family | Image | Domain |
 |-------|--------|-------|--------|
-| **DPA4-Neo-OMat24** | DP | `registry.dp.tech/dptech/dpa-calculator:dpa-mlip-bd246adc` | General inorganic, single-head on OMat24 |
-| **DPA4-Neo-OMat24-ZBL** | DP | `registry.dp.tech/dptech/dpa-calculator:dpa-mlip-bd246adc` | General inorganic, single-head on OMat24 + ZBL short-range repulsion |
-| **DPA3.1-3M** | DP | `registry.dp.tech/dptech/dpa-calculator:dpa-mlip-bd246adc` | General inorganic — **default**, multi-head, 3M params |
-| **DPA3.2-5M** | DP | `registry.dp.tech/dptech/dpa-calculator:dpa-mlip-bd246adc` | General, multi-head, charge/spin, supports `--charge`/`--spin` |
-| DPA2.4-7M | DP | `registry.dp.tech/dptech/dpa-calculator:dpa-mlip-bd246adc` | Legacy multi-head |
-| **MACE-MP-0** | MACE | `registry.dp.tech/dptech/dpa-calculator:mace-mlip-db5a4d45` | General inorganic foundation. |
-| SevenNet | SevenNet | `registry.dp.tech/dptech/dpa-calculator:sevennet-mlip-db5a4d45` | Graph NN. |
-| MatterSim-v1 (1M and 5M) | MatterSim | `registry.dp.tech/dptech/dpa-calculator:mattersim-mlip-db5a4d45` | General inorganic, specialized in non-equilibrium research |
+| **DPA4-Neo-OMat24** | DP | `registry.dp.tech/dptech/dpa-calculator:dpa-mlip-59af55c6` | General inorganic, single-head on OMat24 |
+| **DPA4-Neo-OMat24-ZBL** | DP | `registry.dp.tech/dptech/dpa-calculator:dpa-mlip-59af55c6` | General inorganic, single-head on OMat24 + ZBL short-range repulsion |
+| **DPA3.1-3M** | DP | `registry.dp.tech/dptech/dpa-calculator:dpa-mlip-59af55c6` | General inorganic — **default**, multi-head, 3M params |
+| **DPA3.2-5M** | DP | `registry.dp.tech/dptech/dpa-calculator:dpa-mlip-59af55c6` | General, multi-head, charge/spin, supports `--charge`/`--spin` |
+| DPA2.4-7M | DP | `registry.dp.tech/dptech/dpa-calculator:dpa-mlip-59af55c6` | Legacy multi-head |
+| **MACE-MP-0** | MACE | `registry.dp.tech/dptech/dpa-calculator:mace-mlip-59af55c6` | General inorganic foundation. |
+| SevenNet | SevenNet | `registry.dp.tech/dptech/dpa-calculator:sevennet-mlip-59af55c6` | Graph NN. |
+| MatterSim-v1 (1M and 5M) | MatterSim | `registry.dp.tech/dptech/dpa-calculator:mattersim-mlip-59af55c6` | General inorganic, specialized in non-equilibrium research |
 
 
 ### DPA Heads

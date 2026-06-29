@@ -47,12 +47,12 @@ def _build_workspace_upload_fn(
     """
     if not archival_config or not archival_config.enabled:
         return None
-    oss_prefix = (archival_config.oss_prefix or '').strip('/')
+    oss_prefix = (archival_config.oss_prefix or "").strip("/")
 
     def _do_upload(session_id: str, task_id: str, workspace_path: Path) -> None:
         from src.dao.oss_io import upload_dir_to_oss
 
-        key_prefix = '/'.join(part for part in (oss_prefix, session_id) if part)
+        key_prefix = "/".join(part for part in (oss_prefix, session_id) if part)
         upload_dir_to_oss(workspace_path, key_prefix)
 
     return _do_upload
@@ -63,7 +63,7 @@ def _build_figure_upload_config(*, session_id: str, task_id: str) -> FigureUploa
     return FigureUploadConfig(
         session_id=session_id,
         task_id=task_id,
-        asset_key_prefix='matmaster/chat_figures',
+        asset_key_prefix="matmaster/chat_figures",
         upload_bytes=upload_bytes_to_oss,
     )
 
@@ -80,6 +80,7 @@ async def run_bohrium_stage(
     run_started_at: float,
     bohrium_required: bool,
     workspace: str | None,
+    bohrium_node_sku_id: int | None = None,
 ) -> BohriumStageResult:
     """Run Bohrium setup and physically rebind the execution environment.
 
@@ -98,6 +99,7 @@ async def run_bohrium_stage(
         run_started_at=run_started_at,
         bohrium_required=effective_bohrium_required,
         workspace=workspace,
+        bohrium_node_sku_id=bohrium_node_sku_id,
     )
     ssh_attached = bohrium_result.ssh_attached
     if bohrium_result.abort_result is not None:
@@ -113,8 +115,8 @@ async def run_bohrium_stage(
         environment = environment.with_bohrium(bohrium_result.runtime_snapshot)
     stage_workspace: str | None = None
     if bohrium_result.execution_session is not None:
-        execution_workdir = bohrium_result.execution_workdir or ''
-        session_type = bohrium_result.session_type or 'ssh'
+        execution_workdir = bohrium_result.execution_workdir or ""
+        session_type = bohrium_result.session_type or "ssh"
         environment = environment.with_execution(
             session=bohrium_result.execution_session,
             session_type=session_type,

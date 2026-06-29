@@ -48,6 +48,7 @@ VerifyLiteral = Literal[
     "duration_budget",
     "molcrys_slab_molecular_integrity",
     "molcrys_local_env",
+    "molcrys_molecule_formulas",
     "sc005_disorder_formulas",
     "llm_binary_judge",
     # pymatgen-backed structure-file checks
@@ -346,6 +347,7 @@ class QuestionItem(BaseModel):
             "turn_budget",
             "molcrys_slab_molecular_integrity",
             "molcrys_local_env",
+            "molcrys_molecule_formulas",
             "struct_file_parsable",
             "struct_file_all_occupancy_one",
             "struct_file_space_group",
