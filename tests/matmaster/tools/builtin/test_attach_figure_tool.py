@@ -218,17 +218,11 @@ class TestAttachFigurePublish:
         assert "file_not_found" in result.content
         assert uploads == []  # zero upload on Phase A failure
 
-    def test_duplicate_figure_id_fails_batch(self):
-        # Same basename + identical bytes -> identical figure_id, distinct paths.
-        path_bytes = {"/share/x/band.png": _PNG, "/share/y/band.png": _PNG}
+    def test_same_basename_gets_distinct_suffix(self):
+        # Same basename in distinct paths -> response-unique ids band / band-2,
+        # both published (the old content-hash duplicate rejection is gone).
+        path_bytes = {"/share/x/band.png": _png(b"x"), "/share/y/band.png": _png(b"y")}
         session = make_session(path_bytes=path_bytes)
-        uploads = []
-        cfg = FigureUploadConfig(
-            session_id="s",
-            task_id="t",
-            asset_key_prefix="figs",
-            upload_bytes=lambda payload, key: uploads.append(key) or "https://a/x.png",
-        )
         tool = AttachFigure(session=session, workdir="/share")
         result = run_ctx(
             tool,
@@ -238,12 +232,31 @@ class TestAttachFigurePublish:
                     {"output_path": "/share/y/band.png", "caption": "second"},
                 ]
             },
-            make_ctx(cfg),
+            make_ctx(make_upload_config()),
         )
-        assert result.status == "error"
-        assert not result.payload.get("figures")
-        assert "duplicate figure_id" in result.content
-        assert uploads == []  # duplicate detected in Phase A, before any upload
+        assert result.status == "success"
+        ids = [f["figure_id"] for f in result.payload["figures"]]
+        assert ids == ["band", "band-2"]
+        assert result.content.count("[[fig:") == 2
+
+    def test_basename_unique_across_calls_in_one_run(self):
+        # The figure_id registry lives on runner_state, shared across calls in
+        # one response, so a repeated basename in a later call becomes band-2.
+        session = make_session()
+        tool = AttachFigure(session=session, workdir="/share")
+        ctx = make_ctx(make_upload_config())  # one runner_state, reused below
+        first = run_ctx(
+            tool,
+            {"figures": [{"output_path": "/share/band.png", "caption": "a"}]},
+            ctx,
+        )
+        second = run_ctx(
+            tool,
+            {"figures": [{"output_path": "/share/sub/band.png", "caption": "b"}]},
+            ctx,
+        )
+        assert first.payload["figures"][0]["figure_id"] == "band"
+        assert second.payload["figures"][0]["figure_id"] == "band-2"
 
     def test_phase_b_failure_yields_no_figures(self):
         path_bytes = {

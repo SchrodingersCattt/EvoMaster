@@ -5,7 +5,9 @@ AttachFigure -- publish one or more existing workspace images as answer figures.
 Publish-only: it uploads images that already exist on disk and returns a
 figure_id per image so the model can reference them with [[fig:<figure_id>]].
 It runs no commands and generates no images -- generate with Bash first, then
-attach. Batch publishing is all-or-nothing via two phases: Phase A validates and
+attach. Each figure_id is derived from the filename and made unique within the
+response (clashing basenames get a -2, -3 ... suffix) before the batch runs.
+Batch publishing is all-or-nothing via two phases: Phase A validates and
 content-hashes the whole batch (uploading nothing); Phase B uploads the whole
 batch only if Phase A fully passed. Any failure returns status="error" with no
 payload.figures, which the downstream ResponseFiguresAccumulator relies on.
@@ -19,6 +21,8 @@ from typing import Any, ClassVar
 
 from matmaster.tools.figure_artifacts import (
     PreparedFigure,
+    assign_figure_id,
+    build_figure_id,
     prepare_declared_figure,
     publish_prepared_figure,
     resolve_workspace_output_path,
@@ -177,11 +181,19 @@ class AttachFigure(BuiltinTool):
         try:
             figure_cfg: FigureUploadConfig | None = None
             tool_call_id: str | None = None
+            used: set[str] = set()
             if exec_ctx is not None:
                 tool_call_id = exec_ctx.tool_call_id
                 figure_cfg = self._resolve_figure_cfg(exec_ctx.runner_state)
+                used = self._used_figure_ids(exec_ctx.runner_state)
+            # Assign response-unique figure_ids in the event-loop thread (before
+            # to_thread) so the shared-registry read-modify-write stays atomic.
+            figure_ids = [
+                assign_figure_id(used, build_figure_id(output_path=item["output_path"]))
+                for item in arguments["figures"]
+            ]
             return await asyncio.to_thread(
-                self._run, arguments, figure_cfg, tool_call_id
+                self._run, arguments, figure_ids, figure_cfg, tool_call_id
             )
         except Exception as exc:
             self.logger.error("Tool %s failed: %s", self.name, exc, exc_info=True)
@@ -196,9 +208,22 @@ class AttachFigure(BuiltinTool):
             return None
         return runner_state.get("figure_upload_config")
 
+    @staticmethod
+    def _used_figure_ids(runner_state: ToolRunnerState | None) -> set[str]:
+        # Run-scoped registry of already-assigned figure_ids, shared across all
+        # AttachFigure calls in one response so repeated basenames stay unique.
+        if runner_state is None:
+            return set()
+        used = runner_state.get("figure_ids")
+        if used is None:
+            used = set()
+            runner_state.set("figure_ids", used)
+        return used
+
     def _run(
         self,
         arguments: dict[str, Any],
+        figure_ids: list[str],
         figure_cfg: FigureUploadConfig | None,
         tool_call_id: str | None,
     ) -> ToolResult:
@@ -220,10 +245,8 @@ class AttachFigure(BuiltinTool):
         workdir = str(self._workdir)
         figures: list[dict[str, Any]] = arguments["figures"]
 
-        # Phase A -- validate + hash the whole batch; upload nothing. A shared
-        # figure_id means two paths hash to identical contents, which we reject.
+        # Phase A -- validate + hash the whole batch; upload nothing.
         prepared: list[PreparedFigure] = []
-        by_id: dict[str, str] = {}
         for item in figures:
             result = prepare_declared_figure(
                 session=session,
@@ -240,25 +263,14 @@ class AttachFigure(BuiltinTool):
                         guidance=result.guidance,
                     ),
                 )
-            p = result.prepared
-            if p.figure_id in by_id:
-                return ToolResult(
-                    status="error",
-                    content=(
-                        f"Figure attachment failed: duplicate figure_id "
-                        f"'{p.figure_id}'\n"
-                        f"Both '{by_id[p.figure_id]}' and '{p.output_path}' resolve "
-                        "to identical image contents. Declare each distinct image once."
-                    ),
-                )
-            by_id[p.figure_id] = p.output_path
-            prepared.append(p)
+            prepared.append(result.prepared)
 
-        # Phase B -- upload the whole batch.
+        # Phase B -- upload the whole batch under the pre-assigned ids.
         descriptors = []
-        for p in prepared:
+        for figure_id, p in zip(figure_ids, prepared):
             pub = publish_prepared_figure(
                 prepared=p,
+                figure_id=figure_id,
                 upload_config=figure_cfg,
                 tool_call_id=tool_call_id,
             )

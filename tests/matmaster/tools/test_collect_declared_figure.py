@@ -11,6 +11,7 @@ from matmaster.tools.figure_artifacts import (
     FigureValidationError,
     PreparedFigure,
     _validate_image_bytes,
+    assign_figure_id,
     build_figure_id,
     prepare_declared_figure,
     publish_prepared_figure,
@@ -58,38 +59,32 @@ _PNG_SHA = hashlib.sha256(_PNG).hexdigest()
 
 
 def test_figure_id_sanitizes_spaces():
-    fid = build_figure_id(
-        output_path="plots/band structure.png", content_sha256=_PNG_SHA
-    )
-    stem, _, digest = fid.rpartition("-")
-    assert stem == "band-structure"
-    assert len(digest) == 12
+    assert build_figure_id(output_path="plots/band structure.png") == "band-structure"
 
 
 def test_figure_id_non_ascii_stem_falls_back_to_figure():
-    fid = build_figure_id(output_path="结果图.png", content_sha256=_PNG_SHA)
-    assert fid.startswith("figure-")
+    assert build_figure_id(output_path="结果图.png") == "figure"
 
 
-def test_figure_id_is_deterministic_for_same_bytes():
-    a = build_figure_id(output_path="x.png", content_sha256=_PNG_SHA)
-    b = build_figure_id(output_path="x.png", content_sha256=_PNG_SHA)
-    assert a == b
-
-
-def test_figure_id_changes_with_bytes():
-    a = build_figure_id(output_path="x.png", content_sha256=_PNG_SHA)
-    b = build_figure_id(
-        output_path="x.png", content_sha256=hashlib.sha256(_PNG + b"x").hexdigest()
-    )
-    assert a != b
+def test_figure_id_depends_only_on_path_not_bytes():
+    # No content hash in the base id: the id is a function of the path alone.
+    assert build_figure_id(output_path="x.png") == "x"
 
 
 def test_figure_id_length_bounded_and_charset():
-    fid = build_figure_id(output_path="A" * 200 + ".png", content_sha256=_PNG_SHA)
+    fid = build_figure_id(output_path="A" * 200 + ".png")
     assert len(fid) <= 64
     assert all(c.isalnum() or c in "._-" for c in fid)
     assert "/" not in fid
+
+
+def test_assign_figure_id_suffixes_on_clash():
+    used: set[str] = set()
+    assert assign_figure_id(used, "band") == "band"
+    assert assign_figure_id(used, "band") == "band-2"
+    assert assign_figure_id(used, "band") == "band-3"
+    assert assign_figure_id(used, "dos") == "dos"
+    assert used == {"band", "band-2", "band-3", "dos"}
 
 
 _JPG = b"\xff\xd8\xff" + b"\x00" * 64
@@ -150,7 +145,6 @@ def test_prepare_success_returns_prepared_and_does_not_upload():
     assert result.failure_reason is None
     prepared = result.prepared
     assert isinstance(prepared, PreparedFigure)
-    assert prepared.figure_id.startswith("band-")
     assert prepared.image_bytes == _PNG
     assert prepared.resolved_path == "/share/band.png"
     assert prepared.output_path == "/share/band.png"
@@ -215,7 +209,6 @@ def test_prepare_download_failure():
 
 def test_publish_success_builds_descriptor():
     prepared = PreparedFigure(
-        figure_id="band-abc123",
         image_bytes=_PNG,
         content_sha256=_PNG_SHA,
         resolved_path="/share/band.png",
@@ -224,6 +217,7 @@ def test_publish_success_builds_descriptor():
     )
     result = publish_prepared_figure(
         prepared=prepared,
+        figure_id="band",
         upload_config=make_upload_config("https://assets.test/u/band.png"),
         tool_call_id="call-1",
     )
@@ -231,7 +225,7 @@ def test_publish_success_builds_descriptor():
     assert result.failure_reason is None
     fig = result.figure
     assert fig is not None
-    assert fig.figure_id == "band-abc123"
+    assert fig.figure_id == "band"
     assert fig.asset_url == "https://assets.test/u/band.png"
     assert fig.caption == "Band structure"
     assert fig.source_tool_call_id == "call-1"
@@ -246,7 +240,6 @@ def test_publish_upload_failure_classified():
         session_id="s", task_id="t", asset_key_prefix="figs", upload_bytes=boom
     )
     prepared = PreparedFigure(
-        figure_id="band-abc123",
         image_bytes=_PNG,
         content_sha256=_PNG_SHA,
         resolved_path="/share/band.png",
@@ -254,7 +247,7 @@ def test_publish_upload_failure_classified():
         caption="c",
     )
     result = publish_prepared_figure(
-        prepared=prepared, upload_config=cfg, tool_call_id="call-1"
+        prepared=prepared, figure_id="band", upload_config=cfg, tool_call_id="call-1"
     )
     assert result.figure is None
     assert result.failure_reason == "upload_failed"
@@ -272,9 +265,10 @@ def test_prepare_then_publish_roundtrip():
     assert prep.prepared is not None
     pub = publish_prepared_figure(
         prepared=prep.prepared,
+        figure_id="xrd",
         upload_config=make_upload_config("https://assets.test/u/xrd.png"),
         tool_call_id="call-9",
     )
     assert pub.figure is not None
-    assert pub.figure.figure_id == prep.prepared.figure_id
+    assert pub.figure.figure_id == "xrd"
     assert pub.figure.remote_path == "/share/results/xrd.png"
