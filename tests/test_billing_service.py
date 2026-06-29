@@ -184,7 +184,7 @@ async def test_usage_post_carries_internal_bearer_when_configured(monkeypatch):
         "clients.matmaster_platform.billing.client.MATMASTER_TOOLS_INTERNAL_BEARER",
         "svc-key",
     )
-    session_cls.last_post = {}
+    _FakeSession.last_post = {}
 
     service = BillingService(base_url="https://tools.example.com")
     await service.price_llm_usage(
@@ -195,7 +195,7 @@ async def test_usage_post_carries_internal_bearer_when_configured(monkeypatch):
         usage={"prompt_tokens": 10},
     )
 
-    headers = session_cls.last_post["headers"]
+    headers = _FakeSession.last_post["headers"]
     assert headers["Authorization"] == "Bearer svc-key"
     # 鉴权头不应顶掉原有 Content-Type。
     assert headers["Content-Type"] == "application/json"
@@ -211,13 +211,13 @@ async def test_run_cost_query_carries_internal_bearer_when_configured(monkeypatc
         "clients.matmaster_platform.billing.client.MATMASTER_TOOLS_INTERNAL_BEARER",
         "svc-key",
     )
-    session_cls.last_get = {}
+    _FakeSession.last_get = {}
 
     service = BillingService(base_url="https://tools.example.com")
     data = await service.get_run_cost("inv-1")
 
     assert data == {"total_amount_micro": 5}
-    sent = session_cls.last_get
+    sent = _FakeSession.last_get
     assert sent["url"] == "https://tools.example.com/api/v1/billing/usage/summary"
     assert sent["params"] == {"invocation_id": "inv-1"}
     assert sent["headers"]["Authorization"] == "Bearer svc-key"
