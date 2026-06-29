@@ -63,24 +63,35 @@ def resolve_workspace_output_path(
     return str(resolved)
 
 
-def build_figure_id(*, output_path: str, content_sha256: str) -> str:
-    """Stable, sanitized figure_id: sanitized stem + content_sha256[:12].
-
-    ``content_sha256`` is the hex sha256 of the image bytes, computed once by
-    the caller and shared with the asset key so the payload is hashed only once.
+def build_figure_id(*, output_path: str) -> str:
+    """Base figure_id derived from the filename stem alone (no content hash).
 
     Charset limited to [A-Za-z0-9._-]; other runs fold to '-'; consecutive
     '-' merge; leading/trailing '-' stripped; empty stem -> 'figure';
-    stem capped at 48 chars, total capped at 64. Never contains '/', NUL,
-    control chars, or whitespace.
+    capped at 48 chars. Never contains '/', NUL, control chars, or whitespace.
+    Cross-figure disambiguation in one response is handled by assign_figure_id.
     """
     stem = posixpath.splitext(posixpath.basename(output_path))[0]
     sanitized = re.sub(r"[^A-Za-z0-9._-]+", "-", stem)
     sanitized = re.sub(r"-{2,}", "-", sanitized).strip("-")
     sanitized = sanitized[:_FIGURE_ID_STEM_MAX].strip("-")
-    if not sanitized:
-        sanitized = "figure"
-    return f"{sanitized}-{content_sha256[:12]}"[:_FIGURE_ID_TOTAL_MAX]
+    return sanitized or "figure"
+
+
+def assign_figure_id(used: set[str], base: str) -> str:
+    """Response-unique figure_id from ``base``, suffixing -2, -3 ... on clash.
+
+    ``used`` is a run-scoped set of already-assigned ids; the chosen id is
+    added to it. Must be called in the event-loop thread (ToolRunnerState
+    contract) so this read-modify-write stays atomic between await points.
+    """
+    fid = base
+    i = 2
+    while fid in used:
+        fid = f"{base}-{i}"[:_FIGURE_ID_TOTAL_MAX]
+        i += 1
+    used.add(fid)
+    return fid
 
 
 def _download_with_retry(*, session: Session, path: str) -> bytes:
@@ -166,9 +177,8 @@ def _upload_with_retry(
 
 @dataclass(slots=True)
 class PreparedFigure:
-    """A validated, content-addressed figure ready to upload (no upload yet)."""
+    """A validated figure ready to upload (no upload, no id assigned yet)."""
 
-    figure_id: str
     image_bytes: bytes
     content_sha256: str
     resolved_path: str
@@ -237,11 +247,11 @@ def prepare_declared_figure(
     output_path: str,
     caption: str,
 ) -> FigurePrepareResult:
-    """Resolve -> exists -> is_file -> download -> validate -> figure_id. No upload.
+    """Resolve -> exists -> is_file -> download -> validate. No id, no upload.
 
-    Returns a FigurePrepareResult carrying a PreparedFigure (validated bytes plus
-    the content-addressed figure_id) on success, or a stable failure_reason plus
-    actionable guidance. Never raises for expected failures, and never uploads.
+    Returns a FigurePrepareResult carrying a PreparedFigure (validated bytes
+    and content_sha256) on success, or a stable failure_reason plus actionable
+    guidance. Never raises for expected failures, and never uploads.
     """
 
     def _fail(reason: str) -> FigurePrepareResult:
@@ -270,10 +280,8 @@ def prepare_declared_figure(
         return _fail(exc.reason)
 
     content_sha256 = hashlib.sha256(payload).hexdigest()
-    figure_id = build_figure_id(output_path=output_path, content_sha256=content_sha256)
     return FigurePrepareResult(
         prepared=PreparedFigure(
-            figure_id=figure_id,
             image_bytes=payload,
             content_sha256=content_sha256,
             resolved_path=resolved,
@@ -287,19 +295,20 @@ def prepare_declared_figure(
 def publish_prepared_figure(
     *,
     prepared: PreparedFigure,
+    figure_id: str,
     upload_config: FigureUploadConfig,
     tool_call_id: str,
 ) -> FigurePublishResult:
-    """Upload an already-prepared figure (content-addressed key) -> descriptor.
+    """Upload an already-prepared figure under ``figure_id`` -> descriptor.
 
-    The asset key and figure_id are content-addressed, so a retried or partial
-    batch re-upload is idempotent.
+    The asset key is content-addressed (digest segment), so a retried or
+    partial batch re-upload is idempotent.
     """
     try:
         asset_key = _build_asset_key(
             upload_config=upload_config,
             tool_call_id=tool_call_id,
-            figure_id=prepared.figure_id,
+            figure_id=figure_id,
             source_path=prepared.resolved_path,
             content_sha256=prepared.content_sha256,
         )
@@ -317,7 +326,7 @@ def publish_prepared_figure(
 
     return FigurePublishResult(
         figure=FigureDescriptor(
-            figure_id=prepared.figure_id,
+            figure_id=figure_id,
             asset_url=asset_url,
             caption=prepared.caption,
             source_tool_call_id=tool_call_id,
