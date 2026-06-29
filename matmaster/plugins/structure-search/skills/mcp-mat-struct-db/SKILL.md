@@ -16,6 +16,7 @@ The structure retrieval service mainly uses these database backends:
 | `optimade` | Multi-provider database aggregation, covering MP, COD, NOMAD, Alexandria, ODBX, twodmatpedia, and other providers. |
 | `openlam` | Crystal structures and lattice-matching-related structures. Useful for formula, energy-range, and submission-time queries. |
 | `mofdbsql` | MOF structure database. Useful for MOFs, porous materials, surface area, pore size, and void-fraction queries. |
+| `corecof` | CoRE COF (Covalent Organic Framework) database. Supports topology, name, type (2D/3D), pore size (PLD/LCD), surface area, and density filters. |
 
 For general inorganic crystal-structure retrieval, prefer:
 
@@ -27,6 +28,12 @@ For MOF or porous-framework retrieval, prefer:
 
 ```text
 mofdbsql -> optimade
+```
+
+For COF (Covalent Organic Framework) retrieval, prefer:
+
+```text
+corecof
 ```
 
 ## Query Construction
@@ -69,6 +76,25 @@ Then filter returned candidates by MP, COD, or other provenance.
 | Find SiO2 from COD | `SiO2` | Filter COD after results return. |
 | Find oxide semiconductors with band gap 1 to 2 eV | `O band gap 1 2` | Supported only by selected backends or providers. |
 | Find HKUST-1 or UiO-66 | Prefer `mofdbsql` | MOF-specific backend is more suitable. |
+| Find COF with hcb topology | `COF hcb 拓扑` | Routes to `corecof`. |
+| Find COF-LZU1 structure | `COF-LZU1` | Name-based COF lookup via `corecof`. |
+| Find 3D COF with PLD > 10 Å | `3D COF 孔径大于10` | Type + pore-size filter via `corecof`. |
+
+## CoRE COF Notes
+
+`corecof` is a dedicated backend for the CoRE COF database (~600 structures). It supports structured filtering by:
+
+| Filter | Description | Example |
+|--------|-------------|---------|
+| `topology` | Framework topology net (e.g. hcb, sql, dia, kgm) | `hcb 拓扑的COF` |
+| `name` | COF name or partial match | `COF-LZU1`, `TpPa` |
+| `type` | Dimensionality: `2D` or `3D` | `3D COF` |
+| `pld_min` / `pld_max` | Pore Limiting Diameter (Å) | `孔径大于15埃` |
+| `lcd_min` / `lcd_max` | Largest Cavity Diameter (Å) | `LCD 10-20` |
+| `sa_min` / `sa_max` | Surface Area (m²/g) | `比表面积大于2000` |
+| `density_min` / `density_max` | Density (g/cm³) | `密度小于0.5` |
+
+COF queries are automatically routed to this backend when the query mentions COF, covalent organic framework, or specific COF names/topologies. Do not mix COF-specific filters with element-based inorganic queries.
 
 ## OPTIMADE Notes
 
@@ -107,7 +133,8 @@ OPTIMADE capability boundaries:
 | Materials Project / MP / COD / NOMAD source request | `optimade` |
 | Semiconductor or band-gap material | `bohriumpublic` or `optimade` |
 | Battery material | `bohriumpublic`, `openlam`, `optimade` |
-| MOF / COF / porous material | `mofdbsql`, `optimade` |
+| MOF / porous material | `mofdbsql`, `optimade` |
+| COF (Covalent Organic Framework) | `corecof` |
 | Explicit OpenLAM request | `openlam` |
 | Explicit Bohrium Public request | `bohriumpublic` |
 
