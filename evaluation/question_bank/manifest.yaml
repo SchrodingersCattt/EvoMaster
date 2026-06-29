@@ -166,6 +166,18 @@ banks:
   capability: workflow_orchestration
   domain: agnostic
   questions: 4
+- path: workflow_orchestration/wo_cp2k_properties.yaml
+  capability: workflow_orchestration
+  domain: agnostic
+  questions: 12
+- path: workflow_orchestration/wo_orca_properties.yaml
+  capability: workflow_orchestration
+  domain: agnostic
+  questions: 10
+- path: workflow_orchestration/wo_mlip_properties.yaml
+  capability: workflow_orchestration
+  domain: agnostic
+  questions: 7
 - path: workflow_orchestration/wo_battery.yaml
   capability: workflow_orchestration
   domain: battery

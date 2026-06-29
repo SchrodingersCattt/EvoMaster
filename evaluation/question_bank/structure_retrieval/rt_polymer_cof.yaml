@@ -22,7 +22,6 @@ questions:
     3) 将筛选出的第一个结构导出为 `COF_sql_triazine.cif`。'
   tags:
   - meta_database
-  - cof
   data_files: []
   reference_answers:
   - key: retrieval_report
@@ -147,7 +146,6 @@ questions:
     3) 在报告中确认这是否确实是亚胺键连接的 hcb 拓扑 COF。'
   tags:
   - meta_database
-  - cof
   data_files: []
   reference_answers:
   - key: cif_artifact
@@ -247,7 +245,6 @@ questions:
     B+N 组合在 COF 中常见（硼酸酯键、硼嗪键等）。'
   tags:
   - meta_database
-  - cof
   data_files: []
   reference_answers:
   - key: candidates_json
@@ -350,7 +347,6 @@ questions:
     3) 导出孔径最大的结构为 `largest_pore_cof.cif`。'
   tags:
   - meta_database
-  - cof
   data_files: []
   reference_answers:
   - key: results_json
@@ -457,7 +453,6 @@ questions:
     3) 导出第一个候选结构为 `COF_3D_dia.cif`。'
   tags:
   - meta_database
-  - cof
   data_files: []
   reference_answers:
   - key: results_json
@@ -567,7 +562,6 @@ questions:
     （孔径匹配甲烷动力学直径~3.8Å、高空隙率、合适拓扑）。'
   tags:
   - meta_database
-  - cof
   data_files: []
   reference_answers:
   - key: results_json
@@ -667,7 +661,6 @@ questions:
     2) `topology_comparison_report.md`：对比分析两组数据的孔径和比表面积分布差异，解释为什么不同拓扑会导致不同的孔道几何。'
   tags:
   - meta_database
-  - cof
   data_files: []
   reference_answers:
   - key: comparison_json

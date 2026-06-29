@@ -14,7 +14,6 @@ questions:
   human_prompt_seed: 附件是 COF-5 的晶体结构（hcb 拓扑，硼酸酯键连接），请把它分解成单体（节点）和连接体（linker），分别输出 xyz 文件。
   tags:
   - struct_build
-  - cof
   data_files:
   - key: input_structure
     path: data/SC_cof_structures/COF-5.cif
@@ -156,7 +155,6 @@ questions:
   human_prompt_seed: 附件是 COF-LZU1 的结构（亚胺键连接的 hcb 拓扑 COF），帮我设计一个修饰方案破坏它的共轭路径但保持框架连通，输出修改前后的结构。
   tags:
   - struct_build
-  - cof
   data_files:
   - key: input_structure
     path: data/SC_cof_structures/COF-LZU1.cif
@@ -290,7 +288,6 @@ questions:
   human_prompt_seed: 附件是 CTF-1 的结构（三嗪基共价有机框架），把苯环上的一个 sp2 碳改成 sp3（加氢变四面体），输出原始和修改后的 cif。
   tags:
   - struct_build
-  - cof
   data_files:
   - key: input_structure
     path: data/SC_cof_structures/CTF-1.cif
@@ -427,7 +424,6 @@ questions:
   human_prompt_seed: 附件是 COF-LZU1 的结构（hcb 拓扑，C3 三嗪节点 + C2 对苯二胺连接体，亚胺键），我想把它改成 sql 拓扑（C4 节点），保持亚胺键和相同连接体不变，帮我设计新节点并构建 sql 版本。
   tags:
   - struct_build
-  - cof
   data_files:
   - key: input_structure
     path: data/SC_cof_structures/COF-LZU1.cif
@@ -559,7 +555,6 @@ questions:
   human_prompt_seed: 附件是 TpPa-1 的结构（β-酮烯胺键连接的 hcb 拓扑 2D COF，完全平面），我想让它变成非平面（有褶皱或扭转），但不能断键，帮我想个办法并构建非平面版本。
   tags:
   - struct_build
-  - cof
   data_files:
   - key: input_structure
     path: data/SC_cof_structures/TpPa-1.cif
@@ -686,7 +681,6 @@ questions:
   human_prompt_seed: 附件是 COF-5 的结构（AA 堆积模式），帮我把它转成 AB 堆积（相邻层错位半个晶胞矢量），两个版本都输出 cif。
   tags:
   - struct_build
-  - cof
   data_files:
   - key: input_structure
     path: data/SC_cof_structures/COF-5.cif
@@ -803,7 +797,6 @@ questions:
   human_prompt_seed: 附件是 COF-LZU1 的结构（hcb 拓扑，亚胺键连接），我想在连接体苯环上接一个 -COOH 基团做金属离子吸附，帮我构建功能化后的结构。
   tags:
   - struct_build
-  - cof
   data_files:
   - key: input_structure
     path: data/SC_cof_structures/COF-LZU1.cif
@@ -925,7 +918,6 @@ questions:
   human_prompt_seed: 附件是 COF-300 的结构（dia 拓扑，四面体节点 tetrakis(4-formylphenyl)methane + 对苯二胺连接的 3D COF），请分析其 3D 构型特征并输出 cif，解释为什么四面体节点能产生 3D 框架而非 2D 层状。
   tags:
   - struct_build
-  - cof
   data_files:
   - key: input_structure
     path: data/SC_cof_structures/COF-300.cif
@@ -1038,7 +1030,6 @@ questions:
   human_prompt_seed: 附件是 COF-LZU1 的结构，请构建 2×2 超胞，然后去掉一个连接体分子做空位缺陷，悬挂键用醛基(-CHO)封端，输出完美版和缺陷版的 cif。
   tags:
   - struct_build
-  - cof
   data_files:
   - key: input_structure
     path: data/SC_cof_structures/COF-LZU1.cif
