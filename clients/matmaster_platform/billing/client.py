@@ -183,6 +183,13 @@ class BillingService:
                     timeout=timeout,
                 ) as resp:
                     if resp.status >= 400:
+                        # 与 POST 上报对齐：4xx（含鉴权 401/403）须留痕，否则 bearer 配错
+                        # 会让本查询彻底静默，难以排障。
+                        logger.warning(
+                            "billing run cost query failed status=%s invocation_id=%s",
+                            resp.status,
+                            invocation_id,
+                        )
                         return None
                     data = (await resp.json() or {}).get("data")
                     return data or None

@@ -221,3 +221,17 @@ async def test_run_cost_query_carries_internal_bearer_when_configured(monkeypatc
     assert sent["url"] == "https://tools.example.com/api/v1/billing/usage/summary"
     assert sent["params"] == {"invocation_id": "inv-1"}
     assert sent["headers"]["Authorization"] == "Bearer svc-key"
+
+
+@pytest.mark.asyncio
+async def test_run_cost_query_swallows_4xx(monkeypatch):
+    # 鉴权失败等 4xx 时 best-effort 返回 None（不抛、不拖慢主链路），并已留痕日志。
+    session_cls = _make_session_cls(403, {"code": -1, "msg": "forbidden"})
+    monkeypatch.setattr(
+        "clients.matmaster_platform.billing.client.aiohttp.ClientSession", session_cls
+    )
+
+    service = BillingService(base_url="https://tools.example.com")
+    data = await service.get_run_cost("inv-1")
+
+    assert data is None
