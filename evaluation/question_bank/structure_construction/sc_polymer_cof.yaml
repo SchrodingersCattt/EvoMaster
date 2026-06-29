@@ -15,7 +15,10 @@ questions:
   tags:
   - struct_build
   - cof
-  data_files: []
+  data_files:
+  - key: input_structure
+    path: data/SC_cof_structures/COF-5.cif
+    description: COF-5 crystal structure (hcb topology, boronate ester linkage)
   reference_answers:
   - key: cof_structure_artifact
     value: COF5_structure.cif
@@ -154,7 +157,10 @@ questions:
   tags:
   - struct_build
   - cof
-  data_files: []
+  data_files:
+  - key: input_structure
+    path: data/SC_cof_structures/COF-LZU1.cif
+    description: COF-LZU1 crystal structure (hcb topology, imine linkage)
   reference_answers:
   - key: pristine_artifact
     value: COF_LZU1_pristine.cif
@@ -285,7 +291,10 @@ questions:
   tags:
   - struct_build
   - cof
-  data_files: []
+  data_files:
+  - key: input_structure
+    path: data/SC_cof_structures/CTF-1.cif
+    description: CTF-1 crystal structure (covalent triazine framework)
   reference_answers:
   - key: pristine_artifact
     value: CTF1_pristine.cif
@@ -419,7 +428,10 @@ questions:
   tags:
   - struct_build
   - cof
-  data_files: []
+  data_files:
+  - key: input_structure
+    path: data/SC_cof_structures/COF-LZU1.cif
+    description: COF-LZU1 crystal structure (hcb topology, C3 triazine node + C2 diamine linker, imine linkage)
   reference_answers:
   - key: hcb_artifact
     value: COF_hcb_original.cif
@@ -548,7 +560,10 @@ questions:
   tags:
   - struct_build
   - cof
-  data_files: []
+  data_files:
+  - key: input_structure
+    path: data/SC_cof_structures/TpPa-1.cif
+    description: TpPa-1 crystal structure (beta-ketoenamine linkage, hcb topology, planar 2D COF)
   reference_answers:
   - key: planar_artifact
     value: COF_TpPa1_planar.cif
@@ -672,7 +687,10 @@ questions:
   tags:
   - struct_build
   - cof
-  data_files: []
+  data_files:
+  - key: input_structure
+    path: data/SC_cof_structures/COF-5.cif
+    description: COF-5 crystal structure (AA stacking mode)
   reference_answers:
   - key: aa_artifact
     value: COF5_AA_stacking.cif
@@ -786,7 +804,10 @@ questions:
   tags:
   - struct_build
   - cof
-  data_files: []
+  data_files:
+  - key: input_structure
+    path: data/SC_cof_structures/COF-LZU1.cif
+    description: COF-LZU1 crystal structure (hcb topology, imine linkage)
   reference_answers:
   - key: bare_artifact
     value: COF_LZU1_bare.cif
@@ -905,7 +926,10 @@ questions:
   tags:
   - struct_build
   - cof
-  data_files: []
+  data_files:
+  - key: input_structure
+    path: data/SC_cof_structures/COF-300.cif
+    description: COF-300 crystal structure (dia topology, tetrahedral node, 3D COF)
   reference_answers:
   - key: cof300_artifact
     value: COF300_3D.cif
@@ -1015,7 +1039,10 @@ questions:
   tags:
   - struct_build
   - cof
-  data_files: []
+  data_files:
+  - key: input_structure
+    path: data/SC_cof_structures/COF-LZU1.cif
+    description: COF-LZU1 crystal structure (hcb topology, imine linkage)
   reference_answers:
   - key: perfect_artifact
     value: COF_LZU1_2x2_perfect.cif
