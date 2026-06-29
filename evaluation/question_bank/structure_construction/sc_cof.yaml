@@ -1,0 +1,1130 @@
+version: v5
+capability: structure_construction
+domain: polymer
+questions:
+- id: SC_cof_decompose_monomer_001_20260629
+  capability: structure_construction
+  domain: polymer
+  priority: P1
+  intent: Given a COF structure file, decompose it into constituent monomers
+    (building blocks) and linkers. Tests the agent's understanding of reticular
+    chemistry — recognizing reversible bond formation sites (imine, boronate ester,
+    triazine, etc.) and correctly identifying the monomer units and linker molecules
+    that assemble into the COF topology.
+  human_prompt_seed: 附件是 COF-5 的晶体结构（hcb 拓扑，硼酸酯键连接），请把它分解成单体（节点）和连接体（linker），分别输出 xyz 文件。
+  tags:
+  - struct_build
+  - cof
+  data_files:
+  - COF-5.cif
+  reference_answers:
+  - key: cof_structure_artifact
+    value: COF5_structure.cif
+  - key: node_artifact
+    value: COF5_node.xyz
+  - key: linker_artifact
+    value: COF5_linker.xyz
+  - key: decomposition_json_artifact
+    value: COF5_decomposition.json
+  - key: decomposition_required_tokens
+    value:
+      filename: COF5_decomposition.json
+      tokens:
+      - cof_name
+      - topology
+      - bond_type
+      - node_name
+      - node_smiles
+      - linker_name
+      - linker_smiles
+      - connectivity
+      - hcb
+      - boronate
+      flags: i
+  - key: node_elements
+    value:
+      filename: COF5_node.xyz
+      tokens:
+      - C
+      - O
+      - H
+      flags: i
+  - key: linker_elements
+    value:
+      filename: COF5_linker.xyz
+      tokens:
+      - C
+      - B
+      - O
+      - H
+      flags: i
+  - key: turn_budget
+    value:
+      max: 15
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 15000
+  scoring_checklist:
+  - id: cof_structure_artifact
+    criterion: '[Must] Agent writes `COF5_structure.cif` to workspace.'
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+  - id: node_artifact
+    criterion: '[Must] Agent writes `COF5_node.xyz` to workspace.'
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+  - id: linker_artifact
+    criterion: '[Must] Agent writes `COF5_linker.xyz` to workspace.'
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+  - id: decomposition_json_artifact
+    criterion: '[Must] Agent writes `COF5_decomposition.json` to workspace.'
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+  - id: correct_decomposition
+    criterion: '[Must] The decomposition correctly identifies: (1) HHTP
+      (hexahydroxytriphenylene, C18H12O6 or similar) as the trigonal node with
+      3 connection points; (2) PBBA (benzene-1,4-diboronic acid, C6H8B2O4 or similar)
+      as the linear linker with 2 connection points; (3) boronate ester (B-O) as
+      the reversible bond type; (4) hcb (honeycomb) as the topology. The agent must
+      NOT confuse node and linker roles or misidentify the bond chemistry.'
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 3.0
+  - id: decomposition_required_tokens
+    criterion: Decomposition JSON contains all required metadata fields including
+      topology, bond type, node/linker names and SMILES.
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+  - id: node_chemically_valid
+    criterion: The node XYZ file represents a chemically valid molecule consistent
+      with HHTP (contains C, O, H; has aromatic ring system with hydroxyl groups).
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 1.5
+  - id: linker_chemically_valid
+    criterion: The linker XYZ file represents a chemically valid molecule consistent
+      with PBBA (contains C, B, O, H; has a phenyl ring with two boronic acid groups).
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 1.5
+  - id: grounding_source
+    criterion: The decomposition rationale is grounded in the actual COF structure
+      retrieved, correctly identifies reversible bond positions, and does not fabricate
+      connectivity or molecular formulas unsupported by the structure.
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 2.0
+  - id: no_retries
+    criterion: No repeated identical calls with the same parameters.
+    axis: efficiency
+    verify: no_retries
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Duration is within budget.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total tokens are within budget.
+    axis: efficiency
+    verify: token_budget
+
+- id: SC_cof_doping_conjugation_001_20260629
+  capability: structure_construction
+  domain: polymer
+  priority: P1
+  intent: Given a fully conjugated 2D COF structure, introduce a heteroatom dopant
+    that disrupts the pi-conjugation pathway. Tests the agent's understanding of
+    COF electronic structure — specifically that continuous pi-conjugation in a 2D
+    COF requires sp2-hybridized atoms in planar geometry, and that strategic
+    substitution (e.g., replacing a C=N imine linkage with a C-NH-C amine or
+    inserting a saturated spacer) can break the conjugated path while preserving
+    the framework topology.
+  human_prompt_seed: 附件是 COF-LZU1 的结构（亚胺键连接的 hcb 拓扑 COF），帮我设计一个修饰方案破坏它的共轭路径但保持框架连通，输出修改前后的结构。
+  tags:
+  - struct_build
+  - cof
+  data_files:
+  - COF-LZU1.cif
+  reference_answers:
+  - key: pristine_artifact
+    value: COF_LZU1_pristine.cif
+  - key: doped_artifact
+    value: COF_LZU1_doped.cif
+  - key: design_json_artifact
+    value: doping_design.json
+  - key: design_required_tokens
+    value:
+      filename: doping_design.json
+      tokens:
+      - original_bond_type
+      - modified_bond_type
+      - modification_site
+      - conjugation_broken
+      - topology_preserved
+      - design_rationale
+      flags: i
+  - key: pristine_parsable
+    value:
+      filename: COF_LZU1_pristine.cif
+  - key: doped_parsable
+    value:
+      filename: COF_LZU1_doped.cif
+  - key: turn_budget
+    value:
+      max: 18
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 18000
+  scoring_checklist:
+  - id: pristine_artifact
+    criterion: '[Must] Agent writes `COF_LZU1_pristine.cif` to workspace.'
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+  - id: doped_artifact
+    criterion: '[Must] Agent writes `COF_LZU1_doped.cif` to workspace.'
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+  - id: design_json_artifact
+    criterion: '[Must] Agent writes `doping_design.json` to workspace.'
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+  - id: pristine_parsable
+    criterion: '[Must] COF_LZU1_pristine.cif is parsable as a structure file.'
+    axis: correctness
+    verify: struct_file_parsable
+    weight: 1.0
+  - id: doped_parsable
+    criterion: '[Must] COF_LZU1_doped.cif is parsable as a structure file.'
+    axis: correctness
+    verify: struct_file_parsable
+    weight: 1.0
+  - id: conjugation_correctly_broken
+    criterion: '[Must] The modification correctly disrupts pi-conjugation by converting
+      at least one sp2 linkage (e.g., C=N imine) to an sp3 center (e.g., C-NH-CH2
+      saturated amine) or equivalent disruption. The key chemical criterion is that
+      the p-orbital overlap path is interrupted at the modification site. Simply
+      adding a substituent to an aromatic ring without breaking the backbone conjugation
+      does NOT count.'
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 3.0
+  - id: topology_preserved
+    criterion: '[Must] The framework topology (hcb) is preserved — the modified
+      structure maintains the same connectivity pattern (same node degree, same
+      number of linkers per node) even though the electronic conjugation is broken.
+      The structure must NOT have disconnected fragments or changed bonding topology.'
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 2.0
+  - id: design_required_tokens
+    criterion: Design JSON contains required fields documenting the modification.
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+  - id: scientific_rationale
+    criterion: The explanation correctly describes why converting sp2→sp3 at the
+      linkage site breaks pi-conjugation (loss of p-orbital planarity/overlap),
+      and distinguishes this from merely adding side-groups that do not interrupt
+      the conjugated backbone.
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 2.0
+  - id: grounding_structure
+    criterion: Claims about the pristine COF structure (topology, bond types,
+      conjugation path) are consistent with known COF-LZU1 literature and the
+      delivered pristine CIF, not fabricated.
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.5
+  - id: no_retries
+    criterion: No repeated identical calls with the same parameters.
+    axis: efficiency
+    verify: no_retries
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Duration is within budget.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total tokens are within budget.
+    axis: efficiency
+    verify: token_budget
+
+- id: SC_cof_sp2_to_sp3_001_20260629
+  capability: structure_construction
+  domain: polymer
+  priority: P1
+  intent: Given a conjugated 2D COF structure, replace a specific sp2 carbon atom
+    with an sp3 carbon (by adding hydrogen or other substituents to convert hybridization),
+    creating a local structural defect. Tests the agent's understanding of carbon
+    hybridization in crystalline frameworks — that sp2 carbons are trigonal planar
+    with 3 bonds and participate in pi-conjugation, while sp3 carbons are tetrahedral
+    with 4 bonds and do not contribute to pi-systems. The agent must identify which
+    carbons are sp2, choose one strategically, add appropriate atoms to convert it
+    to sp3, and adjust local geometry accordingly.
+  human_prompt_seed: 附件是 CTF-1 的结构（三嗪基共价有机框架），把苯环上的一个 sp2 碳改成 sp3（加氢变四面体），输出原始和修改后的 cif。
+  tags:
+  - struct_build
+  - cof
+  data_files:
+  - CTF-1.cif
+  reference_answers:
+  - key: pristine_artifact
+    value: CTF1_pristine.cif
+  - key: defect_artifact
+    value: CTF1_sp3_defect.cif
+  - key: conversion_json_artifact
+    value: sp3_conversion.json
+  - key: conversion_required_tokens
+    value:
+      filename: sp3_conversion.json
+      tokens:
+      - target_atom_index
+      - original_hybridization
+      - new_hybridization
+      - added_atoms
+      - bond_changes
+      - geometry_change
+      - effect_on_conjugation
+      - sp2
+      - sp3
+      flags: i
+  - key: pristine_parsable
+    value:
+      filename: CTF1_pristine.cif
+  - key: defect_parsable
+    value:
+      filename: CTF1_sp3_defect.cif
+  - key: turn_budget
+    value:
+      max: 18
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 18000
+  scoring_checklist:
+  - id: pristine_artifact
+    criterion: '[Must] Agent writes `CTF1_pristine.cif` to workspace.'
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+  - id: defect_artifact
+    criterion: '[Must] Agent writes `CTF1_sp3_defect.cif` to workspace.'
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+  - id: conversion_json_artifact
+    criterion: '[Must] Agent writes `sp3_conversion.json` to workspace.'
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+  - id: pristine_parsable
+    criterion: '[Must] CTF1_pristine.cif is parsable as a structure file.'
+    axis: correctness
+    verify: struct_file_parsable
+    weight: 1.0
+  - id: defect_parsable
+    criterion: '[Must] CTF1_sp3_defect.cif is parsable as a structure file.'
+    axis: correctness
+    verify: struct_file_parsable
+    weight: 1.0
+  - id: correct_sp3_conversion
+    criterion: '[Must] The sp3 defect structure correctly shows at least one carbon
+      atom converted from sp2 (trigonal planar, 3 bonds, participates in conjugation)
+      to sp3 (tetrahedral, 4 bonds including added H). The converted carbon must have
+      gained at least one additional bond (typically C-H) compared to the pristine
+      structure, and local geometry should be non-planar at that site. Simply labeling
+      a carbon as "sp3" without actually modifying coordinates/bonds is NOT acceptable.'
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 3.0
+  - id: atom_count_increased
+    criterion: The defect structure has more atoms than the pristine structure
+      (at least 1 additional H per sp3-converted carbon), confirming that hydrogenation
+      or equivalent modification actually occurred in the structure file.
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 2.0
+  - id: conversion_required_tokens
+    criterion: Conversion JSON documents the target atom, hybridization change,
+      added atoms, bond modifications, geometry change, and conjugation effect.
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+  - id: hybridization_understanding
+    criterion: The explanation correctly describes sp2 vs sp3 hybridization (sp2 =
+      trigonal planar, 120° angles, participates in pi-system via unhybridized
+      p-orbital; sp3 = tetrahedral, 109.5° angles, no p-orbital contribution to
+      conjugation), and explains why converting one site disrupts the extended
+      pi-electron delocalization.
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 2.0
+  - id: grounding_structure
+    criterion: Claims about CTF-1 structure (all-sp2 triazine framework from
+      1,4-dicyanobenzene trimerization) are consistent with known CTF-1 literature,
+      and the structural modification is chemically plausible.
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.5
+  - id: no_retries
+    criterion: No repeated identical calls with the same parameters.
+    axis: efficiency
+    verify: no_retries
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Duration is within budget.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total tokens are within budget.
+    axis: efficiency
+    verify: token_budget
+
+- id: SC_cof_hcb_to_sql_001_20260629
+  capability: structure_construction
+  domain: polymer
+  priority: P1
+  intent: Convert an hcb (honeycomb) topology COF to sql (square lattice) topology
+    by redesigning the building blocks. Tests the agent's understanding of reticular
+    chemistry topology — that hcb requires C3+C2 building blocks (trigonal node +
+    linear linker), while sql requires C4+C2 (square-planar node + linear linker).
+    The agent must identify which building block to replace, select an appropriate
+    C4-symmetric monomer to replace the C3 node, and reconstruct the framework
+    with correct sql connectivity while preserving the same linker chemistry.
+  human_prompt_seed: 附件是 COF-LZU1 的结构（hcb 拓扑，C3 三嗪节点 + C2 对苯二胺连接体，亚胺键），我想把它改成 sql 拓扑（C4 节点），保持亚胺键和相同连接体不变，帮我设计新节点并构建 sql 版本。
+  tags:
+  - struct_build
+  - cof
+  data_files:
+  - COF-LZU1.cif
+  reference_answers:
+  - key: hcb_artifact
+    value: COF_hcb_original.cif
+  - key: sql_artifact
+    value: COF_sql_converted.cif
+  - key: conversion_json_artifact
+    value: topology_conversion.json
+  - key: hcb_parsable
+    value:
+      filename: COF_hcb_original.cif
+  - key: sql_parsable
+    value:
+      filename: COF_sql_converted.cif
+  - key: conversion_required_tokens
+    value:
+      filename: topology_conversion.json
+      tokens:
+      - original_topology
+      - target_topology
+      - original_node
+      - new_node
+      - linker
+      - bond_type
+      - design_rationale
+      - hcb
+      - sql
+      - C3
+      - C4
+      flags: i
+  - key: turn_budget
+    value:
+      max: 18
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 18000
+  scoring_checklist:
+  - id: hcb_artifact
+    criterion: '[Must] Agent writes `COF_hcb_original.cif` to workspace.'
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+  - id: sql_artifact
+    criterion: '[Must] Agent writes `COF_sql_converted.cif` to workspace.'
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+  - id: conversion_json_artifact
+    criterion: '[Must] Agent writes `topology_conversion.json` to workspace.'
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+  - id: hcb_parsable
+    criterion: '[Must] COF_hcb_original.cif is parsable as a structure file.'
+    axis: correctness
+    verify: struct_file_parsable
+    weight: 1.0
+  - id: sql_parsable
+    criterion: '[Must] COF_sql_converted.cif is parsable as a structure file.'
+    axis: correctness
+    verify: struct_file_parsable
+    weight: 1.0
+  - id: correct_topology_conversion
+    criterion: '[Must] The converted COF has sql topology: (1) The node has
+      4-fold connectivity (C4 symmetry, 4 functional groups connecting to linkers);
+      (2) The linker remains C2 (linear, 2 connection points); (3) Each node connects
+      to 4 linkers, each linker bridges 2 nodes, forming a square grid pattern;
+      (4) The bond chemistry (imine C=N) is preserved. A structure that still has
+      C3 nodes or hcb connectivity FAILS.'
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 3.0
+  - id: linker_preserved
+    criterion: The same linker molecule (diamine, e.g., p-phenylenediamine or similar
+      C2-symmetric diamine) is used in both the hcb and sql structures, demonstrating
+      that the topology change was achieved by node replacement alone.
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 1.5
+  - id: conversion_required_tokens
+    criterion: Conversion JSON documents both topologies, node change (C3→C4),
+      preserved linker, and design rationale.
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+  - id: topology_rationale_grounded
+    criterion: The explanation correctly describes that topology is determined by
+      building-block symmetry/connectivity (C3+C2→hcb, C4+C2→sql), and the conversion
+      is achieved by replacing the trigonal node with a tetragonal one. Claims about
+      specific molecules and their symmetry must be chemically accurate.
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 2.0
+  - id: no_retries
+    criterion: No repeated identical calls with the same parameters.
+    axis: efficiency
+    verify: no_retries
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Duration is within budget.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total tokens are within budget.
+    axis: efficiency
+    verify: token_budget
+
+- id: SC_cof_nonplanar_001_20260629
+  capability: structure_construction
+  domain: polymer
+  priority: P1
+  intent: Convert a planar 2D COF structure into a non-planar (buckled or corrugated)
+    configuration. Tests the agent's understanding of COF structural dimensionality
+    — that typical 2D COFs are synthesized as planar sheets due to sp2 linkages
+    and aromatic building blocks, but introducing non-planar elements (sp3 nodes,
+    tetrahedral centers, bent linkers, or out-of-plane distortions) can produce
+    corrugated or 3D-extended frameworks. The agent must identify what makes the
+    original COF planar, then introduce a structural modification that forces
+    non-planarity while maintaining framework connectivity.
+  human_prompt_seed: 附件是 TpPa-1 的结构（β-酮烯胺键连接的 hcb 拓扑 2D COF，完全平面），我想让它变成非平面（有褶皱或扭转），但不能断键，帮我想个办法并构建非平面版本。
+  tags:
+  - struct_build
+  - cof
+  data_files:
+  - TpPa-1.cif
+  reference_answers:
+  - key: planar_artifact
+    value: COF_TpPa1_planar.cif
+  - key: nonplanar_artifact
+    value: COF_nonplanar.cif
+  - key: design_json_artifact
+    value: nonplanar_design.json
+  - key: planar_parsable
+    value:
+      filename: COF_TpPa1_planar.cif
+  - key: nonplanar_parsable
+    value:
+      filename: COF_nonplanar.cif
+  - key: design_required_tokens
+    value:
+      filename: nonplanar_design.json
+      tokens:
+      - original_structure
+      - planarity_origin
+      - modification_strategy
+      - nonplanar_element
+      - dihedral_angle_estimate
+      - framework_connectivity_preserved
+      - design_rationale
+      flags: i
+  - key: turn_budget
+    value:
+      max: 18
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 18000
+  scoring_checklist:
+  - id: planar_artifact
+    criterion: '[Must] Agent writes `COF_TpPa1_planar.cif` to workspace.'
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+  - id: nonplanar_artifact
+    criterion: '[Must] Agent writes `COF_nonplanar.cif` to workspace.'
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+  - id: design_json_artifact
+    criterion: '[Must] Agent writes `nonplanar_design.json` to workspace.'
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+  - id: planar_parsable
+    criterion: '[Must] COF_TpPa1_planar.cif is parsable as a structure file.'
+    axis: correctness
+    verify: struct_file_parsable
+    weight: 1.0
+  - id: nonplanar_parsable
+    criterion: '[Must] COF_nonplanar.cif is parsable as a structure file.'
+    axis: correctness
+    verify: struct_file_parsable
+    weight: 1.0
+  - id: genuinely_nonplanar
+    criterion: '[Must] The modified COF structure is genuinely non-planar: atoms in
+      the framework do NOT all lie in a single plane. This can be verified by checking
+      that (1) the unit cell has significant c-axis extent relative to a/b if it is
+      a corrugated 2D sheet, or (2) atomic z-coordinates show out-of-plane variation
+      for framework atoms, or (3) there are dihedral angles significantly deviating
+      from 0°/180° along the backbone. A structure that is still flat/planar FAILS.'
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 3.0
+  - id: connectivity_preserved
+    criterion: '[Must] Framework connectivity is preserved — the modified structure
+      has the same topology (hcb or equivalent), same node degree, and same number
+      of linkers per node as the original. No bonds are broken; only geometry is
+      changed or building blocks are swapped for non-planar isosteres.'
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 2.0
+  - id: design_required_tokens
+    criterion: Design JSON documents the modification strategy with all required fields.
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+  - id: planarity_explanation
+    criterion: The explanation correctly identifies that 2D COF planarity arises from
+      all-sp2 building blocks with planar aromatic cores and coplanar linkages, and
+      explains how the chosen modification (non-planar linker/node/steric strain)
+      introduces out-of-plane distortion. The chemical reasoning must be sound.
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 2.0
+  - id: no_retries
+    criterion: No repeated identical calls with the same parameters.
+    axis: efficiency
+    verify: no_retries
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Duration is within budget.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total tokens are within budget.
+    axis: efficiency
+    verify: token_budget
+
+- id: SC_cof_stacking_aa_to_ab_001_20260629
+  capability: structure_construction
+  domain: polymer
+  priority: P1
+  intent: Convert a 2D COF from AA stacking (eclipsed) to AB stacking (staggered)
+    mode. Tests the agent's understanding of layer stacking in 2D COFs — that most
+    synthesized 2D COFs adopt AA (eclipsed) stacking where layers are directly
+    aligned, but AB (staggered) stacking where adjacent layers are offset by half
+    a unit cell vector is also possible and affects pore geometry and interlayer
+    interactions. The agent must understand the relationship between stacking mode
+    and PXRD pattern / pore channel geometry.
+  human_prompt_seed: 附件是 COF-5 的结构（AA 堆积模式），帮我把它转成 AB 堆积（相邻层错位半个晶胞矢量），两个版本都输出 cif。
+  tags:
+  - struct_build
+  - cof
+  data_files:
+  - COF-5.cif
+  reference_answers:
+  - key: aa_artifact
+    value: COF5_AA_stacking.cif
+  - key: ab_artifact
+    value: COF5_AB_stacking.cif
+  - key: analysis_json_artifact
+    value: stacking_analysis.json
+  - key: aa_parsable
+    value:
+      filename: COF5_AA_stacking.cif
+  - key: ab_parsable
+    value:
+      filename: COF5_AB_stacking.cif
+  - key: analysis_required_tokens
+    value:
+      filename: stacking_analysis.json
+      tokens:
+      - aa_interlayer_distance
+      - ab_interlayer_distance
+      - offset_vector
+      - pore_channel_change
+      - symmetry_change
+      flags: i
+  - key: turn_budget
+    value:
+      max: 15
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 15000
+  scoring_checklist:
+  - id: aa_artifact
+    criterion: '[Must] Agent writes `COF5_AA_stacking.cif` to workspace.'
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+  - id: ab_artifact
+    criterion: '[Must] Agent writes `COF5_AB_stacking.cif` to workspace.'
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+  - id: analysis_json_artifact
+    criterion: '[Must] Agent writes `stacking_analysis.json` to workspace.'
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+  - id: aa_parsable
+    criterion: '[Must] COF5_AA_stacking.cif is parsable as a structure file.'
+    axis: correctness
+    verify: struct_file_parsable
+    weight: 1.0
+  - id: ab_parsable
+    criterion: '[Must] COF5_AB_stacking.cif is parsable as a structure file.'
+    axis: correctness
+    verify: struct_file_parsable
+    weight: 1.0
+  - id: correct_ab_stacking
+    criterion: '[Must] The AB stacking structure shows layers offset from each other:
+      (1) The unit cell c-parameter accommodates at least 2 layers (~6.8 Å or more);
+      (2) Adjacent layers are displaced laterally so that nodes of one layer sit
+      above/below the pore centers of the adjacent layer (not directly eclipsed);
+      (3) The layer-internal bonding is identical to the AA structure. A structure
+      that is still AA-eclipsed or has broken layers FAILS.'
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 3.0
+  - id: analysis_required_tokens
+    criterion: Analysis JSON documents interlayer distances, offset vector, and
+      pore/symmetry changes.
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+  - id: stacking_science
+    criterion: The explanation correctly describes that AA stacking gives straight
+      pore channels while AB stacking produces zigzag/offset channels, and that
+      this affects accessible surface area and diffraction peaks (e.g., broadened
+      or shifted 001 reflection). Claims must be consistent with COF literature.
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 2.0
+  - id: no_retries
+    criterion: No repeated identical calls with the same parameters.
+    axis: efficiency
+    verify: no_retries
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Duration is within budget.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total tokens are within budget.
+    axis: efficiency
+    verify: token_budget
+
+- id: SC_cof_pore_functionalization_001_20260629
+  capability: structure_construction
+  domain: polymer
+  priority: P2
+  intent: Perform post-synthetic pore functionalization on a COF by grafting
+    functional groups onto the pore walls. Tests the agent's ability to identify
+    available functionalization sites within a COF pore, select appropriate chemistry
+    for grafting (e.g., azide-alkyne click, imine exchange, or direct substitution),
+    and modify the structure file to include the grafted groups while maintaining
+    framework integrity and reasonable pore geometry.
+  human_prompt_seed: 附件是 COF-LZU1 的结构（hcb 拓扑，亚胺键连接），我想在连接体苯环上接一个 -COOH 基团做金属离子吸附，帮我构建功能化后的结构。
+  tags:
+  - struct_build
+  - cof
+  data_files:
+  - COF-LZU1.cif
+  reference_answers:
+  - key: bare_artifact
+    value: COF_LZU1_bare.cif
+  - key: func_artifact
+    value: COF_LZU1_COOH.cif
+  - key: func_json_artifact
+    value: functionalization.json
+  - key: bare_parsable
+    value:
+      filename: COF_LZU1_bare.cif
+  - key: func_parsable
+    value:
+      filename: COF_LZU1_COOH.cif
+  - key: func_required_tokens
+    value:
+      filename: functionalization.json
+      tokens:
+      - grafting_site
+      - functional_group
+      - atoms_added_per_unit_cell
+      - pore_size_change_estimate
+      - framework_integrity_preserved
+      - application_rationale
+      - COOH
+      flags: i
+  - key: turn_budget
+    value:
+      max: 18
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 18000
+  scoring_checklist:
+  - id: bare_artifact
+    criterion: '[Must] Agent writes `COF_LZU1_bare.cif` to workspace.'
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+  - id: func_artifact
+    criterion: '[Must] Agent writes `COF_LZU1_COOH.cif` to workspace.'
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+  - id: func_json_artifact
+    criterion: '[Must] Agent writes `functionalization.json` to workspace.'
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+  - id: bare_parsable
+    criterion: '[Must] COF_LZU1_bare.cif is parsable as a structure file.'
+    axis: correctness
+    verify: struct_file_parsable
+    weight: 1.0
+  - id: func_parsable
+    criterion: '[Must] COF_LZU1_COOH.cif is parsable as a structure file.'
+    axis: correctness
+    verify: struct_file_parsable
+    weight: 1.0
+  - id: atoms_actually_added
+    criterion: '[Must] The functionalized structure has MORE atoms than the bare
+      structure, confirming that -COOH groups (at minimum C, O, O, H per group)
+      were actually added to the structure file rather than just described in text.'
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 2.5
+  - id: framework_intact
+    criterion: The backbone connectivity (hcb topology, imine linkages between
+      node and linker) is preserved in the functionalized structure. The -COOH
+      is a pendant side group, not inserted into the backbone.
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 2.0
+  - id: func_required_tokens
+    criterion: Functionalization JSON contains required metadata fields.
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+  - id: grounding_chemistry
+    criterion: The choice of functionalization site and method is chemically
+      reasonable — the linker aromatic ring can be substituted at ortho/meta
+      positions, and the COOH placement does not clash with framework bonds.
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.5
+  - id: no_retries
+    criterion: No repeated identical calls with the same parameters.
+    axis: efficiency
+    verify: no_retries
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Duration is within budget.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total tokens are within budget.
+    axis: efficiency
+    verify: token_budget
+
+- id: SC_cof_2d_to_3d_001_20260629
+  capability: structure_construction
+  domain: polymer
+  priority: P2
+  intent: Construct a 3D COF structure from tetrahedral building blocks. Tests the
+    agent's understanding that 2D COFs arise from planar building blocks giving
+    layered structures, while 3D COFs require at least one building block with
+    non-planar (typically tetrahedral Td) geometry to produce interpenetrated or
+    non-interpenetrated 3D frameworks with specific topologies (dia, pts, ctn, bor).
+    The agent must select appropriate Td-symmetric building blocks and construct
+    a 3D framework.
+  human_prompt_seed: 附件是 COF-300 的结构（dia 拓扑，四面体节点 tetrakis(4-formylphenyl)methane + 对苯二胺连接的 3D COF），请分析其 3D 构型特征并输出 cif，解释为什么四面体节点能产生 3D 框架而非 2D 层状。
+  tags:
+  - struct_build
+  - cof
+  data_files:
+  - COF-300.cif
+  reference_answers:
+  - key: cof300_artifact
+    value: COF300_3D.cif
+  - key: design_json_artifact
+    value: cof_3d_design.json
+  - key: cof300_parsable
+    value:
+      filename: COF300_3D.cif
+  - key: design_required_tokens
+    value:
+      filename: cof_3d_design.json
+      tokens:
+      - node_name
+      - node_symmetry
+      - node_geometry
+      - linker_name
+      - bond_type
+      - topology
+      - dimension
+      - key_structural_difference_from_2d
+      - tetrahedral
+      - dia
+      - 3D
+      flags: i
+  - key: turn_budget
+    value:
+      max: 18
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 18000
+  scoring_checklist:
+  - id: cof300_artifact
+    criterion: '[Must] Agent writes `COF300_3D.cif` to workspace.'
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+  - id: design_json_artifact
+    criterion: '[Must] Agent writes `cof_3d_design.json` to workspace.'
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+  - id: cof300_parsable
+    criterion: '[Must] COF300_3D.cif is parsable as a structure file.'
+    axis: correctness
+    verify: struct_file_parsable
+    weight: 1.0
+  - id: genuinely_3d
+    criterion: '[Must] The constructed COF is genuinely 3-dimensional: the framework
+      extends in all three spatial directions (not a layered 2D structure). The unit
+      cell should have comparable dimensions in a, b, and c, and the framework atoms
+      should span the full 3D cell volume. A 2D layered structure with large
+      interlayer spacing does NOT count as 3D.'
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 3.0
+  - id: correct_topology
+    criterion: 'The structure has dia (diamond) topology consistent with COF-300:
+      each tetrahedral node connects to 4 linear linkers, and the overall connectivity
+      follows the diamond net pattern.'
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 2.0
+  - id: design_required_tokens
+    criterion: Design JSON documents the 3D COF with all required metadata fields.
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+  - id: dimensional_understanding
+    criterion: The explanation correctly identifies that 3D vs 2D character is
+      determined by node geometry (sp3 tetrahedral → 3D extension vs sp2 planar
+      → 2D layers), and accurately describes COF-300's tetrakis(4-formylphenyl)methane
+      node with its central sp3 carbon directing four arms tetrahedrally.
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 2.0
+  - id: no_retries
+    criterion: No repeated identical calls with the same parameters.
+    axis: efficiency
+    verify: no_retries
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Duration is within budget.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total tokens are within budget.
+    axis: efficiency
+    verify: token_budget
+
+- id: SC_cof_defect_vacancy_001_20260629
+  capability: structure_construction
+  domain: polymer
+  priority: P2
+  intent: Introduce a linker vacancy defect into a 2D COF structure. Tests the
+    agent's understanding of defect engineering in COFs — that real synthesized COFs
+    contain missing-linker defects (analogous to MOF defects), and that strategically
+    removing a linker creates undercoordinated nodes, dangling functional groups,
+    and modified local pore environment. The agent must remove a linker while
+    properly terminating the resulting dangling bonds.
+  human_prompt_seed: 附件是 COF-LZU1 的结构，请构建 2×2 超胞，然后去掉一个连接体分子做空位缺陷，悬挂键用醛基(-CHO)封端，输出完美版和缺陷版的 cif。
+  tags:
+  - struct_build
+  - cof
+  data_files:
+  - COF-LZU1.cif
+  reference_answers:
+  - key: perfect_artifact
+    value: COF_LZU1_2x2_perfect.cif
+  - key: vacancy_artifact
+    value: COF_LZU1_2x2_vacancy.cif
+  - key: defect_json_artifact
+    value: vacancy_defect.json
+  - key: perfect_parsable
+    value:
+      filename: COF_LZU1_2x2_perfect.cif
+  - key: vacancy_parsable
+    value:
+      filename: COF_LZU1_2x2_vacancy.cif
+  - key: defect_required_tokens
+    value:
+      filename: vacancy_defect.json
+      tokens:
+      - supercell_size
+      - defect_type
+      - removed_species
+      - dangling_termination
+      - defect_concentration
+      - atoms_removed
+      - effect_on_pore
+      flags: i
+  - key: turn_budget
+    value:
+      max: 18
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 18000
+  scoring_checklist:
+  - id: perfect_artifact
+    criterion: '[Must] Agent writes `COF_LZU1_2x2_perfect.cif` to workspace.'
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+  - id: vacancy_artifact
+    criterion: '[Must] Agent writes `COF_LZU1_2x2_vacancy.cif` to workspace.'
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+  - id: defect_json_artifact
+    criterion: '[Must] Agent writes `vacancy_defect.json` to workspace.'
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+  - id: perfect_parsable
+    criterion: '[Must] COF_LZU1_2x2_perfect.cif is parsable as a structure file.'
+    axis: correctness
+    verify: struct_file_parsable
+    weight: 1.0
+  - id: vacancy_parsable
+    criterion: '[Must] COF_LZU1_2x2_vacancy.cif is parsable as a structure file.'
+    axis: correctness
+    verify: struct_file_parsable
+    weight: 1.0
+  - id: fewer_atoms_in_vacancy
+    criterion: '[Must] The vacancy structure has fewer atoms than the perfect
+      structure, confirming that a linker was actually removed from the structure
+      file (not just described). The difference should be consistent with removing
+      one diamine molecule (~14-16 atoms for p-phenylenediamine + imine bonds).'
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 2.5
+  - id: proper_termination
+    criterion: The dangling bonds at the vacancy site are properly terminated
+      (either as free -CHO aldehyde groups or capped with -NH2), not left as
+      radicals or unphysical broken bonds.
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 2.0
+  - id: defect_required_tokens
+    criterion: Defect JSON documents vacancy details with all required fields.
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+  - id: defect_understanding
+    criterion: The explanation correctly describes how linker vacancy creates
+      undercoordinated nodes, exposes dangling functional groups, and locally
+      enlarges the pore at the defect site. Chemical reasoning is sound.
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.5
+  - id: no_retries
+    criterion: No repeated identical calls with the same parameters.
+    axis: efficiency
+    verify: no_retries
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Duration is within budget.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total tokens are within budget.
+    axis: efficiency
+    verify: token_budget

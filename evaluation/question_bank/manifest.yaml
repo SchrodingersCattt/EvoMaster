@@ -150,6 +150,10 @@ banks:
   capability: structure_retrieval
   domain: battery
   questions: 12
+- path: structure_retrieval/rt_cof.yaml
+  capability: structure_retrieval
+  domain: polymer
+  questions: 7
 - path: workflow_orchestration/wo_alloy.yaml
   capability: workflow_orchestration
   domain: alloy
@@ -214,6 +218,10 @@ banks:
   capability: structure_construction
   domain: polymer
   questions: 1
+- path: structure_construction/sc_cof.yaml
+  capability: structure_construction
+  domain: polymer
+  questions: 9
 - path: input_generation/ig_agnostic.yaml
   capability: input_generation
   domain: agnostic
