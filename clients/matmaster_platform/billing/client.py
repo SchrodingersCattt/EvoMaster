@@ -20,11 +20,24 @@ from typing import Any, Literal
 
 import aiohttp
 
-from utils.env import MATMASTER_TOOLS_SERVER
+from utils.env import MATMASTER_TOOLS_INTERNAL_BEARER, MATMASTER_TOOLS_SERVER
 
 logger = logging.getLogger(__name__)
 
 _REQUEST_TIMEOUT_SECONDS = 5.0
+
+
+def _auth_headers(extra: dict[str, str] | None = None) -> dict[str, str]:
+    """内网机器接口鉴权头：带上统一服务 Bearer（缺配置则不带，由服务端拒绝）。
+
+    与 tools-server ``require_internal_service_token`` 对齐；token 见
+    ``utils.env.MATMASTER_TOOLS_INTERNAL_BEARER``（迁移期回落 BYOK bearer）。
+    """
+    headers = dict(extra or {})
+    if MATMASTER_TOOLS_INTERNAL_BEARER:
+        headers["Authorization"] = f"Bearer {MATMASTER_TOOLS_INTERNAL_BEARER}"
+    return headers
+
 
 # 平台接受的计费模式：platform 扣额度；byok/eval 仅记账（eval 额外定价）。
 BillingMode = Literal["platform", "byok", "eval"]
@@ -98,7 +111,7 @@ class BillingService:
             async with self._session(session) as http:
                 async with http.post(
                     url,
-                    headers={"Content-Type": "application/json"},
+                    headers=_auth_headers({"Content-Type": "application/json"}),
                     json=payload,
                     timeout=timeout,
                 ) as resp:
@@ -164,7 +177,10 @@ class BillingService:
         try:
             async with self._session(session) as http:
                 async with http.get(
-                    url, params={"invocation_id": invocation_id}, timeout=timeout
+                    url,
+                    params={"invocation_id": invocation_id},
+                    headers=_auth_headers(),
+                    timeout=timeout,
                 ) as resp:
                     if resp.status >= 400:
                         return None

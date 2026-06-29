@@ -24,9 +24,10 @@ class _FakeResponse:
 
 
 class _FakeSession:
-    """记录最后一次 POST，便于断言 url/headers/payload。"""
+    """记录最后一次 POST/GET，便于断言 url/headers/payload。"""
 
     last_post: dict = {}
+    last_get: dict = {}
 
     def __init__(self, *_args, **_kwargs):
         pass
@@ -39,6 +40,10 @@ class _FakeSession:
 
     def post(self, url, headers=None, json=None, timeout=None):
         _FakeSession.last_post = {"url": url, "headers": headers, "json": json}
+        return _FakeResponse(self._status, self._payload)
+
+    def get(self, url, params=None, headers=None, timeout=None):
+        _FakeSession.last_get = {"url": url, "params": params, "headers": headers}
         return _FakeResponse(self._status, self._payload)
 
     async def close(self):
@@ -166,3 +171,53 @@ async def test_price_llm_usage_swallows_server_error(monkeypatch):
     )
 
     assert data is None
+
+
+@pytest.mark.asyncio
+async def test_usage_post_carries_internal_bearer_when_configured(monkeypatch):
+    # 配了内网服务 Bearer 时，上报须带 Authorization，否则 tools-server 鉴权会拒绝、计费静默丢失。
+    session_cls = _make_session_cls(200, {"code": 0, "data": {"recorded": True}})
+    monkeypatch.setattr(
+        "clients.matmaster_platform.billing.client.aiohttp.ClientSession", session_cls
+    )
+    monkeypatch.setattr(
+        "clients.matmaster_platform.billing.client.MATMASTER_TOOLS_INTERNAL_BEARER",
+        "svc-key",
+    )
+    session_cls.last_post = {}
+
+    service = BillingService(base_url="https://tools.example.com")
+    await service.price_llm_usage(
+        run_context=_ctx(),
+        model="claude-sonnet-4-6",
+        call_index=1,
+        spawn_id=None,
+        usage={"prompt_tokens": 10},
+    )
+
+    headers = session_cls.last_post["headers"]
+    assert headers["Authorization"] == "Bearer svc-key"
+    # 鉴权头不应顶掉原有 Content-Type。
+    assert headers["Content-Type"] == "application/json"
+
+
+@pytest.mark.asyncio
+async def test_run_cost_query_carries_internal_bearer_when_configured(monkeypatch):
+    session_cls = _make_session_cls(200, {"code": 0, "data": {"total_amount_micro": 5}})
+    monkeypatch.setattr(
+        "clients.matmaster_platform.billing.client.aiohttp.ClientSession", session_cls
+    )
+    monkeypatch.setattr(
+        "clients.matmaster_platform.billing.client.MATMASTER_TOOLS_INTERNAL_BEARER",
+        "svc-key",
+    )
+    session_cls.last_get = {}
+
+    service = BillingService(base_url="https://tools.example.com")
+    data = await service.get_run_cost("inv-1")
+
+    assert data == {"total_amount_micro": 5}
+    sent = session_cls.last_get
+    assert sent["url"] == "https://tools.example.com/api/v1/billing/usage/summary"
+    assert sent["params"] == {"invocation_id": "inv-1"}
+    assert sent["headers"]["Authorization"] == "Bearer svc-key"
