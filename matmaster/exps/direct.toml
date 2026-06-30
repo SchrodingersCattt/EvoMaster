@@ -3,6 +3,8 @@ description = "Full-capability execution subagent for completing tasks with file
 when_to_use = "Use only when the parent agent needs a subagent to autonomously carry out a complex multi-step task, such as coordinated edits across multiple files, investigate-then-execute work, MCP or external tool orchestration, or a task that would otherwise require a long chain of direct tool calls. Do not use for simple reads, quick searches, single-command work, or small localized edits that can be completed directly with builtin tools."
 read_only = false
 visible_as_subagent = true
+# Subagent-only model profile override. Leave commented to inherit parent agent.
+# llm = "matmaster/DeepSeek-v4-Pro"
 context_mode = "fresh"
 result_style = "completion"
 max_turns = 700

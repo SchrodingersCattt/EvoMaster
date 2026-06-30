@@ -34,6 +34,7 @@ from matmaster.context.user_turn_context import (
     USER_CONTEXT_RENDER_VERSION,
     USER_TURN_CONTEXT_SCHEMA_VERSION,
 )
+from matmaster.core.child_llm import _resolve_child_run_ctx
 from matmaster.core.hooks import HookExecutor
 from matmaster.core.path_access import derive_path_access_roots
 from matmaster.core.run_context import AgentRunContext
@@ -179,13 +180,15 @@ class Exp:
         ) -> AsyncIterator[Any]:
             from matmaster.config.loader import load_exp_config
 
+            child_cfg = load_exp_config(exp_name)
             child_exp = Exp(
-                load_exp_config(exp_name),
+                child_cfg,
                 allow_spawn=False,
                 inherited_skill_cache=skill_cache,
             )
+            child_ctx = _resolve_child_run_ctx(ctx, child_cfg)
             return child_exp.run_stream(
-                ctx,
+                child_ctx,
                 task,
                 cancel_token=cancel_token,
                 spawn_id=spawn_id,

@@ -89,6 +89,9 @@ class ExpConfig(BaseModel):
     compaction: CompactionConfig = Field(default_factory=CompactionConfig)
     system_prompt: str = ""
     developer_instructions: str = ""
+    # subagent 专用：作为 subagent 被 spawn 时使用的 LLM profile_key。
+    # None = 继承父 agent。作为 UI root mode 运行时不读此字段。
+    llm: str | None = None
 
     model_config = ConfigDict(extra="forbid")
 

@@ -28,6 +28,16 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+def make_dev_subagent_provider_factory(llm_config):
+    """devshell 用的 subagent provider factory：解析 profile，不包计费。"""
+    from matmaster.providers.llm_factory import build_provider_bundle
+
+    def factory(*, profile_key: str):
+        return build_provider_bundle(llm_config, model_override=profile_key)
+
+    return factory
+
+
 def _patch_bohrium_submit(runtime: Any, error_message: str) -> None:
     """Monkey-patch BohriumTool._submit to always return an error (eval-only)."""
     from matmaster.tools.builtin.bohrium_tool.tool import BohriumTool
@@ -140,15 +150,21 @@ class DevRunner:
         the per-run child-event sink. Shared by ``run()`` and the REPL's tool
         inspection so neither hand-rolls the composition.
         """
-        request = self._request
-        if child_event_sink is not None:
-            from matmaster.types.runtime_ports import AgentRunPorts
+        from matmaster.types.runtime_ports import AgentRunPorts
 
-            request = request.model_copy(
-                update={
-                    "ports": AgentRunPorts(child_event_forward_sink=child_event_sink)
-                }
-            )
+        subagent_factory = (
+            make_dev_subagent_provider_factory(self._llm_config)
+            if self._llm_config is not None
+            else None
+        )
+        request = self._request.model_copy(
+            update={
+                "ports": AgentRunPorts(
+                    child_event_forward_sink=child_event_sink,
+                    subagent_provider_factory=subagent_factory,
+                )
+            }
+        )
         return AgentRunContext(environment=self._environment, request=request)
 
     @staticmethod

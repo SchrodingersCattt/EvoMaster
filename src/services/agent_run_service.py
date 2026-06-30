@@ -12,6 +12,7 @@ import time
 import uuid
 from collections.abc import Callable
 from contextlib import aclosing
+from dataclasses import replace
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -46,6 +47,7 @@ from src.services.agent_run_history_wiring import build_history_wiring
 from src.services.billing_llm_provider import (
     COST_GUARD_CANCEL_REASON,
     BillingLLMProvider,
+    BillingRunState,
 )
 from src.services.bohrium_delivery_ack import DeliverySnapshot
 from src.services.bohrium_jobs_wiring import build_bohrium_jobs_ports
@@ -91,6 +93,31 @@ async def _resolve_run_budget_micro(user_id: str) -> int | None:
 
 
 _MATMASTER_CONFIG_DIR = _project_root / "config"
+
+
+def make_subagent_provider_factory(
+    *,
+    llm_config,
+    run_context,
+    billing_service,
+    billing_state,
+):
+    """构造 subagent provider factory：按 profile_key 解析并包计费，共享 run_state。"""
+    from matmaster.providers.llm_factory import build_provider_bundle
+
+    def factory(*, profile_key: str):
+        bundle = build_provider_bundle(llm_config, model_override=profile_key)
+        wrapped = BillingLLMProvider(
+            bundle.provider,
+            run_context=run_context,
+            model=bundle.model,
+            billing_service=billing_service,
+            billing_mode="platform",
+            run_state=billing_state,
+        )
+        return replace(bundle, provider=wrapped)
+
+    return factory
 
 
 @lru_cache(maxsize=1)
@@ -451,19 +478,24 @@ class AgentRunService:
             budget_micro = None
             if billing_mode == "platform" and cancel_controller is not None and user_id:
                 budget_micro = await _resolve_run_budget_micro(user_id)
+            billing_state = BillingRunState(
+                session_id=session_id,
+                budget_micro=budget_micro,
+                cancel_controller=cancel_controller,
+            )
+            billing_run_context = BillingRunContext(
+                session_id=session_id,
+                task_id=task_id,
+                invocation_id=invocation_id,
+            )
             try:
                 llm_provider = BillingLLMProvider(
                     llm_provider,
-                    run_context=BillingRunContext(
-                        session_id=session_id,
-                        task_id=task_id,
-                        invocation_id=invocation_id,
-                    ),
+                    run_context=billing_run_context,
                     model=llm_bundle.model,
                     billing_service=get_billing_service(),
                     billing_mode=billing_mode,
-                    budget_micro=budget_micro,
-                    cancel_controller=cancel_controller,
+                    run_state=billing_state,
                 )
             except Exception:
                 logger.warning(
@@ -576,6 +608,14 @@ class AgentRunService:
                 job_context_mode=job_context_mode,
                 delivery_snapshot=delivery_snapshot,
             )
+            subagent_provider_factory = None
+            if billing_mode == "platform":
+                subagent_provider_factory = make_subagent_provider_factory(
+                    llm_config=llm_config,
+                    run_context=billing_run_context,
+                    billing_service=get_billing_service(),
+                    billing_state=billing_state,
+                )
             agent_run_ctx = AgentRunContext(
                 environment=environment,
                 request=AgentRunRequest(
@@ -606,6 +646,7 @@ class AgentRunService:
                         workspace_jobs=bohrium_jobs_port,
                         submit_approval_gate=submit_approval_gate,
                         tool_timeout_observer=FeishuToolTimeoutObserver(),
+                        subagent_provider_factory=subagent_provider_factory,
                     ),
                 ),
             )
