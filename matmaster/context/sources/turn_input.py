@@ -29,6 +29,66 @@ def _display_name(value: str) -> str:
     return PurePosixPath(parsed.path or value).name or value
 
 
+def _clean_number_list(value: Any) -> tuple[float, ...]:
+    if not isinstance(value, (list, tuple)):
+        return ()
+    out: list[float] = []
+    for item in value[:3]:
+        try:
+            out.append(float(item))
+        except (TypeError, ValueError):
+            return ()
+    return tuple(out)
+
+
+def _format_coord(values: tuple[float, ...]) -> str:
+    return "[" + ", ".join(f"{v:.6g}" for v in values) + "]"
+
+
+def _clean_atom_selections(values: Any) -> tuple[dict[str, Any], ...]:
+    if values is None:
+        return ()
+    if not isinstance(values, (list, tuple)):
+        return ()
+
+    selections: list[dict[str, Any]] = []
+    for raw_selection in values:
+        if not isinstance(raw_selection, dict):
+            continue
+        raw_atoms = raw_selection.get("atoms")
+        if not isinstance(raw_atoms, (list, tuple)):
+            continue
+        atoms: list[dict[str, Any]] = []
+        for raw_atom in raw_atoms:
+            if not isinstance(raw_atom, dict):
+                continue
+            atom: dict[str, Any] = {}
+            order = raw_atom.get("order")
+            if isinstance(order, (str, int)):
+                atom["order"] = order
+            element = raw_atom.get("element")
+            if isinstance(element, str) and element.strip():
+                atom["element"] = element.strip()
+            cart_coord = _clean_number_list(raw_atom.get("cart_coord"))
+            if cart_coord:
+                atom["cart_coord"] = list(cart_coord)
+            frac_coord = _clean_number_list(raw_atom.get("frac_coord"))
+            if frac_coord:
+                atom["frac_coord"] = list(frac_coord)
+            if atom:
+                atoms.append(atom)
+        if not atoms:
+            continue
+
+        selection: dict[str, Any] = {"atoms": atoms}
+        for key in ("id", "source_label", "source_path", "source_format"):
+            value = raw_selection.get(key)
+            if isinstance(value, str) and value.strip():
+                selection[key] = value.strip()
+        selections.append(selection)
+    return tuple(selections)
+
+
 @dataclass(frozen=True)
 class TurnInstructionSource:
     user_text: str = ""
@@ -50,6 +110,62 @@ class TurnInstructionSource:
                 tag=self.tag,
                 content=text,
                 order=order,
+                views=RUNTIME_ONLY_VIEWS,
+            ),
+        )
+
+
+@dataclass(frozen=True)
+class TurnAtomSelectionsSource:
+    selections: tuple[dict[str, Any], ...] = ()
+
+    def to_payload(self) -> list[dict[str, Any]]:
+        return [
+            {
+                **{k: v for k, v in selection.items() if k != "atoms"},
+                "atoms": [dict(atom) for atom in selection.get("atoms", [])],
+            }
+            for selection in self.selections
+        ]
+
+    def to_lines(self) -> tuple[str, ...]:
+        lines: list[str] = []
+        for index, selection in enumerate(self.selections, 1):
+            atoms = selection.get("atoms", [])
+            label = selection.get("source_label") or selection.get("source_path") or "structure"
+            lines.append(f"selection_{index}: {label}")
+            if selection.get("source_path"):
+                lines.append(f"source_path: {selection['source_path']}")
+            if selection.get("source_format"):
+                lines.append(f"source_format: {selection['source_format']}")
+            lines.append(f"atom_count: {len(atoms)}")
+            lines.append("atoms:")
+            for atom in atoms:
+                parts: list[str] = []
+                if atom.get("order") is not None:
+                    parts.append(f"order={atom['order']}")
+                if atom.get("element"):
+                    parts.append(f"element={atom['element']}")
+                cart_coord = _clean_number_list(atom.get("cart_coord"))
+                if cart_coord:
+                    parts.append(f"cart_coord_angstrom={_format_coord(cart_coord)}")
+                frac_coord = _clean_number_list(atom.get("frac_coord"))
+                if frac_coord:
+                    parts.append(f"frac_coord={_format_coord(frac_coord)}")
+                if parts:
+                    lines.append("- " + " ".join(parts))
+        return tuple(lines)
+
+    def to_sections(self) -> tuple[ContextSection, ...]:
+        lines = self.to_lines()
+        if not lines:
+            return ()
+        return (
+            ContextSection(
+                key="selected-atoms",
+                tag="selected-atoms",
+                content="\n".join(lines),
+                order=SectionOrder.TURN_ATOM_SELECTIONS,
                 views=RUNTIME_ONLY_VIEWS,
             ),
         )
@@ -96,6 +212,7 @@ class TurnAttachmentsSource:
 @dataclass(frozen=True)
 class TurnInput:
     instruction: TurnInstructionSource = field(default_factory=TurnInstructionSource)
+    atom_selections: TurnAtomSelectionsSource = field(default_factory=TurnAtomSelectionsSource)
     attachments: TurnAttachmentsSource = field(default_factory=TurnAttachmentsSource)
     pre_turn_history_event_id: int = 0
 
@@ -112,6 +229,7 @@ class TurnInput:
         images: Any = None,
         image_detail: Literal["low", "high", "auto"] | None = None,
         workspace_paths: Any = None,
+        atom_selections: Any = None,
         pre_turn_history_event_id: int | None = 0,
         instruction_tag: TurnInstructionTag = "current-instruction",
     ) -> TurnInput:
@@ -119,6 +237,9 @@ class TurnInput:
             instruction=TurnInstructionSource(
                 user_text=(user_text or "").strip(),
                 tag=instruction_tag,
+            ),
+            atom_selections=TurnAtomSelectionsSource(
+                selections=_clean_atom_selections(atom_selections),
             ),
             attachments=TurnAttachmentsSource(
                 files=_clean_tuple(files),
@@ -144,6 +265,7 @@ class TurnInput:
             images=payload.get("images"),
             image_detail=payload.get("image_detail"),
             workspace_paths=payload.get("workspace_paths"),
+            atom_selections=payload.get("atom_selections"),
             pre_turn_history_event_id=boundary,
             instruction_tag=payload.get("instruction_tag", "current-instruction"),
         )
@@ -156,6 +278,7 @@ class TurnInput:
             "images": list(self.images),
             "image_detail": self.attachments.image_detail,
             "workspace_paths": list(self.workspace_paths),
+            "atom_selections": self.atom_selections.to_payload(),
             "pre_turn_history_event_id": self.pre_turn_history_event_id,
         }
 
@@ -183,21 +306,22 @@ class TurnInput:
         if split_attachments:
             return (
                 *self.instruction.to_sections(),
+                *self.atom_selections.to_sections(),
                 *self.attachments.to_sections(),
             )
 
         merged = self._merged_current_instruction_text()
-        if not merged.strip():
-            return ()
-        return TurnInstructionSource(
+        instruction_sections = TurnInstructionSource(
             user_text=merged,
             deferred=self.instruction.deferred,
             tag=self.instruction.tag,
         ).to_sections()
+        return (*instruction_sections, *self.atom_selections.to_sections())
 
     def has_effective_input(self) -> bool:
         return bool(
             self.instruction.user_text.strip()
+            or self.atom_selections.selections
             or self.attachments.files
             or self.attachments.images
             or self.attachments.workspace_paths
@@ -210,7 +334,11 @@ class TurnInput:
         )
 
     def instruction_only(self) -> TurnInput:
-        return dataclasses.replace(self, attachments=TurnAttachmentsSource())
+        return dataclasses.replace(
+            self,
+            atom_selections=TurnAtomSelectionsSource(),
+            attachments=TurnAttachmentsSource(),
+        )
 
     def _merged_current_instruction_text(self) -> str:
         lines: list[str] = []
