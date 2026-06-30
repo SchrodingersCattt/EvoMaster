@@ -61,6 +61,38 @@ def test_add_history_event_persists_requested_model_metadata():
     }
 
 
+def test_add_history_event_persists_structure_selection_metadata():
+    table = MagicMock()
+    sessions = MagicMock()
+    service = ChatEventsService(events_table=table, sessions_service=sessions)
+    structure_selections = [
+        {
+            "id": "sel-1",
+            "source_path": "/share/current/POSCAR",
+            "atoms": [{"order": 1, "element": "C"}],
+        }
+    ]
+
+    service.add_history_event(
+        "sess-1",
+        {
+            "source": "User",
+            "type": "query",
+            "content": "run",
+            "task_id": "task-1",
+            "invocation_id": "inv-1",
+            "structure_selections": structure_selections,
+        },
+        user_id="user-1",
+    )
+
+    stored_content = table.add_event.call_args.args[3]
+    assert stored_content == {
+        "content": "run",
+        "structure_selections": structure_selections,
+    }
+
+
 def test_row_to_event_unpacks_session_directory_metadata():
     row = {
         "id": 1,
@@ -111,6 +143,37 @@ def test_row_to_event_unpacks_requested_model_metadata():
     assert event["content"] == "run"
     assert event["requested_llm"] == "opus"
     assert event["requested_model"] == "claude-opus-4-6"
+
+
+def test_row_to_event_unpacks_structure_selection_metadata():
+    structure_selections = [
+        {
+            "id": "sel-1",
+            "source_path": "/share/current/POSCAR",
+            "atoms": [{"order": 1, "element": "C"}],
+        }
+    ]
+    row = {
+        "id": 1,
+        "session_id": "sess-1",
+        "source": "User",
+        "type": "query",
+        "content": json.dumps(
+            {
+                "content": "run",
+                "structure_selections": structure_selections,
+            }
+        ),
+        "task_id": "task-1",
+        "invocation_id": "inv-1",
+        "spawn_id": None,
+        "created_at": None,
+    }
+
+    event = ChatEventsTable._row_to_event(row)
+
+    assert event["content"] == "run"
+    assert event["structure_selections"] == structure_selections
 
 
 class _Cursor:
@@ -170,3 +233,35 @@ def test_get_last_user_query_returns_session_directory_metadata():
     assert last["content"] == "run"
     assert last["session_directory"] == "/share/case"
     assert last["session_directory_source"] == "request"
+
+
+def test_get_last_user_query_returns_structure_selection_metadata():
+    structure_selections = [
+        {
+            "id": "sel-1",
+            "source_path": "/share/current/POSCAR",
+            "atoms": [{"order": 1, "element": "C"}],
+        }
+    ]
+    table = ChatEventsTable.__new__(ChatEventsTable)
+    table.get_connection = lambda: _Connection(
+        {
+            "session_id": "sess-1",
+            "source": "User",
+            "type": "query",
+            "content": json.dumps(
+                {
+                    "content": "run",
+                    "structure_selections": structure_selections,
+                }
+            ),
+            "task_id": "task-1",
+            "invocation_id": "inv-1",
+            "created_at": None,
+        }
+    )
+
+    last = table.get_last_user_query("sess-1")
+
+    assert last["content"] == "run"
+    assert last["structure_selections"] == structure_selections
