@@ -261,7 +261,7 @@ async def test_anchor_turn_with_attachments_merges_into_current_instruction() ->
 
 
 @pytest.mark.asyncio
-async def test_anchor_turn_with_atom_selections_renders_separate_section() -> None:
+async def test_anchor_turn_with_structure_selections_renders_separate_section() -> None:
     assembler = _assembler()
 
     result = await assembler.assemble_turn(
@@ -271,8 +271,9 @@ async def test_anchor_turn_with_atom_selections_renders_separate_section() -> No
             spawn_id=None,
             turn_input=TurnInput.from_values(
                 user_text="measure selected atoms",
-                atom_selections=[
+                structure_selections=[
                     {
+                        "selection_type": "atoms",
                         "source_label": "POSCAR",
                         "source_path": "/share/current/POSCAR",
                         "source_format": "vasp",
@@ -290,8 +291,9 @@ async def test_anchor_turn_with_atom_selections_renders_separate_section() -> No
 
     runtime = result.user_turn_context.to_message(ContextView.RUNTIME)
     assert "<current-instruction>\nmeasure selected atoms\n</current-instruction>" in runtime.content
-    assert "<selected-atoms>" in runtime.content
+    assert "<structure-selections>" in runtime.content
     assert "selection_1: POSCAR" in runtime.content
+    assert "selection_type: atoms" in runtime.content
     assert "source_path: /share/current/POSCAR" in runtime.content
     assert "atom_count: 2" in runtime.content
     assert "order=1 element=C cart_coord_angstrom=[1, 2, 3]" in runtime.content

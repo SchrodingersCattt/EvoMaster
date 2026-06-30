@@ -45,7 +45,7 @@ def _format_coord(values: tuple[float, ...]) -> str:
     return "[" + ", ".join(f"{v:.6g}" for v in values) + "]"
 
 
-def _clean_atom_selections(values: Any) -> tuple[dict[str, Any], ...]:
+def _clean_structure_selections(values: Any) -> tuple[dict[str, Any], ...]:
     if values is None:
         return ()
     if not isinstance(values, (list, tuple)):
@@ -80,7 +80,7 @@ def _clean_atom_selections(values: Any) -> tuple[dict[str, Any], ...]:
         if not atoms:
             continue
 
-        selection: dict[str, Any] = {"atoms": atoms}
+        selection: dict[str, Any] = {"selection_type": "atoms", "atoms": atoms}
         for key in ("id", "source_label", "source_path", "source_format"):
             value = raw_selection.get(key)
             if isinstance(value, str) and value.strip():
@@ -116,7 +116,7 @@ class TurnInstructionSource:
 
 
 @dataclass(frozen=True)
-class TurnAtomSelectionsSource:
+class TurnStructureSelectionsSource:
     selections: tuple[dict[str, Any], ...] = ()
 
     def to_payload(self) -> list[dict[str, Any]]:
@@ -134,6 +134,7 @@ class TurnAtomSelectionsSource:
             atoms = selection.get("atoms", [])
             label = selection.get("source_label") or selection.get("source_path") or "structure"
             lines.append(f"selection_{index}: {label}")
+            lines.append(f"selection_type: {selection.get('selection_type') or 'atoms'}")
             if selection.get("source_path"):
                 lines.append(f"source_path: {selection['source_path']}")
             if selection.get("source_format"):
@@ -162,10 +163,10 @@ class TurnAtomSelectionsSource:
             return ()
         return (
             ContextSection(
-                key="selected-atoms",
-                tag="selected-atoms",
+                key="structure-selections",
+                tag="structure-selections",
                 content="\n".join(lines),
-                order=SectionOrder.TURN_ATOM_SELECTIONS,
+                order=SectionOrder.TURN_STRUCTURE_SELECTIONS,
                 views=RUNTIME_ONLY_VIEWS,
             ),
         )
@@ -212,7 +213,7 @@ class TurnAttachmentsSource:
 @dataclass(frozen=True)
 class TurnInput:
     instruction: TurnInstructionSource = field(default_factory=TurnInstructionSource)
-    atom_selections: TurnAtomSelectionsSource = field(default_factory=TurnAtomSelectionsSource)
+    structure_selections: TurnStructureSelectionsSource = field(default_factory=TurnStructureSelectionsSource)
     attachments: TurnAttachmentsSource = field(default_factory=TurnAttachmentsSource)
     pre_turn_history_event_id: int = 0
 
@@ -229,7 +230,7 @@ class TurnInput:
         images: Any = None,
         image_detail: Literal["low", "high", "auto"] | None = None,
         workspace_paths: Any = None,
-        atom_selections: Any = None,
+        structure_selections: Any = None,
         pre_turn_history_event_id: int | None = 0,
         instruction_tag: TurnInstructionTag = "current-instruction",
     ) -> TurnInput:
@@ -238,8 +239,8 @@ class TurnInput:
                 user_text=(user_text or "").strip(),
                 tag=instruction_tag,
             ),
-            atom_selections=TurnAtomSelectionsSource(
-                selections=_clean_atom_selections(atom_selections),
+            structure_selections=TurnStructureSelectionsSource(
+                selections=_clean_structure_selections(structure_selections),
             ),
             attachments=TurnAttachmentsSource(
                 files=_clean_tuple(files),
@@ -265,7 +266,7 @@ class TurnInput:
             images=payload.get("images"),
             image_detail=payload.get("image_detail"),
             workspace_paths=payload.get("workspace_paths"),
-            atom_selections=payload.get("atom_selections"),
+            structure_selections=payload.get("structure_selections"),
             pre_turn_history_event_id=boundary,
             instruction_tag=payload.get("instruction_tag", "current-instruction"),
         )
@@ -278,7 +279,7 @@ class TurnInput:
             "images": list(self.images),
             "image_detail": self.attachments.image_detail,
             "workspace_paths": list(self.workspace_paths),
-            "atom_selections": self.atom_selections.to_payload(),
+            "structure_selections": self.structure_selections.to_payload(),
             "pre_turn_history_event_id": self.pre_turn_history_event_id,
         }
 
@@ -306,7 +307,7 @@ class TurnInput:
         if split_attachments:
             return (
                 *self.instruction.to_sections(),
-                *self.atom_selections.to_sections(),
+                *self.structure_selections.to_sections(),
                 *self.attachments.to_sections(),
             )
 
@@ -316,12 +317,12 @@ class TurnInput:
             deferred=self.instruction.deferred,
             tag=self.instruction.tag,
         ).to_sections()
-        return (*instruction_sections, *self.atom_selections.to_sections())
+        return (*instruction_sections, *self.structure_selections.to_sections())
 
     def has_effective_input(self) -> bool:
         return bool(
             self.instruction.user_text.strip()
-            or self.atom_selections.selections
+            or self.structure_selections.selections
             or self.attachments.files
             or self.attachments.images
             or self.attachments.workspace_paths
@@ -336,7 +337,7 @@ class TurnInput:
     def instruction_only(self) -> TurnInput:
         return dataclasses.replace(
             self,
-            atom_selections=TurnAtomSelectionsSource(),
+            structure_selections=TurnStructureSelectionsSource(),
             attachments=TurnAttachmentsSource(),
         )
 

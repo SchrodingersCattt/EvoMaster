@@ -267,7 +267,7 @@ class ChatStreamService:
         files: list[str] | None,
         images: list[str] | None,
         workspace_paths: list[str] | None,
-        atom_selections: list | None,
+        structure_selections: list | None,
         event_writer: Callable[[str, str], dict],
         id_prefix: str,
         mode: str,
@@ -308,7 +308,7 @@ class ChatStreamService:
             files=files,
             images=images,
             workspace_paths=workspace_paths,
-            atom_selections=atom_selections,
+            structure_selections=structure_selections,
             pre_turn_history_event_id=pre_turn_history_event_id,
             instruction_tag=instruction_tag,
         )
@@ -474,7 +474,7 @@ class ChatStreamService:
             files=None,
             images=None,
             workspace_paths=None,
-            atom_selections=None,
+            structure_selections=None,
             event_writer=_system_event_writer,
             id_prefix="trig_",
             mode=resolved_mode,
@@ -878,10 +878,10 @@ class ChatStreamService:
                 user_msg["images"] = list(req.images)
             if req.workspace_paths:
                 user_msg["workspace_paths"] = list(req.workspace_paths)
-            if req.atom_selections:
-                user_msg["atom_selections"] = [
+            if req.structure_selections:
+                user_msg["structure_selections"] = [
                     item.model_dump(mode="json", exclude_none=True)
-                    for item in req.atom_selections
+                    for item in req.structure_selections
                 ]
             if resolved_directory.source != "none":
                 user_msg["session_directory"] = resolved_directory.remote_workdir
@@ -896,11 +896,11 @@ class ChatStreamService:
             files=req.files,
             images=req.images,
             workspace_paths=req.workspace_paths,
-            atom_selections=[
+            structure_selections=[
                 item.model_dump(mode="json", exclude_none=True)
-                for item in req.atom_selections
+                for item in req.structure_selections
             ]
-            if req.atom_selections
+            if req.structure_selections
             else None,
             event_writer=_user_event_writer,
             id_prefix="sse_",
