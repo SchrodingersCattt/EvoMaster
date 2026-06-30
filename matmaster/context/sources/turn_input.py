@@ -212,7 +212,9 @@ class TurnAttachmentsSource:
 @dataclass(frozen=True)
 class TurnInput:
     instruction: TurnInstructionSource = field(default_factory=TurnInstructionSource)
-    structure_selections: TurnStructureSelectionsSource = field(default_factory=TurnStructureSelectionsSource)
+    structure_selections: TurnStructureSelectionsSource = field(
+        default_factory=TurnStructureSelectionsSource
+    )
     attachments: TurnAttachmentsSource = field(default_factory=TurnAttachmentsSource)
     pre_turn_history_event_id: int = 0
 
