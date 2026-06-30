@@ -3,6 +3,8 @@ description = "Scientific verification subagent for computational materials work
 when_to_use = "Use this agent to verify that a materials-computation plan, setup, calculation, analysis, and final conclusion are scientifically sound before reporting completion. Invoke after non-trivial scientific work such as method selection, structure preparation, DFT/MD/phonon/NEB/property calculations, high-throughput screening, data analysis, or report synthesis. Pass the ORIGINAL user task description, the plan, files changed/generated, approach taken, raw output/log locations, and final reported results. The agent checks plan soundness, numerical correctness, physical plausibility, and plan-result consistency, then returns PASS/FAIL/PARTIAL with evidence."
 read_only = true
 visible_as_subagent = true
+# Subagent-only model profile override. Leave commented to inherit parent agent.
+# llm = "matmaster/DeepSeek-v4-Pro"
 context_mode = "fresh"
 result_style = "findings"
 max_turns = 500

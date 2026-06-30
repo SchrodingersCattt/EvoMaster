@@ -133,3 +133,21 @@ class TestExpConfigWithSkills:
     def test_exp_config_skills_defaults_when_absent(self):
         cfg = ExpConfig.model_validate({"name": "direct"})
         assert cfg.skills.enabled is False
+
+
+def test_expconfig_llm_defaults_none():
+    assert ExpConfig().llm is None
+
+
+def test_expconfig_llm_accepts_profile_key():
+    cfg = ExpConfig(llm="matmaster/gpt-5.5")
+    assert cfg.llm == "matmaster/gpt-5.5"
+
+
+def test_expconfig_rejects_unknown_field():
+    # extra="forbid" 仍生效，llm 不削弱严格性
+    import pytest
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError):
+        ExpConfig(llmm="typo")

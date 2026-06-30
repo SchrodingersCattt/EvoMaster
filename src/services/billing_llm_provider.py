@@ -24,6 +24,66 @@ logger.setLevel(logging.INFO)
 COST_GUARD_CANCEL_REASON = "cost_guard"
 
 
+class BillingRunState:
+    """一个 run 内共享的计费状态：call_index 计数 + in-run 成本熔断累计。
+
+    root / subagent / compaction 的所有 BillingLLMProvider 共享同一实例，使
+    call_index 全 run 单调、成本熔断按全 run 累计触发。asyncio 单线程下计数
+    和累加均为同步原子操作，无需锁。
+    """
+
+    def __init__(
+        self,
+        *,
+        session_id: str,
+        budget_micro: int | None = None,
+        cancel_controller: CancellationController | None = None,
+    ) -> None:
+        self._session_id = session_id
+        self._budget_micro = budget_micro
+        self._cancel_controller = cancel_controller
+        self._call_index = 0
+        self._spent_micro = 0
+        self._guard_tripped = False
+
+    def next_call_index(self) -> int:
+        self._call_index += 1
+        return self._call_index
+
+    def accumulate(self, cost_micro: int) -> None:
+        """累加本次结算成本，超预算则触发 in-run 熔断。"""
+        if cost_micro <= 0:
+            return
+        self._spent_micro += cost_micro
+        self._maybe_trip_guard()
+
+    def _maybe_trip_guard(self) -> None:
+        if (
+            self._guard_tripped
+            or self._budget_micro is None
+            or self._cancel_controller is None
+        ):
+            return
+        if self._spent_micro <= self._budget_micro:
+            return
+        self._guard_tripped = True
+        logger.warning(
+            "in-run cost guard tripped session_id=%s spent_micro=%s budget_micro=%s, "
+            "cancelling run",
+            self._session_id,
+            self._spent_micro,
+            self._budget_micro,
+        )
+        try:
+            self._cancel_controller.cancel(reason=COST_GUARD_CANCEL_REASON)
+        except Exception:
+            logger.warning(
+                "cost guard cancel failed session_id=%s",
+                self._session_id,
+                exc_info=True,
+            )
+
+
 class BillingLLMProvider:
     """Wrap an LLM provider and report one usage event per completed LLM call.
 
@@ -36,8 +96,8 @@ class BillingLLMProvider:
     故单 run 欠债上界 ≈ 预算 + 一个 turn 成本。取消带 ``cost_guard`` 原因，让 run_agent
     收尾时把本轮按「额度耗尽中止」（失败语义）而非「用户取消」对外呈现。
 
-    仅在同时注入 ``budget_micro`` 与 ``cancel_controller`` 时启用（platform 计费才传；
-    byok/eval 不传 → 不熔断）。累加发生在 fire-and-forget 上报回调里，不阻塞主链路。
+    熔断状态由调用方注入的 ``run_state`` 共享。累加发生在 fire-and-forget 上报回调里，
+    不阻塞主链路。
     """
 
     def __init__(
@@ -48,26 +108,20 @@ class BillingLLMProvider:
         model: str,
         billing_service: BillingService,
         billing_mode: str = "platform",
-        budget_micro: int | None = None,
-        cancel_controller: CancellationController | None = None,
+        run_state: BillingRunState,
     ) -> None:
         self._inner = inner
         self._run_context = run_context
         self._model = model
         self._billing_service = billing_service
         self._billing_mode = billing_mode
-        self._call_index = 0
+        self._run_state = run_state
         self._pending: set[asyncio.Task] = set()
         self._http_session: aiohttp.ClientSession | None = None
         self._spawn_id_var: ContextVar[str | None] = ContextVar(
             "billing_spawn_id",
             default=None,
         )
-        # in-run 成本熔断状态：预算 + 取消句柄齐备才启用；spent 在上报回调里累加。
-        self._budget_micro = budget_micro
-        self._cancel_controller = cancel_controller
-        self._spent_micro = 0
-        self._guard_tripped = False
 
     def __getattr__(self, name: str) -> Any:
         return getattr(self._inner, name)
@@ -108,10 +162,6 @@ class BillingLLMProvider:
         finally:
             self._spawn_id_var.reset(token)
 
-    def _next_call_index(self) -> int:
-        self._call_index += 1
-        return self._call_index
-
     async def _report(
         self,
         *,
@@ -143,45 +193,14 @@ class BillingLLMProvider:
         self._accumulate_cost(data)
 
     def _accumulate_cost(self, data: dict[str, Any] | None) -> None:
-        """累加本次结算成本，超预算则触发 in-run 熔断（取消整个 run）。"""
+        """从定价响应解析本次成本，委派给共享 run_state 累加 / 熔断。"""
         if not data:
             return
         try:
             cost_micro = int(data.get("total_amount_settle_micro") or 0)
         except (TypeError, ValueError):
             return
-        if cost_micro <= 0:
-            return
-        self._spent_micro += cost_micro
-        self._maybe_trip_guard()
-
-    def _maybe_trip_guard(self) -> None:
-        if (
-            self._guard_tripped
-            or self._budget_micro is None
-            or self._cancel_controller is None
-        ):
-            return
-        if self._spent_micro <= self._budget_micro:
-            return
-        # 只触发一次：set event + fire callbacks，Exp 下个 turn 前见 cancel 优雅收尾。
-        # 带 cost_guard 原因，让 run_agent 把本轮按「额度耗尽中止」而非「用户取消」呈现。
-        self._guard_tripped = True
-        logger.warning(
-            "in-run cost guard tripped session_id=%s spent_micro=%s budget_micro=%s, "
-            "cancelling run",
-            self._run_context.session_id,
-            self._spent_micro,
-            self._budget_micro,
-        )
-        try:
-            self._cancel_controller.cancel(reason=COST_GUARD_CANCEL_REASON)
-        except Exception:
-            logger.warning(
-                "cost guard cancel failed session_id=%s",
-                self._run_context.session_id,
-                exc_info=True,
-            )
+        self._run_state.accumulate(cost_micro)
 
     def _schedule_report(
         self,
@@ -209,7 +228,7 @@ class BillingLLMProvider:
         *,
         tool_choice: str | dict | None = None,
     ) -> LLMResponse:
-        call_index = self._next_call_index()
+        call_index = self._run_state.next_call_index()
         response = await self._inner.chat(
             messages,
             tools,
@@ -228,7 +247,7 @@ class BillingLLMProvider:
         *,
         timeout: float | None = None,
     ) -> AsyncIterator[StreamChunk]:
-        call_index = self._next_call_index()
+        call_index = self._run_state.next_call_index()
         last_usage: dict[str, Any] | None = None
         async for chunk in self._inner.chat_stream(messages, tools, timeout=timeout):
             if chunk.usage is not None:

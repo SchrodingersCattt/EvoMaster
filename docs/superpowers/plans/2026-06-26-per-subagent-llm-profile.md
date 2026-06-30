@@ -172,12 +172,12 @@ git commit -m "feat(ports): add subagent_provider_factory port"
 
 ### Task 3: 共享 `BillingRunState` 重构
 
-把 run 级计费状态（call_index / spent / guard）从 `BillingLLMProvider` 实例搬到一个可共享对象，并更新唯一调用点（`agent_run_service.py`）与迁移现有测试。重构后行为对单 provider 场景不变。
+把 run 级计费状态（call_index / spent / guard）从 `BillingLLMProvider` 实例搬到一个可共享对象，更新生产唯一调用点（`agent_run_service.py`），并整体替换现有测试文件。重构后行为对单 provider 场景不变。
 
 **Files:**
 - Modify: `src/services/billing_llm_provider.py`
-- Modify: `src/services/agent_run_service.py`（root wrapper 构造，约 447-460 行）
-- Test: `tests/test_billing_llm_provider.py`（迁移 `TestCostGuard`）
+- Modify: `src/services/agent_run_service.py`（root wrapper 构造，约 451-463 行）
+- Test: `tests/test_billing_llm_provider.py`（整体替换；`TestCostGuard` 迁到 `BillingRunState`）
 
 **Interfaces:**
 - Consumes: 无
@@ -187,7 +187,7 @@ git commit -m "feat(ports): add subagent_provider_factory port"
 
 - [ ] **Step 1: 写失败测试（迁移 guard 测试到 BillingRunState）**
 
-`tests/test_billing_llm_provider.py` 当前仅含 `_provider` + `TestCostGuard`（无其它使用）。用以下**完整文件**覆盖它（guard 逻辑现已属于 `BillingRunState`）：
+`tests/test_billing_llm_provider.py` 当前仅含 `_provider` fixture + `TestCostGuard`，其中 `_provider` 是生产代码外唯一直接构造 `BillingLLMProvider` 的地方。用以下**完整文件**整体覆盖它：删除 `_provider`（避免改了 `__init__` 签名后失配），并把熔断测试迁到 `BillingRunState`（guard 逻辑现已属于它）。**有意取舍**：替换后 `BillingLLMProvider` 自身不再有独立单测（其逻辑已退化为对 `run_state` 的委派）。
 
 ```python
 """BillingRunState 的 in-run 成本熔断（防线二）+ call_index 计数。
@@ -381,7 +381,7 @@ class BillingRunState:
 
 - [ ] **Step 3c: 更新唯一调用点 `agent_run_service.py`**
 
-在 `src/services/agent_run_service.py`，把 root wrapper 构造（约 447-460 行）改为先建共享 state 再传入。将：
+在 `src/services/agent_run_service.py`，把 root wrapper 构造（约 451-463 行）改为先建共享 state 再传入。注意这处构造位于 byok / platform 两分支 if/else **汇合之后**的公共直线代码里——**byok 与 platform 两种模式都会构造 root wrapper**（byok 只是 `budget_micro=None`、不熔断）。将：
 
 ```python
             try:
@@ -425,9 +425,9 @@ class BillingRunState:
             except Exception:
 ```
 
-并更新 import：把 `from src.services.billing_llm_provider import BillingLLMProvider`（约 45 行附近，原 import 含 `BillingLLMProvider`）改为同时导入 `BillingRunState`。用 grep 定位：`grep -n "BillingLLMProvider" src/services/agent_run_service.py`。
+并更新 import：现有 import 是多行形式 `from src.services.billing_llm_provider import (COST_GUARD_CANCEL_REASON, BillingLLMProvider)`（约 43-46 行），在其中加入 `BillingRunState`。用 grep 定位：`grep -n "BillingLLMProvider" src/services/agent_run_service.py`。
 
-> 说明：`billing_state` 变量在 Task 5 会被 subagent factory 闭包复用，故定义在 try 之外。
+> 说明：`billing_state` 定义在 try 之外、且在 byok/platform 汇合后的公共代码处（root wrapper 构造点本身两模式都会执行到），因此 `billing_state` 对两种模式都已绑定。Task 5 的 platform 分支会复用它建 factory；**切勿把这行挪进任何 `if billing_mode == "platform"` 块内**，否则 byok 模式下 root wrapper 引用 `billing_state` 会 `UnboundLocalError`。
 
 - [ ] **Step 4: 运行测试确认通过**
 
@@ -450,11 +450,11 @@ git commit -m "refactor(billing): extract shared BillingRunState for run-level c
 ### Task 4: `child_run_factory` profile 解析与回退
 
 **Files:**
-- Modify: `matmaster/core/exp.py`（新增模块级 `_resolve_child_run_ctx`；`child_run_factory` 调用它）
+- Modify: `matmaster/core/exp.py`（新增模块级 `_resolve_child_run_ctx`；由 `_make_child_run_factory`（约 160-194 行）内的嵌套闭包 `child_run_factory` 调用它）
 - Test: `tests/matmaster/core/test_exp.py`
 
 **Interfaces:**
-- Consumes: `ExpConfig.llm`（Task 1）、`AgentRunPorts.subagent_provider_factory`（Task 2）、`LLMProviderBundle`（含 `provider/model/model_profile/model_route/context_limit/supports_vision/vision_detail`）。
+- Consumes: `ExpConfig.llm`（Task 1）、`AgentRunPorts.subagent_provider_factory`（Task 2）、`LLMProviderBundle`（本函数只消费 `provider/model/model_profile/model_route/context_limit/supports_vision/vision_detail` 七个字段；bundle 另有 `provider_name`/`context_limit_source` 两个必填字段，本函数不读，故测试替身 `_FakeBundle` 只造这七个即可）。
 - Produces: `_resolve_child_run_ctx(ctx: AgentRunContext, child_cfg: ExpConfig) -> AgentRunContext`。
 
 - [ ] **Step 1: 写失败测试**
@@ -594,7 +594,7 @@ def _resolve_child_run_ctx(
 
 > 注：`matmaster/core/exp.py` 顶部已 `import logging`（第 11 行）；若文件内已有 `logger = logging.getLogger(__name__)` 则不要重复定义，只加函数。先 `grep -n "^logger = " matmaster/core/exp.py` 确认。
 
-3b. 改 `child_run_factory`（约 173-192 行），在构造 `child_exp` 后、`run_stream` 前解析 child_ctx：
+3b. 改 `child_run_factory`（`_make_child_run_factory` 方法内的嵌套闭包，约 173-192 行），在构造 `child_exp` 后、`run_stream` 前解析 child_ctx：
 
 ```python
         def child_run_factory(
@@ -651,7 +651,7 @@ git commit -m "feat(exp): resolve per-subagent llm profile in child_run_factory"
 
 - [ ] **Step 1: 写失败测试**
 
-Create `tests/test_subagent_provider_factory.py`：
+Create `tests/test_subagent_provider_factory.py`（注意：本测试真实调用 `build_provider_bundle` 并硬依赖 `config/llm_config.yaml` 现存 profile `matmaster/DeepSeek-v4-Pro`；若该 profile 从配置移除，需同步改 key）：
 
 ```python
 """service 层 subagent provider factory：换 profile + 共享 billing state。"""
@@ -708,7 +708,7 @@ Expected: FAIL（`ImportError: cannot import name 'make_subagent_provider_factor
 
 - [ ] **Step 3: 实现 factory builder 并挂端口**
 
-3a. 在 `src/services/agent_run_service.py` 模块级（靠近文件顶部其它 import 之后、`run_agent` 之外）加。先确认 `from dataclasses import replace` 已导入，否则补：
+3a. 在 `src/services/agent_run_service.py` 模块级（靠近文件顶部其它 import 之后、`run_agent` 之外）加。当前文件**未**导入 `from dataclasses import replace`，需新增：
 
 ```python
 from dataclasses import replace
@@ -744,7 +744,7 @@ def make_subagent_provider_factory(
     return factory
 ```
 
-3b. 在 platform 分支装配 `AgentRunPorts` 处（约 588 行起的 `ports=AgentRunPorts(...)`），加一个字段。注意 BYOK 分支不会执行到这套 platform billing（`billing_state` 仅 platform 分支定义），但 `AgentRunPorts` 是统一构造的——因此用条件值：仅 platform 模式挂 factory。
+3b. 在装配 `AgentRunPorts` 处（约 592 行起的 `ports=AgentRunPorts(...)`，byok / platform 共用一处构造）加一个字段。`billing_state` 已在 Task 3c 的 root wrapper 构造点（byok/platform 公共代码）定义，两种模式都可用；这里只让 **platform 模式额外用它建 factory**，byok 模式 factory 保持 `None`（→ child 回退继承父 BYOK provider）。因此用条件值：仅 platform 模式挂 factory。
 
 在 `ports=AgentRunPorts(` 之前先算出 factory（platform 才有）：
 
@@ -763,7 +763,7 @@ def make_subagent_provider_factory(
                 )
 ```
 
-> `billing_state` 来自 Task 3c（root wrapper 之前定义）。BYOK 分支 `billing_mode == "byok"` → factory 保持 None → child 回退继承父 BYOK provider，符合设计。
+> `billing_state` 来自 Task 3c（在 byok/platform 公共代码处定义，两模式均已绑定，不会 `UnboundLocalError`）。BYOK 分支 `billing_mode == "byok"` → factory 保持 None → child 回退继承父 BYOK provider，符合设计。
 
 然后在 `AgentRunPorts(...)` 构造里新增一行：
 
@@ -801,7 +801,7 @@ git commit -m "feat(service): wire platform subagent provider factory onto ports
 
 - [ ] **Step 1: 写失败测试**
 
-Create `tests/matmaster/devshell/test_runner_subagent_factory.py`：
+Create `tests/matmaster/devshell/test_runner_subagent_factory.py`（同 Task 5：真实调用 `build_provider_bundle`，硬依赖 `config/llm_config.yaml` 现存 `matmaster/DeepSeek-v4-Pro`）：
 
 ```python
 """devshell 非计费 subagent provider factory。"""
