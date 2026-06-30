@@ -80,8 +80,8 @@ def _clean_structure_selections(values: Any) -> tuple[dict[str, Any], ...]:
         if not atoms:
             continue
 
-        selection: dict[str, Any] = {"selection_type": "atoms", "atoms": atoms}
-        for key in ("id", "source_label", "source_path", "source_format"):
+        selection: dict[str, Any] = {"atoms": atoms}
+        for key in ("id", "source_path", "source_format"):
             value = raw_selection.get(key)
             if isinstance(value, str) and value.strip():
                 selection[key] = value.strip()
@@ -132,9 +132,8 @@ class TurnStructureSelectionsSource:
         lines: list[str] = []
         for index, selection in enumerate(self.selections, 1):
             atoms = selection.get("atoms", [])
-            label = selection.get("source_label") or selection.get("source_path") or "structure"
+            label = selection.get("source_path") or "structure"
             lines.append(f"selection_{index}: {label}")
-            lines.append(f"selection_type: {selection.get('selection_type') or 'atoms'}")
             if selection.get("source_path"):
                 lines.append(f"source_path: {selection['source_path']}")
             if selection.get("source_format"):

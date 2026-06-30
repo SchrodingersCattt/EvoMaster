@@ -273,8 +273,6 @@ async def test_anchor_turn_with_structure_selections_renders_separate_section() 
                 user_text="measure selected atoms",
                 structure_selections=[
                     {
-                        "selection_type": "atoms",
-                        "source_label": "POSCAR",
                         "source_path": "/share/current/POSCAR",
                         "source_format": "vasp",
                         "atoms": [
@@ -292,8 +290,7 @@ async def test_anchor_turn_with_structure_selections_renders_separate_section() 
     runtime = result.user_turn_context.to_message(ContextView.RUNTIME)
     assert "<current-instruction>\nmeasure selected atoms\n</current-instruction>" in runtime.content
     assert "<structure-selections>" in runtime.content
-    assert "selection_1: POSCAR" in runtime.content
-    assert "selection_type: atoms" in runtime.content
+    assert "selection_1: /share/current/POSCAR" in runtime.content
     assert "source_path: /share/current/POSCAR" in runtime.content
     assert "atom_count: 2" in runtime.content
     assert "order=1 element=C cart_coord_angstrom=[1, 2, 3]" in runtime.content

@@ -532,14 +532,9 @@ class StructureSelectionAtom(BaseModel):
 
 
 class StructureSelection(BaseModel):
-    """一次从结构文件中选择的一组结构子集；当前支持原子选择。"""
+    """一次从结构文件中选择的一组原子。"""
 
     id: str | None = Field(default=None, description="前端生成的选择批次 ID")
-    selection_type: Literal["atoms"] = Field(
-        default="atoms",
-        description="选择类型；当前为 atoms，后续可扩展到键、片段等结构子集。",
-    )
-    source_label: str | None = Field(default=None, description="展示用结构文件名")
     source_path: str | None = Field(default=None, description="结构文件路径或 URL")
     source_format: str | None = Field(default=None, description="结构文件格式")
     atoms: list[StructureSelectionAtom] = Field(default_factory=list)

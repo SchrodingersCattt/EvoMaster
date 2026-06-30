@@ -198,8 +198,6 @@ def test_prepare_send_message_captures_turn_input_before_user_event():
         structure_selections=[
             {
                 "id": "sel-1",
-                "selection_type": "atoms",
-                "source_label": "POSCAR",
                 "source_path": "/share/current/POSCAR",
                 "source_format": "vasp",
                 "atoms": [
@@ -225,8 +223,6 @@ def test_prepare_send_message_captures_turn_input_before_user_event():
     assert ctx.job["turn_input"]["structure_selections"] == [
         {
             "id": "sel-1",
-            "selection_type": "atoms",
-            "source_label": "POSCAR",
             "source_path": "/share/current/POSCAR",
             "source_format": "vasp",
             "atoms": [
