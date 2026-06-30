@@ -513,6 +513,33 @@ class DeliverySpec(BaseModel):
     notify: bool = True
 
 
+class StructureSelectionAtom(BaseModel):
+    """前端结构预览中选中的单个原子。"""
+
+    order: int | str | None = Field(
+        default=None,
+        description="原子在结构中的序号；由前端结构查看器提供。",
+    )
+    element: str | None = Field(default=None, description="元素符号")
+    cart_coord: list[float] | None = Field(
+        default=None,
+        description="笛卡尔坐标，单位 Angstrom。",
+    )
+    frac_coord: list[float] | None = Field(
+        default=None,
+        description="分数坐标；若前端查看器可提供则透传。",
+    )
+
+
+class StructureSelection(BaseModel):
+    """一次从结构文件中选择的一组原子。"""
+
+    id: str | None = Field(default=None, description="前端生成的选择批次 ID")
+    source_path: str | None = Field(default=None, description="结构文件路径或 URL")
+    source_format: str | None = Field(default=None, description="结构文件格式")
+    atoms: list[StructureSelectionAtom] = Field(default_factory=list)
+
+
 class ChatSendRequest(BaseModel):
     """POST /chat/sessions/{session_id}/stream 请求体：不传或 content 为空则仅拉历史+ping；有 content 则发送消息并返回本次运行的 SSE 流"""
 
@@ -525,6 +552,10 @@ class ChatSendRequest(BaseModel):
     )
     workspace_paths: list[str] | None = (
         None  # 可选，工作区/个人路径列表，如 /personal/1.cif，与 files(OSS) 区分
+    )
+    structure_selections: list[StructureSelection] | None = Field(
+        default=None,
+        description="可选，本轮从结构预览中选中的结构上下文；后端作为结构化 turn input 渲染给 agent。",
     )
     mode: str = "direct"  # "direct" | "planner"
     model: str | None = (

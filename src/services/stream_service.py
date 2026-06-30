@@ -267,6 +267,7 @@ class ChatStreamService:
         files: list[str] | None,
         images: list[str] | None,
         workspace_paths: list[str] | None,
+        structure_selections: list | None,
         event_writer: Callable[[str, str], dict],
         id_prefix: str,
         mode: str,
@@ -307,6 +308,7 @@ class ChatStreamService:
             files=files,
             images=images,
             workspace_paths=workspace_paths,
+            structure_selections=structure_selections,
             pre_turn_history_event_id=pre_turn_history_event_id,
             instruction_tag=instruction_tag,
         )
@@ -472,6 +474,7 @@ class ChatStreamService:
             files=None,
             images=None,
             workspace_paths=None,
+            structure_selections=None,
             event_writer=_system_event_writer,
             id_prefix="trig_",
             mode=resolved_mode,
@@ -857,6 +860,11 @@ class ChatStreamService:
                         e,
                     )
 
+        structure_selections = [
+            item.model_dump(mode="json", exclude_none=True)
+            for item in req.structure_selections or []
+        ] or None
+
         def _user_event_writer(task_id: str, invocation_id: str) -> dict:
             user_msg = {
                 "source": "User",
@@ -875,6 +883,8 @@ class ChatStreamService:
                 user_msg["images"] = list(req.images)
             if req.workspace_paths:
                 user_msg["workspace_paths"] = list(req.workspace_paths)
+            if structure_selections:
+                user_msg["structure_selections"] = structure_selections
             if resolved_directory.source != "none":
                 user_msg["session_directory"] = resolved_directory.remote_workdir
                 user_msg["session_directory_source"] = resolved_directory.source
@@ -888,6 +898,7 @@ class ChatStreamService:
             files=req.files,
             images=req.images,
             workspace_paths=req.workspace_paths,
+            structure_selections=structure_selections,
             event_writer=_user_event_writer,
             id_prefix="sse_",
             mode=mode,

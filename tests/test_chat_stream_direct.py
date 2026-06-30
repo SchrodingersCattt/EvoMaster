@@ -190,11 +190,22 @@ def test_prepare_send_message_captures_turn_input_before_user_event():
         events_service=events_service,
         deploy_state_service=MagicMock(),
     )
+    structure_selections = [
+        {
+            "id": "sel-1",
+            "source_path": "/share/current/POSCAR",
+            "source_format": "vasp",
+            "atoms": [
+                {"order": 1, "element": "C", "cart_coord": [1.0, 2.0, 3.0]},
+            ],
+        }
+    ]
     req = ChatSendRequest(
         content="analyze current",
         files=["https://oss.example.com/chat/new.cif"],
         images=["https://oss.example.com/chat/current.png"],
         workspace_paths=["/share/current/POSCAR"],
+        structure_selections=structure_selections,
     )
 
     with (
@@ -210,8 +221,10 @@ def test_prepare_send_message_captures_turn_input_before_user_event():
         "https://oss.example.com/chat/current.png"
     ]
     assert ctx.job["turn_input"]["workspace_paths"] == ["/share/current/POSCAR"]
+    assert ctx.job["turn_input"]["structure_selections"] == structure_selections
     assert ctx.job["turn_input"]["pre_turn_history_event_id"] == 77
     assert ctx.user_msg["content"] == "analyze current"
+    assert ctx.user_msg["structure_selections"] == structure_selections
     assert "schema_version" not in ctx.user_msg
     events_service.get_latest_scope_event_id.assert_called_once_with("sess-1", None)
     events_service.add_history_event.assert_called_once()
