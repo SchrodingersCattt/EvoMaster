@@ -44,7 +44,8 @@ class ChatEventsTable(BaseTable):
             ev['files'] = content.get('files', [])
             ev['images'] = content.get('images', [])
             ev['workspace_paths'] = content.get('workspace_paths', [])
-            ev['structure_selections'] = content.get('structure_selections', [])
+            if content.get('structure_selections'):
+                ev['structure_selections'] = content.get('structure_selections')
             if content.get('session_directory'):
                 ev['session_directory'] = content.get('session_directory')
             if content.get('session_directory_source'):
@@ -407,10 +408,10 @@ class ChatEventsTable(BaseTable):
                         ev['files'] = content.get('files', [])
                         ev['images'] = content.get('images', [])
                         ev['workspace_paths'] = content.get('workspace_paths', [])
-                        ev['structure_selections'] = content.get(
-                            'structure_selections',
-                            [],
-                        )
+                        if content.get('structure_selections'):
+                            ev['structure_selections'] = content.get(
+                                'structure_selections'
+                            )
                         if content.get('session_directory'):
                             ev['session_directory'] = content.get('session_directory')
                         if content.get('session_directory_source'):
