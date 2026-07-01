@@ -296,7 +296,8 @@ def test_prepare_send_message_uses_session_submit_confirmation_when_request_omit
 
 def test_generate_send_stream_skips_current_task_in_history_replay():
     """发送流回放历史时不应再次回放当前任务刚落库的 query。"""
-    from src.services.stream_service import ChatStreamService, SendStreamContext
+    from src.services.stream_service import ChatStreamService
+    from src.services.stream_types import SendStreamContext
 
     sessions_service = MagicMock()
     sessions_service.get_session_status_payload.return_value = {
@@ -604,7 +605,8 @@ async def test_sse_frames_match_frontend_contract_without_mysql():
 
 
 def test_generate_send_stream_normalizes_replayed_history_source():
-    from src.services.stream_service import ChatStreamService, SendStreamContext
+    from src.services.stream_service import ChatStreamService
+    from src.services.stream_types import SendStreamContext
 
     sessions_service = MagicMock()
     sessions_service.get_session_status_payload.return_value = {
@@ -668,7 +670,8 @@ def test_generate_send_stream_normalizes_replayed_history_source():
 
 
 def test_generate_send_stream_replay_prefers_run_result_over_response():
-    from src.services.stream_service import ChatStreamService, SendStreamContext
+    from src.services.stream_service import ChatStreamService
+    from src.services.stream_types import SendStreamContext
 
     sessions_service = MagicMock()
     sessions_service.get_session_status_payload.return_value = {
@@ -755,7 +758,8 @@ def test_generate_send_stream_replay_prefers_run_result_over_response():
 
 def test_generate_send_stream_replay_keeps_intermediate_response():
     """终态去重只隐藏最终答案副本：tool_call 前的中间 response 在刷新回放中保留。"""
-    from src.services.stream_service import ChatStreamService, SendStreamContext
+    from src.services.stream_service import ChatStreamService
+    from src.services.stream_types import SendStreamContext
 
     sessions_service = MagicMock()
     sessions_service.get_session_status_payload.return_value = {
@@ -867,7 +871,8 @@ def test_generate_send_stream_replay_keeps_intermediate_response():
 
 
 def test_generate_send_stream_subscribes_before_enqueue():
-    from src.services.stream_service import ChatStreamService, SendStreamContext
+    from src.services.stream_service import ChatStreamService
+    from src.services.stream_types import SendStreamContext
 
     sessions_service = MagicMock()
     sessions_service.get_session_status_payload.return_value = {

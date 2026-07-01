@@ -87,7 +87,7 @@ def test_internal_trigger_token_constant_importable():
 
 
 def test_run_handle_and_busy_and_trigger_result_shapes():
-    from src.services.stream_service import Busy, RunHandle, TriggerResult
+    from src.services.stream_types import Busy, RunHandle, TriggerResult
 
     handle = RunHandle(
         task_id="trig_x",
@@ -108,7 +108,7 @@ def test_run_handle_and_busy_and_trigger_result_shapes():
 
 
 def test_send_stream_context_has_job_field():
-    from src.services.stream_service import SendStreamContext
+    from src.services.stream_types import SendStreamContext
 
     ctx = SendStreamContext(
         task_id="t",
@@ -137,7 +137,7 @@ def _make_service():
 
 def test_prepare_run_snapshots_boundary_before_writing_event():
     """历史边界必须在写发起事件之前快照（否则注入消息被算进自身历史）。"""
-    from src.services.stream_service import RunHandle
+    from src.services.stream_types import RunHandle
 
     service, sessions_service, events_service = _make_service()
     call_order = []
@@ -180,7 +180,7 @@ def test_prepare_run_snapshots_boundary_before_writing_event():
 
 
 def test_prepare_run_returns_busy_when_lock_held():
-    from src.services.stream_service import Busy
+    from src.services.stream_types import Busy
 
     service, sessions_service, events_service = _make_service()
     sessions_service.try_acquire_session_run.return_value = (False, "already_in_run")
@@ -330,7 +330,7 @@ def _trigger_patches(fake_redis, *, trigger_enabled=True):
 
 
 def test_trigger_run_error_when_no_owner():
-    from src.services.stream_service import TriggerResult
+    from src.services.stream_types import TriggerResult
 
     service, sessions_service, events_service = _make_trigger_service(owner=None)
     res = service.trigger_run("s1", "作业完成", origin="hpc_job")

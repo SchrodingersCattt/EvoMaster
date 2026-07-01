@@ -49,13 +49,11 @@ from src.services.stream_sse_filter import (
     _normalize_replayed_event,
     _should_emit_event_to_sse,
 )
-from src.services.stream_types import (
-    Busy,
-    RunHandle,
-    SendStreamContext,
-    TriggerResult,
-    TriggerStreamContext,
-)
+from src.services.stream_types import Busy as _Busy
+from src.services.stream_types import RunHandle as _RunHandle
+from src.services.stream_types import SendStreamContext as _SendStreamContext
+from src.services.stream_types import TriggerResult as _TriggerResult
+from src.services.stream_types import TriggerStreamContext as _TriggerStreamContext
 from src.services.user_service import UserService
 from src.services.worker_registry_service import get_worker_registry_service
 from src.utils.constant import AG_UI_EVENT, REDIS_URL, SERVICE_ENV
@@ -240,7 +238,7 @@ class ChatStreamService:
         delivery: dict | None = None,
         instruction_tag: TurnInstructionTag = "current-instruction",
         pre_event_hook: Callable[[], None] | None = None,
-    ) -> RunHandle | Busy:
+    ) -> _RunHandle | _Busy:
         """共享内核：确保会话、占锁、快照边界、写发起事件并组装 job。
 
         不负责 lpush，以保护用户发送路径 subscribe-before-enqueue 的不变量。
@@ -253,7 +251,7 @@ class ChatStreamService:
         self._sessions_service.ensure_session(sid, user_id=user_id)
         acquired_ok, reason = self._sessions_service.try_acquire_session_run(sid)
         if not acquired_ok:
-            return Busy(reason=reason or "unknown")
+            return _Busy(reason=reason or "unknown")
         if pre_event_hook is not None:
             pre_event_hook()
         task_id = id_prefix + uuid.uuid4().hex[:16]
@@ -293,7 +291,7 @@ class ChatStreamService:
             "delivery": delivery,
             "submitted_at": datetime.now(timezone.utc).isoformat(),
         }
-        return RunHandle(
+        return _RunHandle(
             task_id=task_id,
             invocation_id=invocation_id,
             job=job,
@@ -364,7 +362,7 @@ class ChatStreamService:
                 reason,
             )
 
-    def _finalize_enqueue(self, ctx: TriggerStreamContext, session_id: str) -> bool:
+    def _finalize_enqueue(self, ctx: _TriggerStreamContext, session_id: str) -> bool:
         """提交内部 trigger：入队成功后标记 dedup 并发布 wakeup；失败返回 False。"""
         if not self._enqueue_run(session_id, ctx.job):
             return False
@@ -384,7 +382,7 @@ class ChatStreamService:
         mode: str | None = None,
         model: str | None = None,
         workspace: str | None = None,
-    ) -> TriggerResult | TriggerStreamContext:
+    ) -> _TriggerResult | _TriggerStreamContext:
         """准备内部 trigger：校验 owner/dedup，写 System/trigger，组装 job，不入队。"""
         sid = session_id.strip()
         owner = self._sessions_service.get_session_user_id(sid)
@@ -393,7 +391,9 @@ class ChatStreamService:
                 "trigger prepare rejected: session not found or no owner session_id=%s",
                 sid,
             )
-            return TriggerResult(status="error", reason="session_not_found_or_no_owner")
+            return _TriggerResult(
+                status="error", reason="session_not_found_or_no_owner"
+            )
 
         if not is_programmatic_trigger_enabled(owner):
             logger.info(
@@ -403,13 +403,15 @@ class ChatStreamService:
                 owner,
                 origin,
             )
-            return TriggerResult(status="error", reason="programmatic_trigger_disabled")
+            return _TriggerResult(
+                status="error", reason="programmatic_trigger_disabled"
+            )
 
         if dedup_key and get_redis_dao().dedup_key_exists(dedup_key):
             logger.info(
                 "trigger prepare deduped session_id=%s dedup_key=%s", sid, dedup_key
             )
-            return TriggerResult(status="deduped", dedup_key=dedup_key)
+            return _TriggerResult(status="deduped", dedup_key=dedup_key)
 
         resolved_mode = self._resolve_mode(mode)
         model_val = (model or "").strip() or None
@@ -420,7 +422,7 @@ class ChatStreamService:
             model_val, inherited_model, sid, logger
         )
         if invalid_explicit_model:
-            return TriggerResult(status="error", reason="invalid_model_profile")
+            return _TriggerResult(status="error", reason="invalid_model_profile")
         delivery_payload = delivery.model_dump() if delivery is not None else None
 
         def _system_event_writer(task_id: str, invocation_id: str) -> dict:
@@ -453,13 +455,13 @@ class ChatStreamService:
             delivery=delivery_payload,
             instruction_tag="system-reminder",
         )
-        if isinstance(handle, Busy):
+        if isinstance(handle, _Busy):
             logger.info(
                 "trigger prepare busy session_id=%s reason=%s", sid, handle.reason
             )
-            return TriggerResult(status="busy", reason=handle.reason)
+            return _TriggerResult(status="busy", reason=handle.reason)
 
-        return TriggerStreamContext(
+        return _TriggerStreamContext(
             task_id=handle.task_id,
             invocation_id=handle.invocation_id,
             owner=owner,
@@ -479,7 +481,7 @@ class ChatStreamService:
         mode: str | None = None,
         model: str | None = None,
         workspace: str | None = None,
-    ) -> TriggerResult:
+    ) -> _TriggerResult:
         """程序化触发一次 agent run。"""
         sid = session_id.strip()
         prep = self.prepare_internal_trigger_run(
@@ -492,18 +494,18 @@ class ChatStreamService:
             model=model,
             workspace=workspace,
         )
-        if isinstance(prep, TriggerResult):
+        if isinstance(prep, _TriggerResult):
             return prep
 
         if not self._finalize_enqueue(prep, sid):
-            return TriggerResult(status="error", reason="enqueue_failed")
+            return _TriggerResult(status="error", reason="enqueue_failed")
         logger.info(
             "trigger_run enqueued session_id=%s task_id=%s origin=%s",
             sid,
             prep.task_id,
             origin,
         )
-        return TriggerResult(
+        return _TriggerResult(
             status="enqueued",
             task_id=prep.task_id,
             invocation_id=prep.invocation_id,
@@ -732,7 +734,7 @@ class ChatStreamService:
         req: ChatSendRequest,
         user_id: str | None,
         org_id: str | None = None,
-    ) -> SendStreamContext | None:
+    ) -> _SendStreamContext | None:
         """
         为发送消息做准备：确保会话、尝试占用 run、更新 Bohrium 凭证、写入用户消息、创建队列。
         若该会话已有任务在运行则返回 None（调用方应返回 409）。
@@ -883,10 +885,10 @@ class ChatStreamService:
             delivery=None,
             pre_event_hook=_run_pre_event_hook,
         )
-        if isinstance(handle, Busy):
+        if isinstance(handle, _Busy):
             return None
 
-        return SendStreamContext(
+        return _SendStreamContext(
             task_id=handle.task_id,
             invocation_id=handle.invocation_id,
             mode=mode,
@@ -909,7 +911,7 @@ class ChatStreamService:
     async def generate_send_stream(
         self,
         session_id: str,
-        ctx: SendStreamContext,
+        ctx: _SendStreamContext,
     ) -> AsyncGenerator[str, None]:
         """
         发送消息流：先推送历史 + 用户消息 + 状态，再订阅 Redis channel 推送 Worker 事件。
@@ -936,7 +938,7 @@ class ChatStreamService:
     async def generate_internal_trigger_stream(
         self,
         session_id: str,
-        ctx: TriggerStreamContext,
+        ctx: _TriggerStreamContext,
     ) -> AsyncGenerator[str, None]:
         """内部 HTTP trigger 流：订阅就绪后才入队，再转发 Worker 实时事件。"""
         sid = session_id.strip()

@@ -64,9 +64,9 @@ from src.services.sessions_service import (
 )
 from src.services.stream_service import (
     ChatStreamService,
-    TriggerStreamContext,
     get_stream_service,
 )
+from src.services.stream_types import TriggerStreamContext
 from src.services.user_service import UserService
 from src.services.worker_registry_service import get_worker_registry_service
 from src.utils.constant import INTERNAL_TRIGGER_TOKEN, REDIS_URL

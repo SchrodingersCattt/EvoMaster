@@ -23,7 +23,7 @@ def _make_service():
 
 
 async def test_generate_internal_trigger_stream_subscribes_before_enqueue():
-    from src.services.stream_service import TriggerStreamContext
+    from src.services.stream_types import TriggerStreamContext
 
     service = _make_service()
     ctx = TriggerStreamContext(
