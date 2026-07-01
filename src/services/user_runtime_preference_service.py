@@ -28,6 +28,8 @@ class UserRuntimePreference:
     user_bohrium_submit_confirmation_required: bool | None = None
     bohrium_job_max_runtime_seconds: int | None = None
     bohrium_node_sku_id: int | None = None
+    programmatic_trigger_enabled: bool | None = None
+    loaded: bool = False
 
 
 def _get_latest_org_id(
@@ -72,4 +74,6 @@ def get_user_runtime_preference(
         ),
         bohrium_job_max_runtime_seconds=user_level.bohrium_job_max_runtime_seconds,
         bohrium_node_sku_id=user_level.bohrium_node_sku_id,
+        programmatic_trigger_enabled=user_level.programmatic_trigger_enabled,
+        loaded=user_level.loaded,
     )

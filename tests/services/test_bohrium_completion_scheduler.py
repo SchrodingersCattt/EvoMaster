@@ -169,13 +169,13 @@ def test_reason_priority_order_for_session_merge():
 
 
 class _FakeJobsTable:
-    """只实现 scheduler 用到的读方法；任何写方法被调用都会 AttributeError，
-    这本身就是「enqueued 后不写任何持久状态」的守护。"""
+    """只实现 scheduler 用到的读写方法。"""
 
     def __init__(self, units=(), frozen=0):
         self.units = list(units)
         self.scan_limits: list[int] = []
         self.frozen = frozen
+        self.mark_handled_calls: list[dict] = []
 
     def scan_delivery_units(self, *, limit):
         self.scan_limits.append(limit)
@@ -183,6 +183,32 @@ class _FakeJobsTable:
 
     def count_frozen_delivery_units(self):
         return self.frozen
+
+    def list_pending_terminal_snapshot(self, *, user_id, org_id, session_id, workspace):
+        return [
+            {
+                "id": unit["max_pending_terminal_id"],
+                "invocation_id": unit["invocation_key"] or None,
+            }
+            for unit in self.units
+            if unit["user_id"] == user_id
+            and unit["org_id"] == org_id
+            and unit["session_id"] == session_id
+            and unit["workspace"] == workspace
+            and unit["pending_terminal"] > 0
+        ]
+
+    def mark_handled_by_ids(self, *, user_id, org_id, session_id, workspace, row_ids):
+        self.mark_handled_calls.append(
+            {
+                "user_id": user_id,
+                "org_id": org_id,
+                "session_id": session_id,
+                "workspace": workspace,
+                "row_ids": tuple(row_ids),
+            }
+        )
+        return len(row_ids)
 
 
 class _FakeSessions:
@@ -230,6 +256,10 @@ def _scheduler(units, *, table=None, sessions=None, redis=None, stream=None, cfg
         stream_service=stream,
         redis=redis,
         cfg=cfg or SchedulerConfig(),
+        runtime_preference_getter=lambda _user_id: SimpleNamespace(
+            loaded=True,
+            programmatic_trigger_enabled=True,
+        ),
     )
     return sched, table, sessions, redis, stream
 
@@ -249,6 +279,7 @@ def test_tick_triggers_final_with_notify_and_no_persistent_state():
     assert call["delivery"] == DeliverySpec(notify=True)
     assert "dedup_key" not in call  # 占位已由 NX 接管
     assert redis.calls[0]["ttl_sec"] == 60
+    assert table.mark_handled_calls == []
 
 
 def test_tick_merges_session_units_single_trigger_with_primary_reason():
@@ -401,6 +432,110 @@ def test_tick_status_gate_failed_counts_and_warns_with_session_list(caplog):
     assert warn and "s1" in warn[0].getMessage()
 
 
+def test_tick_user_disabled_acks_pending_without_trigger_or_reservation():
+    units = [
+        _unit(
+            invocation_key="inv-a",
+            active=0,
+            pending_terminal=1,
+            max_pending_terminal_id=11,
+        ),
+        _unit(
+            invocation_key="inv-b",
+            active=0,
+            pending_terminal=2,
+            max_pending_terminal_id=12,
+        ),
+    ]
+    table = _FakeJobsTable(units)
+    redis = _FakeRedis()
+    stream = _FakeStream()
+    sched = BohriumCompletionScheduler(
+        jobs_table=table,
+        sessions_service=_FakeSessions(),
+        stream_service=stream,
+        redis=redis,
+        cfg=SchedulerConfig(),
+        runtime_preference_getter=lambda _user_id: SimpleNamespace(
+            loaded=True,
+            programmatic_trigger_enabled=False,
+        ),
+    )
+
+    summary = sched.tick()
+
+    assert summary["skipped_user_disabled"] == 1
+    assert summary["acked_user_disabled"] == 2
+    assert summary["triggered"] == 0
+    assert stream.calls == []
+    assert redis.calls == []
+    assert table.mark_handled_calls == [
+        {
+            "user_id": "u1",
+            "org_id": "o1",
+            "session_id": "s1",
+            "workspace": "/share/p",
+            "row_ids": (11, 12),
+        }
+    ]
+
+
+def test_tick_preference_unavailable_skips_without_ack_or_trigger(caplog):
+    units = [_unit(active=0, pending_terminal=1)]
+    table = _FakeJobsTable(units)
+    sched = BohriumCompletionScheduler(
+        jobs_table=table,
+        sessions_service=_FakeSessions(),
+        stream_service=_FakeStream(),
+        redis=_FakeRedis(),
+        cfg=SchedulerConfig(),
+        runtime_preference_getter=lambda _user_id: SimpleNamespace(
+            loaded=False,
+            programmatic_trigger_enabled=None,
+        ),
+    )
+
+    with caplog.at_level(
+        logging.WARNING, logger="src.services.bohrium_completion_scheduler"
+    ):
+        summary = sched.tick()
+
+    assert summary["skipped_preference_unavailable"] == 1
+    assert summary["triggered"] == 0
+    assert table.mark_handled_calls == []
+    warns = [r for r in caplog.records if "preference unavailable" in r.getMessage()]
+    assert len(warns) == 1
+
+
+def test_tick_preference_lookup_error_skips_without_ack_or_trigger(caplog):
+    units = [_unit(active=0, pending_terminal=1)]
+    table = _FakeJobsTable(units)
+
+    def _raise_preference(_user_id):
+        raise RuntimeError("preference service unavailable")
+
+    sched = BohriumCompletionScheduler(
+        jobs_table=table,
+        sessions_service=_FakeSessions(),
+        stream_service=_FakeStream(),
+        redis=_FakeRedis(),
+        cfg=SchedulerConfig(),
+        runtime_preference_getter=_raise_preference,
+    )
+
+    with caplog.at_level(
+        logging.WARNING, logger="src.services.bohrium_completion_scheduler"
+    ):
+        summary = sched.tick()
+
+    assert summary["skipped_preference_unavailable"] == 1
+    assert summary["errors"] == 0
+    assert summary["triggered"] == 0
+    assert table.mark_handled_calls == []
+    warns = [r for r in caplog.records if "preference unavailable" in r.getMessage()]
+    assert len(warns) == 1
+
+
 def test_tick_reports_frozen_count():
     # frozen（被冻结的 failed 僵尸单元数）写入 summary，供 monitor 日志输出（spec 3.4）
     units = [_unit(active=0, pending_terminal=1)]
@@ -451,7 +586,6 @@ def test_tick_trigger_busy_and_error_do_not_touch_ledger():
     sched2, _, _, _, _ = _scheduler(units, stream=_FakeStream(status="error"))
     summary2 = sched2.tick()
     assert summary2["errors"] == 1 and summary2["triggered"] == 0
-    # _FakeJobsTable 无任何写方法：触达 ledger 会直接 AttributeError 炸测试
 
 
 def test_tick_swallows_scan_failure_and_returns_tick_failed():
