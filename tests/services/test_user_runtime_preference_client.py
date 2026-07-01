@@ -62,6 +62,7 @@ def test_get_user_runtime_preference_combines_tools_preference_and_latest_org(
     assert pref.bohrium_job_max_runtime_seconds == 7200
     assert pref.bohrium_node_sku_id == 12345
     assert pref.programmatic_trigger_enabled is True
+    assert pref.loaded is True
     assert fake_client.requests == [
         (
             "https://tools.example/api/v1/users/u1/runtime-preference",
@@ -94,3 +95,4 @@ def test_get_user_runtime_preference_fail_soft_when_tools_server_fails(
     assert pref.bohrium_job_max_runtime_seconds is None
     assert pref.bohrium_node_sku_id is None
     assert pref.programmatic_trigger_enabled is None
+    assert pref.loaded is False

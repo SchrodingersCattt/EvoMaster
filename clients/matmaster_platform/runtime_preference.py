@@ -25,6 +25,7 @@ class UserLevelRuntimePreference:
     bohrium_job_max_runtime_seconds: int | None = None
     bohrium_node_sku_id: int | None = None
     programmatic_trigger_enabled: bool | None = None
+    loaded: bool = False
 
 
 def _runtime_preference_url(user_id: str) -> str:
@@ -120,6 +121,7 @@ def get_user_level_runtime_preference(user_id: str) -> UserLevelRuntimePreferenc
             if isinstance(data.get("programmatic_trigger_enabled"), bool)
             else None
         ),
+        loaded=True,
     )
 
 

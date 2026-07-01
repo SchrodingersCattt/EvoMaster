@@ -10,6 +10,9 @@ bohrium_jobs 当前聚合快照推导（无 now、无持久调度态、enqueued 
 经 worker ack 至少消化 step 个 pending。STALLED 是常态上界外的异常态兜底：仅当
 剩余活跃作业全部失联（unknown）且最老 pending 熟化超阈值时触发，每次触发须有
 新终态出现并再次熟化，病态接口间歇恢复下至多每作业一次、间隔 ≥ 阈值。
+
+用户未开启程序化 trigger 时，scheduler 会消费当前 pending terminal 行（handled_at），
+避免用户稍后开启后补触发历史完成事件；偏好服务不可用时不消费，等待下轮重试。
 """
 
 from __future__ import annotations
@@ -17,8 +20,9 @@ from __future__ import annotations
 import enum
 import logging
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Callable
 
+from clients.matmaster_platform.runtime_preference import UserLevelRuntimePreference
 from src.models.chat import DeliverySpec
 from src.utils.constant import env_int
 
@@ -104,12 +108,16 @@ class BohriumCompletionScheduler:
         stream_service: Any | None = None,
         redis: Any | None = None,
         cfg: SchedulerConfig | None = None,
+        runtime_preference_getter: (
+            Callable[[str], UserLevelRuntimePreference] | None
+        ) = None,
     ) -> None:
         self._jobs_table = jobs_table
         self._sessions_service = sessions_service
         self._stream_service = stream_service
         self._redis = redis
         self._cfg = cfg if cfg is not None else SchedulerConfig.from_env()
+        self._runtime_preference_getter = runtime_preference_getter
 
     def _ensure_deps(self) -> None:
         if self._jobs_table is None:
@@ -138,6 +146,9 @@ class BohriumCompletionScheduler:
             "skipped_busy": 0,
             "skipped_failed": 0,
             "skipped_redis": 0,
+            "skipped_user_disabled": 0,
+            "skipped_preference_unavailable": 0,
+            "acked_user_disabled": 0,
             "frozen": 0,
             "errors": 0,
             "tick_failed": 0,
@@ -198,7 +209,51 @@ class BohriumCompletionScheduler:
                 "this tick (fail-closed; resumes when redis recovers)",
                 summary["skipped_redis"],
             )
+        if summary["skipped_preference_unavailable"]:
+            logger.warning(
+                "bohrium delivery preference unavailable, skipped %d session(s) "
+                "this tick (no ack; resumes when preference service recovers)",
+                summary["skipped_preference_unavailable"],
+            )
         return summary
+
+    def _programmatic_trigger_enabled(self, user_id: str) -> bool | None:
+        getter = self._runtime_preference_getter
+        if getter is None:
+            from clients.matmaster_platform.runtime_preference import (
+                get_user_level_runtime_preference,
+            )
+
+            getter = get_user_level_runtime_preference
+        preference = getter(user_id)
+        if not getattr(preference, "loaded", False):
+            return None
+        return preference.programmatic_trigger_enabled is True
+
+    def _ack_user_disabled_pending_terminal(
+        self,
+        *,
+        user_id: str,
+        org_id: str,
+        session_id: str,
+        workspace: str,
+    ) -> int:
+        rows = self._jobs_table.list_pending_terminal_snapshot(
+            user_id=user_id,
+            org_id=org_id,
+            session_id=session_id,
+            workspace=workspace,
+        )
+        row_ids = tuple(int(row["id"]) for row in rows)
+        if not row_ids:
+            return 0
+        return self._jobs_table.mark_handled_by_ids(
+            user_id=user_id,
+            org_id=org_id,
+            session_id=session_id,
+            workspace=workspace,
+            row_ids=row_ids,
+        )
 
     def _process_session(
         self,
@@ -241,6 +296,20 @@ class BohriumCompletionScheduler:
             return
         if status != "idle":
             summary["skipped_busy"] += 1
+            return
+
+        enabled = self._programmatic_trigger_enabled(user_id)
+        if enabled is None:
+            summary["skipped_preference_unavailable"] += 1
+            return
+        if not enabled:
+            summary["skipped_user_disabled"] += 1
+            summary["acked_user_disabled"] += self._ack_user_disabled_pending_terminal(
+                user_id=user_id,
+                org_id=org_id,
+                session_id=session_id,
+                workspace=workspace,
+            )
             return
 
         # (c) NX 原子占位（fail-closed）：同 tick 多实例竞态的防御纵深。
