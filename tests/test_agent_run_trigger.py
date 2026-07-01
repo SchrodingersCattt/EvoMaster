@@ -1,5 +1,7 @@
 """程序化触发原语测试：DeliverySpec / ChatSendRequest 扩展 / dedup / _prepare_run / _enqueue_run / trigger_run。"""
 
+from contextlib import contextmanager
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -294,9 +296,28 @@ def _make_trigger_service(owner="owner-1"):
     return service, sessions_service, events_service
 
 
-def _trigger_patches(fake_redis):
-    return (
+@contextmanager
+def _redis_and_trigger_preference_patches(
+    fake_redis,
+    *,
+    trigger_enabled=True,
+):
+    with (
         patch("src.services.stream_service.get_redis_dao", return_value=fake_redis),
+        patch(
+            "src.services.stream_service.get_user_level_runtime_preference",
+            return_value=SimpleNamespace(programmatic_trigger_enabled=trigger_enabled),
+        ),
+    ):
+        yield
+
+
+def _trigger_patches(fake_redis, *, trigger_enabled=True):
+    return (
+        _redis_and_trigger_preference_patches(
+            fake_redis,
+            trigger_enabled=trigger_enabled,
+        ),
         patch("src.services.stream_service.notify_post_async"),
         patch(
             "src.services.stream_service.UserService.get_user_info_for_display",
@@ -316,6 +337,31 @@ def test_trigger_run_error_when_no_owner():
     res = service.trigger_run("s1", "作业完成", origin="hpc_job")
     assert isinstance(res, TriggerResult)
     assert res.status == "error"
+    events_service.add_history_event.assert_not_called()
+
+
+@pytest.mark.parametrize("trigger_enabled", [None, False])
+def test_trigger_run_requires_user_enabled_preference(trigger_enabled):
+    service, sessions_service, events_service = _make_trigger_service()
+    fake_redis = MagicMock()
+    p1, p2, p3, p4 = _trigger_patches(
+        fake_redis,
+        trigger_enabled=trigger_enabled,
+    )
+
+    with p1, p2, p3, p4:
+        res = service.trigger_run(
+            "s1",
+            "作业完成",
+            origin="hpc_job",
+            dedup_key="job:123:done",
+        )
+
+    assert res.status == "error"
+    assert res.reason == "programmatic_trigger_disabled"
+    sessions_service.try_acquire_session_run.assert_not_called()
+    fake_redis.dedup_key_exists.assert_not_called()
+    fake_redis.lpush_agent_run_job.assert_not_called()
     events_service.add_history_event.assert_not_called()
 
 

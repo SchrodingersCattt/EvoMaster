@@ -10,6 +10,9 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from functools import lru_cache
 
+from clients.matmaster_platform.runtime_preference import (
+    get_user_level_runtime_preference,
+)
 from matmaster.config.exp import DEFAULT_MODE, SUPPORTED_MODES
 from matmaster.context.sources.turn_input import TurnInput, TurnInstructionTag
 from src.dao.redis_dao import STREAM_CHANNEL_PREFIX, get_redis_dao, user_wakeup_channel
@@ -406,6 +409,20 @@ class ChatStreamService:
                 reason,
             )
 
+    @staticmethod
+    def _is_programmatic_trigger_enabled(user_id: str) -> bool:
+        """程序化 trigger 会发起新 run，必须由用户偏好显式允许。"""
+        try:
+            preference = get_user_level_runtime_preference(user_id)
+        except Exception:
+            logger.warning(
+                "programmatic trigger preference lookup failed user_id=%s",
+                user_id,
+                exc_info=True,
+            )
+            return False
+        return preference.programmatic_trigger_enabled is True
+
     def _finalize_enqueue(self, ctx: TriggerStreamContext, session_id: str) -> bool:
         """提交内部 trigger：入队成功后标记 dedup 并发布 wakeup；失败返回 False。"""
         if not self._enqueue_run(session_id, ctx.job):
@@ -436,6 +453,16 @@ class ChatStreamService:
                 sid,
             )
             return TriggerResult(status="error", reason="session_not_found_or_no_owner")
+
+        if not self._is_programmatic_trigger_enabled(owner):
+            logger.info(
+                "trigger prepare rejected: programmatic trigger disabled "
+                "session_id=%s user_id=%s origin=%s",
+                sid,
+                owner,
+                origin,
+            )
+            return TriggerResult(status="error", reason="programmatic_trigger_disabled")
 
         if dedup_key and get_redis_dao().dedup_key_exists(dedup_key):
             logger.info(
