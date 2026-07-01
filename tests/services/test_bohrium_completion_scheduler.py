@@ -507,6 +507,35 @@ def test_tick_preference_unavailable_skips_without_ack_or_trigger(caplog):
     assert len(warns) == 1
 
 
+def test_tick_preference_lookup_error_skips_without_ack_or_trigger(caplog):
+    units = [_unit(active=0, pending_terminal=1)]
+    table = _FakeJobsTable(units)
+
+    def _raise_preference(_user_id):
+        raise RuntimeError("preference service unavailable")
+
+    sched = BohriumCompletionScheduler(
+        jobs_table=table,
+        sessions_service=_FakeSessions(),
+        stream_service=_FakeStream(),
+        redis=_FakeRedis(),
+        cfg=SchedulerConfig(),
+        runtime_preference_getter=_raise_preference,
+    )
+
+    with caplog.at_level(
+        logging.WARNING, logger="src.services.bohrium_completion_scheduler"
+    ):
+        summary = sched.tick()
+
+    assert summary["skipped_preference_unavailable"] == 1
+    assert summary["errors"] == 0
+    assert summary["triggered"] == 0
+    assert table.mark_handled_calls == []
+    warns = [r for r in caplog.records if "preference unavailable" in r.getMessage()]
+    assert len(warns) == 1
+
+
 def test_tick_reports_frozen_count():
     # frozen（被冻结的 failed 僵尸单元数）写入 summary，供 monitor 日志输出（spec 3.4）
     units = [_unit(active=0, pending_terminal=1)]

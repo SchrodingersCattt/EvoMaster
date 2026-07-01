@@ -25,6 +25,9 @@ from typing import Any
 
 from clients.matmaster_platform.runtime_preference import UserLevelRuntimePreference
 from src.models.chat import DeliverySpec
+from src.services.programmatic_trigger_preference import (
+    get_programmatic_trigger_enabled_state,
+)
 from src.utils.constant import env_int
 
 logger = logging.getLogger(__name__)
@@ -219,17 +222,10 @@ class BohriumCompletionScheduler:
         return summary
 
     def _programmatic_trigger_enabled(self, user_id: str) -> bool | None:
-        getter = self._runtime_preference_getter
-        if getter is None:
-            from clients.matmaster_platform.runtime_preference import (
-                get_user_level_runtime_preference,
-            )
-
-            getter = get_user_level_runtime_preference
-        preference = getter(user_id)
-        if not getattr(preference, "loaded", False):
-            return None
-        return preference.programmatic_trigger_enabled is True
+        return get_programmatic_trigger_enabled_state(
+            user_id,
+            preference_getter=self._runtime_preference_getter,
+        )
 
     def _ack_user_disabled_pending_terminal(
         self,

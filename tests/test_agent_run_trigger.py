@@ -339,6 +339,57 @@ def test_trigger_run_error_when_no_owner():
     events_service.add_history_event.assert_not_called()
 
 
+def test_programmatic_trigger_preference_state_distinguishes_unavailable():
+    from types import SimpleNamespace
+
+    from src.services.programmatic_trigger_preference import (
+        get_programmatic_trigger_enabled_state,
+    )
+
+    assert (
+        get_programmatic_trigger_enabled_state(
+            "u1",
+            preference_getter=lambda _user_id: SimpleNamespace(
+                loaded=True,
+                programmatic_trigger_enabled=True,
+            ),
+        )
+        is True
+    )
+    assert (
+        get_programmatic_trigger_enabled_state(
+            "u1",
+            preference_getter=lambda _user_id: SimpleNamespace(
+                loaded=True,
+                programmatic_trigger_enabled=False,
+            ),
+        )
+        is False
+    )
+    assert (
+        get_programmatic_trigger_enabled_state(
+            "u1",
+            preference_getter=lambda _user_id: SimpleNamespace(
+                loaded=False,
+                programmatic_trigger_enabled=True,
+            ),
+        )
+        is None
+    )
+
+
+def test_programmatic_trigger_bool_wrapper_fails_closed(monkeypatch):
+    from src.services import programmatic_trigger_preference as pref_mod
+
+    monkeypatch.setattr(
+        pref_mod,
+        "get_programmatic_trigger_enabled_state",
+        lambda _user_id: None,
+    )
+
+    assert pref_mod.is_programmatic_trigger_enabled("u1") is False
+
+
 @pytest.mark.parametrize("trigger_enabled", [None, False])
 def test_trigger_run_requires_user_enabled_preference(trigger_enabled):
     service, sessions_service, events_service = _make_trigger_service()
