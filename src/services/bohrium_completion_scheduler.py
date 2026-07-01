@@ -19,8 +19,9 @@ from __future__ import annotations
 
 import enum
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable
+from typing import Any
 
 from clients.matmaster_platform.runtime_preference import UserLevelRuntimePreference
 from src.models.chat import DeliverySpec

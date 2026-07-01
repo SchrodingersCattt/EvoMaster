@@ -6,13 +6,9 @@ import logging
 import threading
 import uuid
 from collections.abc import AsyncGenerator, Callable
-from dataclasses import dataclass
 from datetime import datetime, timezone
 from functools import lru_cache
 
-from clients.matmaster_platform.runtime_preference import (
-    get_user_level_runtime_preference,
-)
 from matmaster.config.exp import DEFAULT_MODE, SUPPORTED_MODES
 from matmaster.context.sources.turn_input import TurnInput, TurnInstructionTag
 from src.dao.redis_dao import STREAM_CHANNEL_PREFIX, get_redis_dao, user_wakeup_channel
@@ -26,6 +22,9 @@ from src.services.events_service import ChatEventsService, get_events_service
 from src.services.llm_profile_validation import (
     resolve_trigger_model_profile,
     validate_platform_model_profile,
+)
+from src.services.programmatic_trigger_preference import (
+    is_programmatic_trigger_enabled,
 )
 from src.services.run_interruption import (
     build_run_interrupted_history_content,
@@ -49,6 +48,13 @@ from src.services.stream_sse_filter import (
     _normalize_replayed_compaction_events,
     _normalize_replayed_event,
     _should_emit_event_to_sse,
+)
+from src.services.stream_types import (
+    Busy,
+    RunHandle,
+    SendStreamContext,
+    TriggerResult,
+    TriggerStreamContext,
 )
 from src.services.user_service import UserService
 from src.services.worker_registry_service import get_worker_registry_service
@@ -122,57 +128,6 @@ def _start_redis_stream_subscription(
     return _start_redis_channel_subscription(
         STREAM_CHANNEL_PREFIX + session_id, loop, thread_name=thread_name
     )
-
-
-@dataclass
-class RunHandle:
-    """_prepare_run 的成功产物：已写好发起事件、已组好 job，待 _enqueue_run 入队。"""
-
-    task_id: str
-    invocation_id: str
-    job: dict
-    event: dict  # 已落库的发起事件（User/query 或 System/trigger）
-
-
-@dataclass
-class Busy:
-    """_prepare_run 因会话运行锁被占而放弃的产物。"""
-
-    reason: str  # already_in_run | db_update_failed | unknown
-
-
-@dataclass
-class TriggerResult:
-    """trigger_run 的返回。status: enqueued | deduped | busy | error。"""
-
-    status: str
-    task_id: str | None = None
-    invocation_id: str | None = None
-    dedup_key: str | None = None
-    reason: str | None = None
-
-
-@dataclass
-class TriggerStreamContext:
-    """内部 trigger 已写好发起事件、已组好 job，待订阅就绪后入队。"""
-
-    task_id: str
-    invocation_id: str
-    owner: str
-    job: dict
-    event: dict  # 已落库的 System/trigger 发起事件
-    dedup_key: str | None = None
-
-
-@dataclass
-class SendStreamContext:
-    """发送消息流所需上下文，由 prepare_send_message 返回。"""
-
-    task_id: str
-    invocation_id: str  # 本轮调用的唯一标识，前端用于区分第几轮
-    mode: str
-    user_msg: dict
-    job: dict  # _prepare_run 组好的入队 job；由 generate_send_stream 经 _enqueue_run 入队
 
 
 class ChatStreamService:
@@ -409,20 +364,6 @@ class ChatStreamService:
                 reason,
             )
 
-    @staticmethod
-    def _is_programmatic_trigger_enabled(user_id: str) -> bool:
-        """程序化 trigger 会发起新 run，必须由用户偏好显式允许。"""
-        try:
-            preference = get_user_level_runtime_preference(user_id)
-        except Exception:
-            logger.warning(
-                "programmatic trigger preference lookup failed user_id=%s",
-                user_id,
-                exc_info=True,
-            )
-            return False
-        return preference.programmatic_trigger_enabled is True
-
     def _finalize_enqueue(self, ctx: TriggerStreamContext, session_id: str) -> bool:
         """提交内部 trigger：入队成功后标记 dedup 并发布 wakeup；失败返回 False。"""
         if not self._enqueue_run(session_id, ctx.job):
@@ -454,7 +395,7 @@ class ChatStreamService:
             )
             return TriggerResult(status="error", reason="session_not_found_or_no_owner")
 
-        if not self._is_programmatic_trigger_enabled(owner):
+        if not is_programmatic_trigger_enabled(owner):
             logger.info(
                 "trigger prepare rejected: programmatic trigger disabled "
                 "session_id=%s user_id=%s origin=%s",

@@ -1,7 +1,6 @@
 """程序化触发原语测试：DeliverySpec / ChatSendRequest 扩展 / dedup / _prepare_run / _enqueue_run / trigger_run。"""
 
 from contextlib import contextmanager
-from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -305,8 +304,8 @@ def _redis_and_trigger_preference_patches(
     with (
         patch("src.services.stream_service.get_redis_dao", return_value=fake_redis),
         patch(
-            "src.services.stream_service.get_user_level_runtime_preference",
-            return_value=SimpleNamespace(programmatic_trigger_enabled=trigger_enabled),
+            "src.services.stream_service.is_programmatic_trigger_enabled",
+            return_value=trigger_enabled is True,
         ),
     ):
         yield
