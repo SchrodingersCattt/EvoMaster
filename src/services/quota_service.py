@@ -40,6 +40,11 @@ class QuotaStatus:
         默认 False）。仅当为 True 时光子余额才计入放行——与平台实扣侧
         （PhotonSource 未开偏好则 skip）口径一致，避免「有光子但没开代扣」被误放行后漏扣。
     settlement_blocked: MatMaster 平台判定存在未清偿欠费等结算阻断时为 True。
+        **结算阻断以本字段为唯一依据**：欠费清偿批量化后，平台在「在途清偿已
+        覆盖全部欠费」时即置 False，此时 debt_micro 仍是 >0 的事实值
+        （等批量 worker 落账才降）。
+    debt_micro: 未清偿欠费的事实值（micro CNY），仅作展示/日志参考，不参与闸口——
+        叠加 debt_micro>0 判阻断会把平台的先行解锁抵消，让用户空等批量落账时延。
     """
 
     remaining_yuan: float
@@ -65,8 +70,10 @@ class QuotaStatus:
         也有余额，但用户没开代扣时实扣侧会 skip，闸口若只看 photon_remaining 放行就会
         漏扣，故必须同时要求 photon_overflow_enabled。未启用光子 / 没开代扣 / 余额为 0
         时退化为只看金额额度。
+
+        结算阻断只看 settlement_blocked，不叠加 debt_micro>0（见字段说明）。
         """
-        if self.settlement_blocked or self.debt_micro > 0:
+        if self.settlement_blocked:
             return True
         if self.remaining_yuan > 0:
             return False
@@ -84,7 +91,7 @@ class QuotaStatus:
         有刷新日期则带出恢复时间；否则用调用方给的兜底措辞
         （网页端、飞书端等差异在此参数化）。
         """
-        if self.settlement_blocked or self.debt_micro > 0:
+        if self.settlement_blocked:
             return "存在未清偿账单，请先完成扣费后再继续使用。"
         if self.reset_at:
             return f"免费额度已用完，将于 {self.reset_at} 恢复。"
@@ -116,7 +123,12 @@ async def check_quota_status(user_id: str) -> QuotaStatus:
     photon_overflow_enabled = bool(inner.get("photon_overflow_enabled"))
     debt_raw = inner.get("debt_micro")
     debt_micro = int(debt_raw) if isinstance(debt_raw, int) else 0
-    settlement_blocked = bool(inner.get("settlement_blocked")) or debt_micro > 0
+    # 阻断只信平台的 settlement_blocked：批量清偿时代 debt_micro 是事实欠费，
+    # 在途清偿覆盖后平台会先行解锁而 debt_micro 仍 >0（等 worker 落账），叠加
+    # debt_micro>0 兜底会把解锁抵消。不需要按 debt_micro 做缺字段回退：平台侧
+    # 两字段同一提交引入（tools-server 100aeb3），「有 debt 无 blocked」的版本
+    # 不存在；更老的版本两个字段都没有，本就无债可拦。
+    settlement_blocked = bool(inner.get("settlement_blocked"))
     settlement_block_reason = inner.get("settlement_block_reason")
     settlement_block_reason = (
         settlement_block_reason
