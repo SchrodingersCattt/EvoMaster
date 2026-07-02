@@ -25,11 +25,14 @@ COST_GUARD_CANCEL_REASON = "cost_guard"
 
 
 class BillingRunState:
-    """一个 run 内共享的计费状态：call_index 计数 + in-run 成本熔断累计。
+    """一个 run 内共享的计费状态：call_index 计数 + in-run 熔断（预算 / 欠费双触发）。
 
     root / subagent / compaction 的所有 BillingLLMProvider 共享同一实例，使
-    call_index 全 run 单调、成本熔断按全 run 累计触发。asyncio 单线程下计数
-    和累加均为同步原子操作，无需锁。
+    call_index 全 run 单调、熔断按全 run 累计触发。两个触发条件共用一次性
+    的 tripped 标记：本 run 累计花费超预算快照（accumulate），或结算响应
+    显示本次调用已产生未覆盖欠费（report_uncovered，针对并行会话抽干共享
+    余额、快照失真的场景）。asyncio 单线程下计数和累加均为同步原子操作，
+    无需锁。
     """
 
     def __init__(
@@ -57,6 +60,27 @@ class BillingRunState:
         self._spent_micro += cost_micro
         self._maybe_trip_guard()
 
+    def report_uncovered(self, uncovered_micro: int) -> None:
+        """结算响应显示本次调用产生了未覆盖欠费：立即熔断，不看预算快照。
+
+        预算快照只数本 run 自己的花费：并行会话共享同一余额池，池子被别的
+        run 抽干后，本 run 在自己撞线前会一直在欠费上跑。settle 响应的
+        ``uncovered_micro > 0`` 是「这笔调用已经没人买单」的精确信号（平台侧
+        对幂等重放/结算故障/fail-open 恒返回 0，不会误杀），见到即停，单 run
+        欠费上界从「预算快照 + 宽限」收敛到 ≈ 一笔调用。
+        """
+        if uncovered_micro <= 0:
+            return
+        if self._guard_tripped or self._cancel_controller is None:
+            return
+        logger.warning(
+            "in-run debt guard tripped session_id=%s uncovered_micro=%s, "
+            "cancelling run",
+            self._session_id,
+            uncovered_micro,
+        )
+        self._trip_guard()
+
     def _maybe_trip_guard(self) -> None:
         if (
             self._guard_tripped
@@ -66,7 +90,6 @@ class BillingRunState:
             return
         if self._spent_micro <= self._budget_micro:
             return
-        self._guard_tripped = True
         logger.warning(
             "in-run cost guard tripped session_id=%s spent_micro=%s budget_micro=%s, "
             "cancelling run",
@@ -74,6 +97,10 @@ class BillingRunState:
             self._spent_micro,
             self._budget_micro,
         )
+        self._trip_guard()
+
+    def _trip_guard(self) -> None:
+        self._guard_tripped = True
         try:
             self._cancel_controller.cancel(reason=COST_GUARD_CANCEL_REASON)
         except Exception:
@@ -193,14 +220,21 @@ class BillingLLMProvider:
         self._accumulate_cost(data)
 
     def _accumulate_cost(self, data: dict[str, Any] | None) -> None:
-        """从定价响应解析本次成本，委派给共享 run_state 累加 / 熔断。"""
+        """从定价响应解析本次成本与欠费信号，委派给共享 run_state 累加 / 熔断。"""
         if not data:
             return
         try:
             cost_micro = int(data.get("total_amount_settle_micro") or 0)
         except (TypeError, ValueError):
-            return
+            cost_micro = 0
         self._run_state.accumulate(cost_micro)
+        # uncovered_micro：平台 settle 后未被任何源覆盖、已挂欠费的残额。
+        # 旧平台响应无此字段 -> 0，欠费熔断退化关闭（仍有预算快照兜底）。
+        try:
+            uncovered_micro = int(data.get("uncovered_micro") or 0)
+        except (TypeError, ValueError):
+            uncovered_micro = 0
+        self._run_state.report_uncovered(uncovered_micro)
 
     def _schedule_report(
         self,
