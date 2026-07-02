@@ -725,7 +725,7 @@ class BasePlayground(PlaygroundMcpMixin, PlaygroundSessionMixin):
         对于 DockerSession，如果 auto_remove=False，则保留容器不关闭 session，
         以便在后续运行中复用同一个容器。
         """
-        if self.mcp_manager:
+        if getattr(self, 'mcp_manager', None):
             try:
                 loop = self._mcp_loop
                 t = self._mcp_thread
