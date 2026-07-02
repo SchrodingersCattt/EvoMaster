@@ -11,6 +11,7 @@ skill_type: operator
 This skill covers **dpdata-only** dataset plumbing for DeePMD-kit property workflows:
 
 - `pymatgen.Structure` + scalar label → `deepmd/npy`
+- Alloy composition JSON + crystal template CIFs → random-substitution supercells → `deepmd/npy/mixed`
 - Raw `coord`/`box`/`types` arrays → `deepmd/npy` (`prep_property_npy.py`)
 - Load/split `deepmd/npy` or `deepmd/npy/mixed` into train/valid trees
 - K-fold style splits over per-system mixed directories
@@ -31,6 +32,8 @@ After datasets are ready, use **`dpa-property-finetuning`** for `input.json`, fi
 
 | Script | Role |
 |--------|------|
+| `excel_to_composition_json.py` | Excel (.xlsx) alloy table → composition JSON compatible with `composition_json_to_mixed_npy.py`; handles fraction/percent auto-detection, phase normalization (BCC_A2→bcc etc.), optional `--extra-json` merge |
+| `composition_json_to_mixed_npy.py` | Composition JSON (`composition`, `phase`, scalar property) + template CIFs + type map → one `deepmd/npy/mixed` dir per composition row; supports FCC/BCC/HCP via `--template-fcc/bcc/hcp` |
 | `pack_structure_to_npy.py` | One structure file (CIF or pymatgen JSON) + `--property` + `--type-map` → one `deepmd/npy` system dir |
 | `prep_property_npy.py` | Numpy arrays + type map → one `deepmd/npy` system (`energy.npy` + `property.npy`) |
 | `split_train_valid.py` | Split systems under a parent dir into `train/` and `valid/` (mixed or plain) |
@@ -41,6 +44,16 @@ After datasets are ready, use **`dpa-property-finetuning`** for `input.json`, fi
 
 ### Examples (via use_skill)
 
+    # Convert Excel → composition JSON (step 1 for Excel-first workflows)
+    use_skill dpdata-dataset run_script excel_to_composition_json.py --input Data_base_DFT_Thermal.xlsx --elements Fe Ni Co Cr V Cu --property-col TEC --phase-col "Stable Phase" --out-json base_compositions.json
+    # Optionally merge with a second experimental batch JSON:
+    use_skill dpdata-dataset run_script excel_to_composition_json.py --input Data_base_DFT_Thermal.xlsx --elements Fe Ni Co Cr V Cu --extra-json iter03_experimental_batch.json --out-json all_compositions.json
+    # Build DeepMD structures from the merged JSON (multi-phase: BCC+FCC+HCP)
+    use_skill dpdata-dataset run_script composition_json_to_mixed_npy.py --input base_compositions.json --type-map-file type_map.txt --template-fcc struct_template/fcc-Ni_mp-23_conventional_standard.cif --template-bcc struct_template/bcc-Fe_mp-13_conventional_standard.cif --template-hcp struct_template/hcp-Co_mp-54_conventional_standard.cif --out-root datasets --property-key TEC --seeds 1
+    # Then 5-fold split:
+    use_skill dpdata-dataset run_script split_5fold.py --datasets-glob "datasets/*" --test-ratio 0.02 --seed 42
+    # Previous single-phase FCC example:
+    use_skill dpdata-dataset run_script composition_json_to_mixed_npy.py --input ./iter03_experimental_batch.json --type-map-file ./type_map.txt --template-fcc ./struct_template/fcc-Ni_mp-23_conventional_standard.cif --out-root ./new_data_iter03 --property-key TEC --seeds 10
     use_skill dpdata-dataset run_script pack_structure_to_npy.py --structure ./struct.cif --property 12.3 --type-map ./type_map.txt --out ./datasets/sys0
     use_skill dpdata-dataset run_script split_train_valid.py --datasets-root ./datasets --ratio 0.1
     use_skill dpdata-dataset run_script mixed_to_npy.py --mixed-dir ./valid --out-root ./valid_npy

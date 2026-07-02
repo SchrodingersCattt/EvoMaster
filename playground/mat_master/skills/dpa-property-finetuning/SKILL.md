@@ -8,7 +8,7 @@ skill_type: operator
 
 ## Pipeline
 
-1. **Data**: Prepare `deepmd/npy` (or mixed) with **`dpdata-dataset`** (`pack_structure_to_npy.py`, `prep_property_npy.py`, splits, `fix_property_npy.py`).
+1. **Data**: Prepare `deepmd/npy` (or mixed) with **`dpdata-dataset`** (`composition_json_to_mixed_npy.py`, `pack_structure_to_npy.py`, `prep_property_npy.py`, splits, `fix_property_npy.py`).
 2. **Config**: Start from a working property `input.json` (see [reference-config.md](reference-config.md)). Merge train/validation system paths with `gen_finetune_config.py`.
 3. **Train (Bohrium)**: Package the working directory (template `input.json`, pretrained `.pt`, data paths consistent with job cwd) and submit with **`bohrium-job`**:
    - `use_skill` skill_name=`bohrium-job` action=`run_script` script_name=`submit_job.py`
