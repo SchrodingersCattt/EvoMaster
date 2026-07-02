@@ -62,7 +62,7 @@ class BaseConfig(BaseModel, ABC):
 class ClusterPoolConfig(BaseConfig):
     """集群资源池配置"""
 
-    type: str = Field(description='资源类型: cpu, gpu')
+    type: str = Field(default='cpu', description='资源类型: cpu, gpu')
     max_concurrent: int = Field(default=5, description='最大并发数')
     resource_limits: dict[str, Any] = Field(
         default_factory=dict, description='资源限制'
@@ -72,8 +72,8 @@ class ClusterPoolConfig(BaseConfig):
 class ClusterConfig(BaseConfig):
     """集群配置"""
 
-    debug_pool: ClusterPoolConfig = Field(description='Debug 池配置')
-    train_pool: ClusterPoolConfig = Field(description='训练池配置')
+    debug_pool: ClusterPoolConfig = Field(default_factory=ClusterPoolConfig, description='Debug 池配置')
+    train_pool: ClusterPoolConfig = Field(default_factory=ClusterPoolConfig, description='训练池配置')
 
 
 class DockerEnvConfig(BaseConfig):
@@ -100,9 +100,9 @@ class EnvConfig(BaseConfig):
     Bohrium 鉴权（BOHRIUM_ACCESS_KEY, BOHRIUM_PROJECT_ID 等）由 .env 提供，供 MCP calculation path adaptor 注入到 executor/storage。
     """
 
-    cluster: ClusterConfig = Field(description='集群配置')
-    docker: DockerEnvConfig = Field(description='Docker 配置')
-    scheduler: SchedulerConfig = Field(description='调度器配置')
+    cluster: ClusterConfig = Field(default_factory=ClusterConfig, description='集群配置')
+    docker: DockerEnvConfig = Field(default_factory=DockerEnvConfig, description='Docker 配置')
+    scheduler: SchedulerConfig = Field(default_factory=SchedulerConfig, description='调度器配置')
 
 
 # ============================================
