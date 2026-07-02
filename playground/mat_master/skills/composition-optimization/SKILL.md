@@ -1,46 +1,55 @@
 ---
 name: composition-optimization
-description: Use for alloy composition search, element comparison, genetic algorithm optimization. Enforces symmetric per-candidate literature retrieval so that all candidates receive equal evidence before ranking. 
+description: Use for alloy composition search, element comparison, genetic algorithm optimization. Enforces symmetric per-candidate literature retrieval so that all candidates receive equal evidence before ranking.
 ---
 
 # Composition Optimization Skill
 
 Guidance-only orchestrator (no runnable scripts). Load via `use_skill action=get_info`.
 
-
 ## Workflow
 
 ### 1. Normalize
 
-Extract objectives, constraints, search space, and note what the user provided (data, surrogate, structures).
+Extract from the user prompt:
+- Target property/properties and their desired direction (minimize, maximize, range).
+- Base alloy system.
+- Constraints (composition bounds, phase requirements, excluded elements).
+- Available assets: initial data, surrogate model URL, explicit structures.
 
 ### 2. Candidate Screening — Symmetric Retrieval Protocol
 
-When ranking 2+ candidate elements, the following protocol is **mandatory**.
+When ranking 2+ candidate elements or compositions, the following protocol is **mandatory**.
 
 **Step A — Assemble candidate list.**
-Identify ≥3 plausible candidates from domain knowledge. Do NOT rank them yet.
+Identify ≥3 plausible candidates from domain knowledge. Do NOT rank or discard any yet.
 
-**Step B — Symmetric literature search.**
-For every candidate in the list, perform the **same** queries with the **same** budget:
+**Step B — Define comparison axes.**
+Before searching, list the property axes relevant to the user's objective (e.g. effect on target property, density contribution, phase solubility, Curie temperature shift). These become your evidence-table columns.
 
-| Query template (fill `<X>` with element name) | Purpose |
-|---|---|
-| `<base-alloy> Invar <X> thermal expansion Curie temperature` | TEC / magnetic effect |
-| `<base-alloy> Invar <X> density FCC solubility` | Density / phase compatibility |
+**Step C — Symmetric literature search.**
+For every candidate, perform the **same** query templates with the **same** budget:
+
+Template pattern (adapt `<base-alloy>` and `<property>` to the task):
+- `<base-alloy> <X> <primary-target-property>`
+- `<base-alloy> <X> <secondary-property-or-constraint>`
 
 Rules:
 - Same number of searches per candidate; no candidate may receive fewer queries.
 - Do NOT discard a candidate before its searches complete.
 - Record all retrieved evidence in a comparison table before proceeding.
 
-**Step C — Build evidence table.**
-Columns: Element | Density advantage | TEC evidence (quantitative preferred) | Curie-T effect | FCC solubility | Key references.
+**Step D — Build evidence table.**
+Use the axes defined in Step B as columns. Mark each cell with evidence tier:
+- T1: quantitative experimental measurement in the same or closely related alloy system.
+- T2: experimental data in a related but not identical system.
+- T3: computational prediction (DFT, MD).
+- T4: qualitative reasoning only.
 
-**Step D — Rank.**
-- Candidates with quantitative property data (measured values) outrank those with only qualitative reasoning.
-- At equal evidence tier, rank by joint-objective merit (lower TEC + lower density).
-- Save table as `causal_chain.md`.
+**Step E — Rank.**
+- Higher evidence tier wins over lower, regardless of qualitative argument strength.
+- At equal tier, rank by joint-objective merit.
+- Save the completed table as `causal_chain.md`.
 
 ### 3. Surrogate Optimization (if available)
 
@@ -54,7 +63,7 @@ Use heuristics in `reference/composition_to_structure_heuristics.md`. Validate v
 
 ### 5. Report
 
-Ranked compositions with provenance. Disclose assumptions.
+Ranked compositions with provenance. Disclose assumptions and evidence gaps.
 
 ## Rules
 
