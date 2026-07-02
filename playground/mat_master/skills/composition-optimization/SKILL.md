@@ -1,18 +1,12 @@
 ---
 name: composition-optimization
-description: Orchestrates dopant/element screening and multi-component composition optimization. Enforces symmetric per-candidate literature retrieval so that all candidates receive equal evidence before ranking. Use for alloy composition search, element comparison, DART GA optimization, or composition-to-structure conversion.
+description: Use for alloy composition search, element comparison, genetic algorithm optimization. Enforces symmetric per-candidate literature retrieval so that all candidates receive equal evidence before ranking. 
 ---
 
 # Composition Optimization Skill
 
 Guidance-only orchestrator (no runnable scripts). Load via `use_skill action=get_info`.
 
-## When to use
-
-- Optimize alloy composition for target properties.
-- Screen or rank candidate dopant elements for an alloy system.
-- Run DART GA over a surrogate model.
-- Convert composition-only specs into explicit structures.
 
 ## Workflow
 
