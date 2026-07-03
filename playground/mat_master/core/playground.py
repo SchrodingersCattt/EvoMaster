@@ -300,7 +300,7 @@ class MatMasterPlayground(BasePlayground):
         self._skill_registry = skill_registry
         # 初始化 MCP（每 agent 在 _create_agent 内通过 _create_tools_for_agent 获得独立 registry）
         self._setup_mcp_tools()
-        if self.mcp_manager is not None:
+        if getattr(self, "mcp_manager", None) is not None:
             self.logger.info('MCP manager ready (tools will be attached per-agent)')
 
         agents_config = getattr(self.config, 'agents', None)
@@ -367,13 +367,22 @@ class MatMasterPlayground(BasePlayground):
             llm_config = self.config_manager.get_agent_llm_config(name)
         if tool_config is None:
             tool_config = self.config_manager.get_agent_tools_config(name)
-        builtin = tool_config.get('builtin', ['*'])
+        tool_config = dict(tool_config or {})
+        builtin = list(tool_config.get('builtin', ['*']) or [])
+        # Keep finish available even for explicit builtin allowlists so clean
+        # task termination cannot be broken by config omissions.
+        if builtin and '*' not in builtin and 'finish' not in builtin:
+            builtin.append('finish')
+        tool_config['builtin'] = builtin
         enable_tools = bool(builtin)
         enabled_tool_names = None
         if '*' in builtin or not builtin:
             enabled_tool_names = None
         else:
             enabled_tool_names = list(builtin)
+            mcp_cfg = tool_config.get('mcp')
+            if mcp_cfg and getattr(self, 'mcp_manager', None):
+                enabled_tool_names.extend(self.mcp_manager.get_tool_names())
 
         base_max_turns = agent_config.get('max_turns', 20)
         full_cfg = self.config.model_dump() or {}
