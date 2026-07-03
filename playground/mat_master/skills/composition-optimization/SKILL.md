@@ -46,9 +46,10 @@ Use the axes defined in Step B as columns. Mark each cell with evidence tier:
 - T3: computational prediction (DFT, MD).
 - T4: qualitative reasoning only.
 
-**Step E — Rank.**
-- Higher evidence tier wins over lower, regardless of qualitative argument strength.
-- At equal tier, rank by joint-objective merit.
+**Step E — Constraint verification + Rank.**
+1. Re-read the constraints extracted in Step 1. For each candidate, verify it satisfies ALL hard constraints (direction of each target property, phase requirements, solubility bounds). Discard any candidate that violates a hard constraint, regardless of evidence tier.
+2. Among remaining candidates: higher evidence tier wins over lower, regardless of qualitative argument strength.
+3. At equal tier, rank by joint-objective merit.
 - Save the completed table as `causal_chain.md`.
 
 ### 3. Surrogate Optimization (if available)
