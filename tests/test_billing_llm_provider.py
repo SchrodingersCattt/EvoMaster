@@ -1,4 +1,4 @@
-"""BillingRunState 的 in-run 成本熔断（防线二）+ call_index 计数。
+"""BillingRunState 的 in-run 熔断（预算快照 + 欠费信号）+ call_index 计数。
 
 只测同步的成本累加 + 熔断触发逻辑，不触发真实 LLM / HTTP。
 """
@@ -68,3 +68,47 @@ class TestCostGuard:
         # 共享 state：两个 wrapper 取到的 call_index 全 run 单调
         st = _state(None, None)
         assert [st.next_call_index() for _ in range(3)] == [1, 2, 3]
+
+
+class TestDebtGuard:
+    """欠费熔断：结算响应 uncovered_micro>0 即停，不看预算快照。
+
+    针对并行会话抽干共享余额的场景——每个 run 的预算快照在启动时拍下，
+    其它会话花掉的钱对本 run 不可见，池子空了以后本 run 仍会在欠费上跑。
+    """
+
+    def test_uncovered_trips_immediately_without_budget(self):
+        # 预算快照缺失（旧平台/查询失败）也要能触发：欠费信号不依赖快照。
+        ctrl = CancellationController()
+        st = _state(None, ctrl)
+        st.report_uncovered(1)
+        assert ctrl.token.is_cancelled is True
+        assert ctrl.token.cancel_reason == "cost_guard"
+
+    def test_uncovered_trips_within_budget(self):
+        # 自己的花费远没撞线，但这笔已经没人买单：立即停。
+        ctrl = CancellationController()
+        st = _state(10**9, ctrl)
+        st.accumulate(100)
+        assert ctrl.token.is_cancelled is False
+        st.report_uncovered(155)
+        assert ctrl.token.is_cancelled is True
+
+    def test_zero_uncovered_never_trips(self):
+        ctrl = CancellationController()
+        st = _state(10**9, ctrl)
+        st.report_uncovered(0)
+        st.report_uncovered(-5)
+        assert ctrl.token.is_cancelled is False
+
+    def test_trips_only_once(self):
+        ctrl = CancellationController()
+        st = _state(None, ctrl)
+        st.report_uncovered(100)
+        st.report_uncovered(100)
+        assert ctrl.token.is_cancelled is True
+
+    def test_no_controller_never_trips(self):
+        st = _state(None, None)
+        st.report_uncovered(100)
+        assert st._guard_tripped is False

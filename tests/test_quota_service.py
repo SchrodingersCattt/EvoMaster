@@ -33,6 +33,46 @@ async def test_check_quota_status_maps_client_data(monkeypatch):
     assert status.settlement_blocked is False
 
 
+async def test_settlement_blocked_false_respected_even_with_debt(monkeypatch):
+    # 批量清偿时代的核心语义：在途清偿覆盖全部欠费后平台先行解锁
+    # （settlement_blocked=False 而 debt_micro 仍 >0），客户端必须尊重解锁，
+    # 不得再用 debt_micro>0 兜底把用户拦回去空等 worker 落账。
+    from src.services import quota_service as mod
+
+    async def _fake_fetch_quota_info(user_id):
+        return {
+            'credit_remaining': 1.0,
+            'debt_micro': 50_000,
+            'settlement_blocked': False,
+        }
+
+    monkeypatch.setattr(mod, 'fetch_quota_info', _fake_fetch_quota_info)
+
+    status = await mod.check_quota_status('u1')
+
+    assert status.debt_micro == 50_000
+    assert status.settlement_blocked is False
+    assert status.is_exhausted is False
+
+
+async def test_missing_settlement_blocked_defaults_unblocked(monkeypatch):
+    # 缺失 settlement_blocked 按未阻断处理，不做 debt_micro>0 回退：平台侧两
+    # 字段同一提交引入，「有 debt 无 blocked」的服务端版本不存在。
+    from src.services import quota_service as mod
+
+    async def _fake_fetch_quota_info(user_id):
+        return {
+            'credit_remaining': 1.0,
+        }
+
+    monkeypatch.setattr(mod, 'fetch_quota_info', _fake_fetch_quota_info)
+
+    status = await mod.check_quota_status('u1')
+
+    assert status.settlement_blocked is False
+    assert status.is_exhausted is False
+
+
 async def test_check_quota_status_maps_settlement_block(monkeypatch):
     from src.services import quota_service as mod
 
@@ -73,6 +113,28 @@ class TestIsExhausted:
             ).is_exhausted
             is True
         )
+
+    def test_debt_alone_does_not_block_when_unblocked(self):
+        # 阻断只看 settlement_blocked：debt_micro 是事实欠费（可能已被在途
+        # 清偿覆盖），不得叠加进闸口。
+        assert (
+            QuotaStatus(
+                remaining_yuan=1.0,
+                debt_micro=100,
+                settlement_blocked=False,
+            ).is_exhausted
+            is False
+        )
+
+    def test_exhausted_message_ignores_debt_when_unblocked(self):
+        status = QuotaStatus(
+            remaining_yuan=0.0,
+            reset_at='2026-06-09',
+            debt_micro=100,
+            settlement_blocked=False,
+        )
+        assert '未清偿账单' not in status.exhausted_message('fallback')
+        assert '2026-06-09' in status.exhausted_message('fallback')
 
     def test_free_zero_no_photon_field_exhausted(self):
         # 未启用光子（photon_remaining 默认 None）：退化为只看金额额度。
