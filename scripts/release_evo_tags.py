@@ -15,10 +15,10 @@ import argparse
 import subprocess
 import sys
 import tomllib
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Sequence
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 PYPROJECT_PATH = PROJECT_ROOT / "pyproject.toml"
@@ -42,8 +42,7 @@ def run_git(args: Sequence[str], *, check: bool = True) -> CommandResult:
         ["git", *args],
         cwd=PROJECT_ROOT,
         text=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        capture_output=True,
         check=False,
     )
     command_result = CommandResult(
