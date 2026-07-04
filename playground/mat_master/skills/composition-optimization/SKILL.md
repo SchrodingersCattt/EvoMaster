@@ -1,75 +1,45 @@
 ---
 name: composition-optimization
-description: Use for alloy composition search, element comparison, genetic algorithm optimization. Enforces symmetric per-candidate literature retrieval so that all candidates receive equal evidence before ranking.
+description: Alloy composition optimization via symmetric literature retrieval and DART genetic algorithm. Supports bohrium-job submission (preferred) and MCP mat_compdart fallback.
+skill_type: hybrid
 ---
 
 # Composition Optimization Skill
 
-Guidance-only orchestrator (no runnable scripts). Load via `use_skill action=get_info`.
+Multi-objective alloy composition search combining literature evidence with
+surrogate-model GA optimization.
 
-## Workflow
+## Quick Workflow
 
-### 1. Normalize
+1. **Normalize** — extract targets, constraints, base alloy from user prompt.
+2. **Screen** — symmetric retrieval protocol (≥6 candidates, equal queries).
+   → See [`reference/screening_protocol.md`](reference/screening_protocol.md)
+3. **Optimize** — run DART GA on ALL constraint-passing candidates (not just top 2-3).
+   → See [`reference/ga_submission.md`](reference/ga_submission.md)
+4. **Compare** — rank by GA-optimized joint objective (TEC + density).
+5. **Report** — output `recommendation.json` with provenance.
 
-Extract from the user prompt:
-- Target property/properties and their desired direction (minimize, maximize, range).
-- Base alloy system.
-- Constraints (composition bounds, phase requirements, excluded elements).
-- Available assets: initial data, surrogate model URL, explicit structures.
+## Sub-Document Index
 
-### 2. Candidate Screening — Symmetric Retrieval Protocol
+| Document | Purpose |
+|---|---|
+| [`reference/screening_protocol.md`](reference/screening_protocol.md) | Symmetric retrieval, evidence tiers, constraint gate |
+| [`reference/ga_submission.md`](reference/ga_submission.md) | DART GA via bohrium-job (image, machine, workflow) |
+| [`reference/ga_config_schema.md`](reference/ga_config_schema.md) | GA config JSON schema and field reference |
+| [`reference/composition_to_structure_heuristics.md`](reference/composition_to_structure_heuristics.md) | Structure generation from composition |
+| [`examples/ga_config_invar.json`](examples/ga_config_invar.json) | Working example for Fe-Ni Invar system |
 
-When ranking 2+ candidate elements or compositions, the following protocol is **mandatory**.
+## Scripts
 
-**Step A — Assemble candidate list.**
-Identify ≥3 plausible candidates from domain knowledge. Do NOT rank or discard any yet.
+| Script | Purpose | Invocation |
+|---|---|---|
+| `prepare_ga_config.py` | Generate `ga_config.json` + `run_ga.py` wrapper | `use_skill composition-optimization run_script prepare_ga_config.py --help` |
+| `parse_ga_results.py` | Parse GA output → ranked compositions | `use_skill composition-optimization run_script parse_ga_results.py --help` |
 
-**Step B — Define comparison axes.**
-Before searching, list the property axes relevant to the user's objective (e.g. effect on target property, density contribution, phase solubility, Curie temperature shift). These become your evidence-table columns.
+## Key Rules
 
-**Step C — Symmetric literature search.**
-For every candidate, perform the **same** query templates with the **same** budget:
-
-Template pattern (adapt `<base-alloy>` and `<property>` to the task):
-- `<base-alloy> <X> <primary-target-property>`
-- `<base-alloy> <X> <secondary-property-or-constraint>`
-
-Rules:
-- Same number of searches per candidate; no candidate may receive fewer queries.
-- Do NOT discard a candidate before its searches complete.
-- Record all retrieved evidence in a comparison table before proceeding.
-
-**Step D — Build evidence table.**
-Use the axes defined in Step B as columns. Mark each cell with evidence tier:
-- T1: quantitative experimental measurement in the same or closely related alloy system.
-- T2: experimental data in a related but not identical system.
-- T3: computational prediction (DFT, MD).
-- T4: qualitative reasoning only.
-
-**Step E — Constraint verification + Rank.**
-1. Re-read the constraints extracted in Step 1. For each candidate, verify it satisfies ALL hard constraints (direction of each target property, phase requirements, solubility bounds). Discard any candidate that violates a hard constraint, regardless of evidence tier.
-2. Among remaining candidates: higher evidence tier wins over lower, regardless of qualitative argument strength.
-3. At equal tier, rank by joint-objective merit.
-- Save the completed table as `causal_chain.md`.
-
-### 3. Surrogate Optimization (if available)
-
-- If a surrogate model URL/path is provided and DART GA tool exists, run GA.
-- Pass model path directly as `targets[*].model_path`.
-- If surrogate absent, skip GA; return literature-based ranking only.
-
-### 4. Composition → Structure (if needed)
-
-Use heuristics in `reference/composition_to_structure_heuristics.md`. Validate via `structure-manager`.
-
-### 5. Report
-
-Ranked compositions with provenance. Disclose assumptions and evidence gaps.
-
-## Rules
-
-- Never rank before symmetric retrieval completes.
+- Never rank before symmetric retrieval completes for ALL candidates.
+- Run GA on ALL constraint-passing candidates — do NOT pre-narrow to top 2-3.
+- Prefer bohrium-job submission over MCP `mat_compdart` (more stable).
+- If GA fails after 2 retries, compute linear mixture density manually as fallback.
 - Never fabricate structure details; use heuristic generation.
-- Do not run DART GA without a surrogate unless user explicitly requests it.
-- Do not call `action=run_script` for this skill (guidance-only).
-- DART GA tool: prefer `mat_compdart_submit_run_dart_ga` or detect `*_run_dart_ga`.

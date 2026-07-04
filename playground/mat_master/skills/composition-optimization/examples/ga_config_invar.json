@@ -1,0 +1,55 @@
+{
+  "elements": ["Fe", "Ni", "Co", "Cr", "V", "Al", "Si"],
+  "targets": [
+    {
+      "name": "TEC",
+      "type": "surrogate",
+      "model_path": "https://bohrium.oss-cn-zhangjiakou.aliyuncs.com/13756/27666/store/upload/804c56ae-3140-49f9-a5c6-214e2fe39361/iter03_models.zip",
+      "weight_mean": -1.0,
+      "weight_std": 1.0,
+      "normalization": {
+        "method": "z-score",
+        "params": {"mean": 9.76, "std": 4.30}
+      }
+    },
+    {
+      "name": "density",
+      "type": "linear_mixture",
+      "data_source": "density",
+      "weight_mean": -1.0,
+      "weight_std": 0.0,
+      "normalization": {
+        "method": "z-score",
+        "params": {"mean": 8331.9, "std": 182.2}
+      }
+    }
+  ],
+  "constraints": [
+    {"target": "Fe", "condition": ">=0.55"},
+    {"target": "Fe", "condition": "<=0.70"},
+    {"target": "Ni", "condition": ">=0.20"},
+    {"target": "Ni", "condition": "<=0.40"},
+    {"target": "Co", "condition": "<=0.15"},
+    {"target": "Al", "condition": "<=0.015"},
+    {"target": "V", "condition": "<=0.03"},
+    {"target": "Si", "condition": "<=0.05"}
+  ],
+  "structure_config": {
+    "template_path": "fcc",
+    "supercell": [5, 5, 5]
+  },
+  "ga_params": {
+    "population_size": 20,
+    "generations": 50,
+    "crossover_rate": 0.8,
+    "mutation_rate": 0.15,
+    "selection_mode": "tournament"
+  },
+  "init_population": [
+    [0.6337, 0.2854, 0.0566, 0.0156, 0.0000, 0.0088, 0.0000],
+    [0.5660, 0.2873, 0.0911, 0.0299, 0.0085, 0.0173, 0.0000],
+    [0.6191, 0.3133, 0.0519, 0.0000, 0.0000, 0.0157, 0.0000],
+    [0.6475, 0.2916, 0.0548, 0.0041, 0.0020, 0.0000, 0.0000],
+    [0.6410, 0.3363, 0.0155, 0.0000, 0.0072, 0.0000, 0.0000]
+  ]
+}
