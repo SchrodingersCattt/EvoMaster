@@ -1,75 +1,74 @@
 ---
 name: composition-optimization
-description: Use for alloy composition search, element comparison, genetic algorithm optimization. Enforces symmetric per-candidate literature retrieval so that all candidates receive equal evidence before ranking.
+description: Alloy composition search with symmetric evidence collection and source-reliability-aware ranking.
 ---
 
 # Composition Optimization Skill
 
-Guidance-only orchestrator (no runnable scripts). Load via `use_skill action=get_info`.
+Guidance-only orchestrator. Load via `use_skill action=get_info`.
 
 ## Workflow
 
 ### 1. Normalize
 
-Extract from the user prompt:
-- Target property/properties and their desired direction (minimize, maximize, range).
+Extract from user prompt:
+- Target properties and direction (minimize/maximize/range).
 - Base alloy system.
-- Constraints (composition bounds, phase requirements, excluded elements).
-- Available assets: initial data, surrogate model URL, explicit structures.
+- Constraints (composition bounds, phase, excluded elements).
+- Available tools: surrogate models, literature retrieval, rule-based estimation.
 
-### 2. Candidate Screening — Symmetric Retrieval Protocol
+### 2. Candidate Screening — Symmetric Protocol
 
-When ranking 2+ candidate elements or compositions, the following protocol is **mandatory**.
+**Step A — Assemble candidates.** Identify ≥6 plausible candidates. Do NOT rank yet.
 
-**Step A — Assemble candidate list.**
-Identify ≥3 plausible candidates from domain knowledge. Do NOT rank or discard any yet.
+**Step B — Evidence collection (symmetric and multi-source).**
+For every candidate with equal effort:
+1. Compute any rule-based or exactly-calculable properties.
+2. Perform literature search (same query templates, same budget per candidate).
+3. If surrogate available, predict target properties; note whether candidate is in-distribution (IND) or out-of-distribution (OOD).
 
-**Step B — Define comparison axes.**
-Before searching, list the property axes relevant to the user's objective (e.g. effect on target property, density contribution, phase solubility, Curie temperature shift). These become your evidence-table columns.
-
-**Step C — Symmetric literature search.**
-For every candidate, perform the **same** query templates with the **same** budget:
-
-Template pattern (adapt `<base-alloy>` and `<property>` to the task):
-- `<base-alloy> <X> <primary-target-property>`
-- `<base-alloy> <X> <secondary-property-or-constraint>`
-
-Rules:
-- Same number of searches per candidate; no candidate may receive fewer queries.
-- Do NOT discard a candidate before its searches complete.
-- Record all retrieved evidence in a comparison table before proceeding.
+**Step C — Source-reliability classification.**
+Before ranking, tag each evidence item:
+- **Exact**: rule-based calculations from tabulated constants. Usable as hard constraint.
+- **IND surrogate**: model prediction within training chemistry. Usable as ranking signal.
+- **OOD surrogate**: model prediction outside training chemistry. High uncertainty; do not use alone for decision.
+- **Literature**: experimental or computational reports. Tier by directness (T1–T4).
 
 **Step D — Build evidence table.**
-Use the axes defined in Step B as columns. Mark each cell with evidence tier:
-- T1: quantitative experimental measurement in the same or closely related alloy system.
-- T2: experimental data in a related but not identical system.
-- T3: computational prediction (DFT, MD).
-- T4: qualitative reasoning only.
+Columns: candidate, each property, source tag, keep/reject.
+Every candidate must appear. Never output only the winner.
 
-**Step E — Constraint verification + Rank.**
-1. Re-read the constraints extracted in Step 1. For each candidate, verify it satisfies ALL hard constraints (direction of each target property, phase requirements, solubility bounds). Discard any candidate that violates a hard constraint, regardless of evidence tier.
-2. Among remaining candidates: higher evidence tier wins over lower, regardless of qualitative argument strength.
-3. At equal tier, rank by joint-objective merit.
-- Save the completed table as `causal_chain.md`.
+Example (adapt columns to your task):
+
+| Candidate | Property P (source) | Property Q (source) | Property R (source) | Keep/Reject | Reason |
+|---|---|---|---|---|---|
+| XX | meets target (exact) | pred ± σ (IND) | T2: one study supports | Keep | passes hard constraint, surrogate corroborates |
+| YY | fails target (exact) | pred ± σ (IND) | T1: well-studied | Reject | fails exact constraint despite good surrogate |
+| ZZ | meets target (exact) | pred ± σ (OOD) | T4: no direct study | Keep | passes exact; OOD unreliable, defer to literature |
+
+**Step E — Rank.**
+1. Apply exact hard constraints first (discard candidates that fail).
+2. Among survivors, rank by joint objective using reliable signals.
+3. OOD surrogate predictions serve only as tie-breakers or exploration cues.
+4. Literature evidence resolves ties or corroborates/refutes uncertain predictions.
+
+Save the table as `causal_chain.md`.
 
 ### 3. Surrogate Optimization (if available)
 
-- If a surrogate model URL/path is provided and DART GA tool exists, run GA.
-- Pass model path directly as `targets[*].model_path`.
-- If surrogate absent, skip GA; return literature-based ranking only.
+- Run GA within the element space selected through screening.
+- For each target in the GA fitness function, classify its reliability:
+  - Properties from tabulated constants or exact rules → hard constraints.
+  - Surrogate predictions within training chemistry (IND) → ranking signal.
+  - Surrogate predictions outside training chemistry (OOD) → uncertain; do not let them override exact constraints or strong literature.
+- If surrogate is absent or all candidates are OOD, return the ranking from Step E without GA.
 
-### 4. Composition → Structure (if needed)
+### 4. Report
 
-Use heuristics in `reference/composition_to_structure_heuristics.md`. Validate via `structure-manager`.
-
-### 5. Report
-
-Ranked compositions with provenance. Disclose assumptions and evidence gaps.
+Ranked compositions with provenance. `causal_chain.md` must show how each candidate was kept or eliminated and why.
 
 ## Rules
 
-- Never rank before symmetric retrieval completes.
-- Never fabricate structure details; use heuristic generation.
-- Do not run DART GA without a surrogate unless user explicitly requests it.
-- Do not call `action=run_script` for this skill (guidance-only).
-- DART GA tool: prefer `mat_compdart_submit_run_dart_ga` or detect `*_run_dart_ga`.
+- Never rank before symmetric evidence collection completes for all candidates.
+- Never let a single OOD surrogate prediction override an exact property or strong literature.
+- Never output only the winning candidate; the rejection ledger is mandatory.
