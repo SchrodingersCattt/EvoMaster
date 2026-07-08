@@ -148,16 +148,18 @@ def _classify_llm_error(
         )
 
     if 'no fallback model group found' in err_lower:
-        group = profile.fallback_group
-        if group:
-            issues.append(
-                f'上游代理未识别 fallback_group={group}；'
-                '请检查代理侧 fallback 分组是否与本地模型画像一致。'
-            )
-        else:
-            issues.append(
-                '当前模型未声明 fallback_group；请在统一模型配置中补齐该字段。'
-            )
+        is_rate_limit = 'rate limit' in err_lower or '429' in err_lower
+        if not is_rate_limit:
+            group = profile.fallback_group
+            if group:
+                issues.append(
+                    f'上游代理未识别 fallback_group={group}；'
+                    '请检查代理侧 fallback 分组是否与本地模型画像一致。'
+                )
+            else:
+                issues.append(
+                    '当前模型未声明 fallback_group；请在统一模型配置中补齐该字段。'
+                )
 
     if not issues:
         return None

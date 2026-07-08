@@ -27,6 +27,15 @@ For every candidate with equal effort:
 2. Perform literature search (same query templates, same budget per candidate).
 3. If surrogate available, predict target properties; note whether candidate is in-distribution (IND) or out-of-distribution (OOD).
 
+**Surrogate screening protocol (Step B.3 detail):**
+To screen candidates using a trained surrogate model, call `mat_compdart_submit_run_dart_ga` in inference-only mode:
+- Set `generations` to 1 (single evaluation, no evolutionary optimization).
+- Construct the initial population as the set of candidate compositions you wish to compare.
+- Use the same structure template and substitution protocol for every candidate to ensure fair comparison.
+- The tool returns predicted property values for each composition — extract these to build the screening table.
+
+This is equivalent to "DART generation=1": the surrogate predicts properties for each candidate without optimizing. Use the results as one column in the evidence table (tagged IND or OOD).
+
 **Step C — Source-reliability classification.**
 Before ranking, tag each evidence item:
 - **Exact**: rule-based calculations from tabulated constants. Usable as hard constraint.

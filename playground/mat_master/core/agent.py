@@ -297,18 +297,28 @@ class MatMasterAgent(MatMasterFinishGatesMixin, MatMasterToolExecutionMixin, Age
             and bool(getattr(self, '_system_prompt', ''))
             else None
         )
+        _mat_cfg_pre = (self._full_config_dict or {}).get('mat_master') or {}
+        _no_lit = bool(_mat_cfg_pre.get('no_literature_mode', False))
+
+        _tool_groups_override = None
+        if _no_lit:
+            from ..prompts.build_prompt import TOOL_GROUPS
+            _tool_groups_override = [
+                g for g in TOOL_GROUPS if g[0] != 'mat_sn'
+            ]
+
         base, current_date, os_type, shell_type = build_mat_master_system_prompt(
             registry=registry,
             mode_profile=self._mode_profile,
             template_text=template_text,
+            tool_groups=_tool_groups_override,
         )
 
         working_dir = self.session.config.workspace_path
         working_dir_abs = str(Path(working_dir).absolute())
         working_dir_info = f"\n\nYou must perform all operations in this working directory; do not change directory. All file operations and commands must be run under: {working_dir_abs}"
         prompt = base + working_dir_info
-        _mat_cfg = (self._full_config_dict or {}).get('mat_master') or {}
-        if bool(_mat_cfg.get('no_literature_mode', False)):
+        if _no_lit:
             prompt += (
                 '\n\n# No-literature ablation (hard rule)\n'
                 '- This run is a strict **no-literature / no-web** ablation.\n'

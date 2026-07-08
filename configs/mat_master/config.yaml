@@ -10,19 +10,17 @@
 llm:
   opus:
     provider: "openai"
-    model: "claude-opus-4-6"
+    model: "qwen3"
     api_key: "${LITELLM_PROXY_API_KEY}"
     base_url: "${LITELLM_PROXY_API_BASE}"
-    thinking_effort: "high"
-    reasoning_protocol: "anthropic_adaptive_thinking"
-    temperature_policy: "force_one_when_reasoning"
+    fallback_group: "qwen3"
     temperature: 0.7
     # max_tokens: 16384
-    timeout: 300              # 非流式整包超时（秒）；大模型长输出需要 2-3 分钟
-    stream_timeout: 90        # 流式首 token 超时（秒）；长上下文/网关慢时易超过 20s，不宜过小
-    stream_idle_timeout: 60   # 流式 chunk 间最大空闲（秒）；公网网关建议 60~120
-    max_retries: 3
-    retry_delay: 1.0
+    timeout: 300
+    stream_timeout: 90
+    stream_idle_timeout: 60
+    max_retries: 8
+    retry_delay: 30.0
 
   sonnet:
     provider: "openai"
@@ -330,7 +328,7 @@ mcp:
           batch_type: "OpenAPI"
           context_type: "OpenAPI"
           remote_profile:
-            image_address: "registry.dp.tech/dptech/dpa-calculator:9ef99f94"
+            image_address: "registry.dp.tech/dptech/dpa-calculator:a9a8b637"
             platform: "ali"
             machine_type: "c16_m64_1 * NVIDIA 4090"
             app_key: "agent"
