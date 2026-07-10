@@ -23,7 +23,7 @@ async def test_feishu_passes_submit_confirmation_preference_to_chat_request(
             captured["org_id"] = org_id
             return None
 
-    async def fake_check_quota_status(user_id):
+    async def fake_check_quota_status(user_id, project_id=None):
         return FakeQuotaStatus()
 
     monkeypatch.setattr(

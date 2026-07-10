@@ -32,8 +32,8 @@ class _FakeSession:
     async def __aexit__(self, *_args):
         return False
 
-    def get(self, url, headers=None):
-        self.calls.append((url, headers))
+    def get(self, url, headers=None, params=None):
+        self.calls.append((url, headers, params))
         return self.response
 
 
@@ -48,7 +48,25 @@ async def test_fetch_quota_info_returns_data(monkeypatch):
     assert data == {"credit_remaining": 1.5}
     assert response.raised is True
     assert session.calls == [
-        ("https://tools.example/api/v1/quota/info", {"X-User-Id": "u1"})
+        ("https://tools.example/api/v1/quota/info", {"X-User-Id": "u1"}, None)
+    ]
+
+
+async def test_fetch_quota_info_passes_project_id_as_query(monkeypatch):
+    response = _FakeResponse({"code": 0, "data": {"org_wallet_pass": True}})
+    session = _FakeSession(response)
+    monkeypatch.setattr(mod, "MATMASTER_TOOLS_SERVER", "https://tools.example")
+    monkeypatch.setattr(mod.aiohttp, "ClientSession", lambda: session)
+
+    data = await mod.fetch_quota_info("u1", project_id=12791)
+
+    assert data == {"org_wallet_pass": True}
+    assert session.calls == [
+        (
+            "https://tools.example/api/v1/quota/info",
+            {"X-User-Id": "u1"},
+            {"project_id": "12791"},
+        )
     ]
 
 

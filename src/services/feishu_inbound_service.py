@@ -101,7 +101,11 @@ async def _run_agent_and_reply_feishu(
         bohrium_node_sku_id=runtime_pref.bohrium_node_sku_id,
     )
     try:
-        quota_status = await check_quota_status(user_id)
+        # 传 project：飞书入口的会话归属就是 runtime_pref.project_id，
+        # 平台据此判定「项目扣费能否兜底」（org_wallet_pass）。
+        quota_status = await check_quota_status(
+            user_id, project_id=runtime_pref.project_id
+        )
         if quota_status.is_exhausted:
             reply_text_message(
                 message_id,
