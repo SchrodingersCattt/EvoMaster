@@ -177,8 +177,6 @@ async def _handle_internal_trigger(
     owner = str(session_row.get("user_id") or "") or None
     if not owner:
         raise NotFoundErrorResponse(msg="会话不存在或无所有者，无法内部触发")
-    # project 归属随行取：让平台一并判定「项目扣费能否兜底」（org_wallet_pass），
-    # 否则没光子的项目付费用户会被闸口误拦。
     quota_status = await check_quota_status(
         owner, project_id=session_row.get("project_id")
     )
@@ -409,17 +407,13 @@ async def chat_stream(
             request, stream_svc.generate_subscribe_stream(sid)
         )
 
-    # 发送消息前检查额度（计价化：金额额度 <= 0 则 403；模型级限制已并入金额额度）
     assert req is not None
     if user_id:
-        # project 归属：req.bohrium_project_id 优先（本次发送会把会话归属写成它，
-        # 计费扣的就是它，见 stream_service 的 set_session_bohrium），
-        # 没带则回落会话行既有归属。读行失败按 None（闸口退化为 免费额度/光子）。
+        # 本次请求的 project 优先；缺失时 fail-soft 回落会话归属。
         gate_project_id = req.bohrium_project_id
         if gate_project_id in (None, ""):
             try:
-                session_row = chat_svc.get_session(sid) or {}
-                gate_project_id = session_row.get("project_id")
+                gate_project_id = (chat_svc.get_session(sid) or {}).get("project_id")
             except Exception:  # noqa: BLE001 - 拿不到归属不阻断闸口检查
                 gate_project_id = None
         quota_status = await check_quota_status(user_id, project_id=gate_project_id)
@@ -432,7 +426,6 @@ async def chat_stream(
             quota_status.reset_at,
         )
         if quota_status.is_exhausted:
-            # 403 时打出请求详情便于 UAT 排查
             req_headers = dict(request.headers) if request else {}
             safe_headers = {}
             for k, v in req_headers.items():
