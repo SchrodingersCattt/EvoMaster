@@ -28,7 +28,13 @@ async def fetch_quota_info(
     logger.info(
         "fetch_quota_info request: url=%s headers=%s params=%s", url, headers, params
     )
-    async with aiohttp.ClientSession() as session:
+    # 超时必须显式设：本调用挡在每条消息发送前，而平台侧 /quota/info 带
+    # project_id 时有真实慢路径（org 解析/钱包/成员门外部 HTTP + 欠费内联清偿）。
+    # aiohttp 默认 total=300s，平台挂住会把每次发送吊满 5 分钟。超时抛错沿
+    # 现有异常路径处理：发送闸口报错即拦截（不放行）；run 预算/飞书路径已
+    # 各自捕获并降级。
+    timeout = aiohttp.ClientTimeout(total=10)
+    async with aiohttp.ClientSession(timeout=timeout) as session:
         async with session.get(url, headers=headers, params=params) as resp:
             resp.raise_for_status()
             payload: dict[str, Any] = await resp.json()
