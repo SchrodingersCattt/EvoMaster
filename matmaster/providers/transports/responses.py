@@ -301,8 +301,14 @@ class ResponsesTransport(OpenAISDKTransport):
         tool_choice: str | dict | None = None,
         stream: bool = False,
     ) -> dict[str, Any]:
-        # Responses stream API 无 stream 形参；chat 与 chat_stream 都走
-        # client.responses.stream()。
+        # stream 形参由调用方直接传给 client.responses.create()，不进 kwargs：
+        # chat 走 create()（非流式），chat_stream 走 create(stream=True)。
+        # 不用 SDK 的 client.responses.stream() 累加器——它要求 SSE 首事件必须是
+        # response.created，而 LiteLLM 代理对部分路由（如 Azure 后端的 gpt-5.6-sol）
+        # 不回放该开场事件，会抛
+        # "Expected to have received `response.created`" RuntimeError。
+        # create(stream=True) 返回原始 AsyncStream，不跑累加器，由 normalize_stream
+        # 直接消费原始事件（本就不依赖 response.created）。
         system_messages = [m for m in messages if isinstance(m, SystemMessage)]
         instructions = "\n\n".join(m.content or "" for m in system_messages).strip()
         kwargs: dict[str, Any] = {
@@ -457,9 +463,8 @@ class ResponsesTransport(OpenAISDKTransport):
     ) -> LLMResponse:
         client = self._ensure_client()
         kwargs = self.build_kwargs(messages, tools, tool_choice=tool_choice)
-        async with client.responses.stream(**kwargs) as stream:
-            final = await stream.get_final_response()
-        return self.normalize_response(final)
+        response = await client.responses.create(**kwargs)
+        return self.normalize_response(response)
 
     async def chat_stream(
         self,
@@ -473,9 +478,9 @@ class ResponsesTransport(OpenAISDKTransport):
         if timeout is not None:
             kwargs["timeout"] = timeout
         try:
-            async with client.responses.stream(**kwargs) as stream:
-                async for chunk in self.normalize_stream(stream):
-                    yield chunk
+            raw = await client.responses.create(stream=True, **kwargs)
+            async for chunk in self.normalize_stream(raw):
+                yield chunk
         except Exception as exc:  # noqa: BLE001
             err = self.classify_error(exc)
             if err is not None:

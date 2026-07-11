@@ -47,7 +47,7 @@ class _FakeResponses:
         self._items = items
         self.called_kwargs = None
 
-    def stream(self, **kwargs):
+    async def create(self, **kwargs):
         self.called_kwargs = kwargs
         return _FakeStream(self._items)
 
@@ -199,7 +199,7 @@ class TestNormalizeStream:
 
 
 class TestChatStream:
-    async def test_chat_stream_uses_responses_stream_without_stream_kwarg(self) -> None:
+    async def test_chat_stream_uses_create_with_stream_true(self) -> None:
         provider = ResponsesTransport(model="matmaster/gpt-5.5", api_key="sk-test")
         completed = SimpleNamespace(
             output=[], status="completed", incomplete_details=None, usage=None
@@ -215,5 +215,6 @@ class TestChatStream:
         ]
 
         assert any(c.finish_reason == "stop" for c in chunks)
-        assert "stream" not in responses.called_kwargs
+        # 走 create(stream=True)（原始事件流，绕开 SDK 累加器对 response.created 的强校验）
+        assert responses.called_kwargs["stream"] is True
         assert responses.called_kwargs["timeout"] == 12.5
