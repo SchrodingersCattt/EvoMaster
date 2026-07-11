@@ -136,6 +136,77 @@ class TestNormalizeStream:
         }
         assert chunks[7].usage_vendor is not None
 
+    async def test_completed_only_buffered_falls_back_to_output_text(self) -> None:
+        # LiteLLM 缓冲整段：只有 response.completed、无增量 delta，正文在 output 里。
+        provider = ResponsesTransport(model="matmaster/gpt-5.5", api_key="sk-test")
+        completed = SimpleNamespace(
+            output=[
+                SimpleNamespace(
+                    type="message",
+                    content=[_part(type="output_text", text="buffered answer")],
+                )
+            ],
+            status="completed",
+            incomplete_details=None,
+            usage=None,
+        )
+        events = [_event("response.completed", response=completed)]
+
+        chunks = [c async for c in provider.normalize_stream(_aiter(events))]
+
+        assert "".join(c.content or "" for c in chunks) == "buffered answer"
+        assert any(c.finish_reason == "stop" for c in chunks)
+
+    async def test_completed_only_buffered_falls_back_to_tool_calls(self) -> None:
+        provider = ResponsesTransport(model="matmaster/gpt-5.5", api_key="sk-test")
+        completed = SimpleNamespace(
+            output=[
+                SimpleNamespace(
+                    type="function_call",
+                    call_id="call_1",
+                    name="search",
+                    arguments='{"q": "x"}',
+                )
+            ],
+            status="completed",
+            incomplete_details=None,
+            usage=None,
+        )
+        events = [_event("response.completed", response=completed)]
+
+        chunks = [c async for c in provider.normalize_stream(_aiter(events))]
+
+        tool_deltas = [
+            d for c in chunks if c.tool_call_deltas for d in c.tool_call_deltas
+        ]
+        assert tool_deltas == [
+            {"index": 0, "id": "call_1", "name": "search", "arguments": '{"q": "x"}'}
+        ]
+        assert any(c.finish_reason == "tool_calls" for c in chunks)
+
+    async def test_streamed_deltas_do_not_double_emit_from_completed(self) -> None:
+        # 已走增量时，终结事件不得再从 output 兜底（避免重复正文）。
+        provider = ResponsesTransport(model="matmaster/gpt-5.5", api_key="sk-test")
+        completed = SimpleNamespace(
+            output=[
+                SimpleNamespace(
+                    type="message",
+                    content=[_part(type="output_text", text="hello")],
+                )
+            ],
+            status="completed",
+            incomplete_details=None,
+            usage=None,
+        )
+        events = [
+            _event("response.output_text.delta", delta="hello"),
+            _event("response.completed", response=completed),
+        ]
+
+        chunks = [c async for c in provider.normalize_stream(_aiter(events))]
+
+        assert "".join(c.content or "" for c in chunks) == "hello"
+
     async def test_reasoning_text_delta_maps_to_reasoning_content(self) -> None:
         provider = ResponsesTransport(model="matmaster/gpt-5.5", api_key="sk-test")
         events = [_event("response.reasoning_text.delta", delta="raw")]

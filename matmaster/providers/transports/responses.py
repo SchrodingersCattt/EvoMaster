@@ -182,6 +182,45 @@ def _finish_reason_from_response(response: Any) -> str | None:
     return "stop"
 
 
+def _visible_output_from_response(
+    response: Any,
+) -> tuple[str, str, list[dict[str, Any]]]:
+    """从终结响应的 output 抽取可见文本 / reasoning / 工具调用增量。
+
+    用于 LiteLLM 把整段响应缓冲进单个 response.completed（不发增量事件）的路由：
+    此时流里没有 output_text.delta / function_call_arguments.delta，正文只存在于
+    response.output，需要兜底取出，否则流式路径拿到空内容 → agent 判为
+    invalid_finish。返回 (文本, reasoning 文本, tool_call_deltas)。
+    """
+    text_parts: list[str] = []
+    reasoning_parts: list[str] = []
+    tool_deltas: list[dict[str, Any]] = []
+    for item in getattr(response, "output", None) or []:
+        item_type = getattr(item, "type", None)
+        if item_type == "reasoning":
+            for part in getattr(item, "summary", None) or []:
+                text = getattr(part, "text", "") or ""
+                if text:
+                    reasoning_parts.append(text)
+        elif item_type == "message":
+            for part in getattr(item, "content", None) or []:
+                part_type = getattr(part, "type", None)
+                if part_type == "output_text":
+                    text_parts.append(getattr(part, "text", "") or "")
+                elif part_type == "refusal":
+                    text_parts.append(getattr(part, "refusal", "") or "")
+        elif item_type == "function_call":
+            tool_deltas.append(
+                {
+                    "index": len(tool_deltas),
+                    "id": getattr(item, "call_id", None),
+                    "name": getattr(item, "name", None),
+                    "arguments": getattr(item, "arguments", "") or "",
+                }
+            )
+    return "".join(text_parts), "".join(reasoning_parts), tool_deltas
+
+
 def _is_non_retryable_responses_bad_request(text: str) -> bool:
     lowered = text.lower()
     patterns = (
@@ -375,24 +414,33 @@ class ResponsesTransport(OpenAISDKTransport):
         item_logical_index: dict[str, int] = {}
         next_index = 0
         buffered_reasoning: list[dict[str, Any]] = []
+        # 是否已通过增量事件发出过对应内容；用于终结事件时判断要不要从
+        # response.output 兜底（LiteLLM 缓冲整段、不发增量的路由）。
+        streamed_text = False
+        streamed_reasoning = False
+        streamed_tool = False
 
         async for event in raw_iter:
             event_type = getattr(event, "type", None)
             if event_type == "response.output_text.delta":
+                streamed_text = True
                 yield StreamChunk(content=getattr(event, "delta", "") or "")
                 continue
             if event_type in (
                 "response.reasoning_summary_text.delta",
                 "response.reasoning_text.delta",
             ):
+                streamed_reasoning = True
                 yield StreamChunk(reasoning_content=getattr(event, "delta", "") or "")
                 continue
             if event_type == "response.refusal.delta":
+                streamed_text = True
                 yield StreamChunk(content=getattr(event, "delta", "") or "")
                 continue
             if event_type == "response.output_item.added":
                 item = getattr(event, "item", None)
                 if getattr(item, "type", None) == "function_call":
+                    streamed_tool = True
                     item_id = getattr(item, "id", None)
                     if item_id not in item_logical_index:
                         item_logical_index[item_id] = next_index
@@ -408,6 +456,7 @@ class ResponsesTransport(OpenAISDKTransport):
                     )
                 continue
             if event_type == "response.function_call_arguments.delta":
+                streamed_tool = True
                 item_id = getattr(event, "item_id", None)
                 if item_id not in item_logical_index:
                     item_logical_index[item_id] = next_index
@@ -430,6 +479,19 @@ class ResponsesTransport(OpenAISDKTransport):
                 continue
             if event_type in ("response.completed", "response.incomplete"):
                 response = getattr(event, "response", None)
+                # 兜底：某些 LiteLLM 路由把整段响应缓冲进 response.completed 而不发
+                # 增量事件，此时正文只在 response.output 里。对未流式过的内容从
+                # output 补发，避免流式路径拿到空内容被判 invalid_finish。
+                if response is not None:
+                    fb_text, fb_reasoning, fb_tools = _visible_output_from_response(
+                        response
+                    )
+                    if not streamed_reasoning and fb_reasoning:
+                        yield StreamChunk(reasoning_content=fb_reasoning)
+                    if not streamed_text and fb_text:
+                        yield StreamChunk(content=fb_text)
+                    if not streamed_tool and fb_tools:
+                        yield StreamChunk(tool_call_deltas=fb_tools)
                 reasoning_items = (
                     _reasoning_items_from_output(getattr(response, "output", None))
                     or buffered_reasoning
