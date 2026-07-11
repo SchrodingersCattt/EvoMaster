@@ -4,7 +4,7 @@ import uuid
 from unittest.mock import MagicMock, patch
 
 
-async def _check_quota_ok(user_id: str):
+async def _check_quota_ok(user_id: str, project_id=None):
     from src.services.quota_service import QuotaStatus
 
     return QuotaStatus(remaining_yuan=10.0, reset_at=None)

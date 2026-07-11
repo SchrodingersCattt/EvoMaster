@@ -8,7 +8,7 @@ from src.services.quota_service import QuotaStatus
 async def test_check_quota_status_maps_client_data(monkeypatch):
     from src.services import quota_service as mod
 
-    async def _fake_fetch_quota_info(user_id):
+    async def _fake_fetch_quota_info(user_id, project_id=None):
         assert user_id == 'u1'
         return {
             'credit_remaining': 1.25,
@@ -39,7 +39,7 @@ async def test_settlement_blocked_false_respected_even_with_debt(monkeypatch):
     # 不得再用 debt_micro>0 兜底把用户拦回去空等 worker 落账。
     from src.services import quota_service as mod
 
-    async def _fake_fetch_quota_info(user_id):
+    async def _fake_fetch_quota_info(user_id, project_id=None):
         return {
             'credit_remaining': 1.0,
             'debt_micro': 50_000,
@@ -60,7 +60,7 @@ async def test_missing_settlement_blocked_defaults_unblocked(monkeypatch):
     # 字段同一提交引入，「有 debt 无 blocked」的服务端版本不存在。
     from src.services import quota_service as mod
 
-    async def _fake_fetch_quota_info(user_id):
+    async def _fake_fetch_quota_info(user_id, project_id=None):
         return {
             'credit_remaining': 1.0,
         }
@@ -76,7 +76,7 @@ async def test_missing_settlement_blocked_defaults_unblocked(monkeypatch):
 async def test_check_quota_status_maps_settlement_block(monkeypatch):
     from src.services import quota_service as mod
 
-    async def _fake_fetch_quota_info(user_id):
+    async def _fake_fetch_quota_info(user_id, project_id=None):
         assert user_id == 'u1'
         return {
             'credit_remaining': 10.0,
@@ -198,3 +198,78 @@ class TestIsExhausted:
     def test_exhausted_message_fallback(self):
         status = QuotaStatus(remaining_yuan=0.0, reset_at=None)
         assert status.exhausted_message('用完啦') == '用完啦'
+
+
+class TestOrgWalletGate:
+    """项目扣费闸口：org_wallet_pass 在瀑布中的位置与退化行为。"""
+
+    def test_org_wallet_pass_unblocks_user_without_photon(self):
+        # 核心场景：没光子（或没开代扣）、靠项目付钱的用户，不得被拦在发送前。
+        assert (
+            QuotaStatus(
+                remaining_yuan=0.0,
+                photon_remaining=0.0,
+                photon_overflow_enabled=False,
+                org_wallet_pass=True,
+            ).is_exhausted
+            is False
+        )
+
+    def test_default_false_keeps_old_behavior(self):
+        # 未传 project / 旧平台接口：org_wallet_pass 缺省 False，闸口行为不变。
+        assert (
+            QuotaStatus(
+                remaining_yuan=0.0,
+                photon_remaining=0.0,
+                photon_overflow_enabled=True,
+            ).is_exhausted
+            is True
+        )
+
+    def test_settlement_block_beats_org_wallet(self):
+        # 欠费阻断优先：项目能付新账不等于旧账清了。
+        assert (
+            QuotaStatus(
+                remaining_yuan=0.0,
+                org_wallet_pass=True,
+                settlement_blocked=True,
+            ).is_exhausted
+            is True
+        )
+
+
+async def test_check_quota_status_parses_org_wallet_pass(monkeypatch):
+    from src.services import quota_service as mod
+
+    seen = {}
+
+    async def _fake_fetch_quota_info(user_id, project_id=None):
+        seen['project_id'] = project_id
+        return {
+            'credit_remaining': 0.0,
+            'org_wallet_pass': True,
+            'org_wallet_available_fen': 300,
+        }
+
+    monkeypatch.setattr(mod, 'fetch_quota_info', _fake_fetch_quota_info)
+
+    status = await mod.check_quota_status('u1', project_id=12791)
+
+    assert seen['project_id'] == 12791
+    assert status.org_wallet_pass is True
+    assert status.is_exhausted is False
+
+
+async def test_check_quota_status_org_wallet_defaults_false(monkeypatch):
+    # 平台没返回该字段（旧版本 / 没传 project）：按 False，不放行。
+    from src.services import quota_service as mod
+
+    async def _fake_fetch_quota_info(user_id, project_id=None):
+        return {'credit_remaining': 0.0}
+
+    monkeypatch.setattr(mod, 'fetch_quota_info', _fake_fetch_quota_info)
+
+    status = await mod.check_quota_status('u1')
+
+    assert status.org_wallet_pass is False
+    assert status.is_exhausted is True

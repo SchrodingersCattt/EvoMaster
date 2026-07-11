@@ -49,7 +49,7 @@ def _mock_events_table():
     return t
 
 
-async def _check_quota_noop(user_id: str):
+async def _check_quota_noop(user_id: str, project_id=None):
     from src.services.quota_service import QuotaStatus
 
     return QuotaStatus(remaining_yuan=10.0, reset_at=None)

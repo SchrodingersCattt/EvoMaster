@@ -75,15 +75,20 @@ _project_root = Path(__file__).resolve().parent.parent.parent
 RUN_ID_WEB = "mat_master_web"
 
 
-async def _resolve_run_budget_micro(user_id: str) -> int | None:
+async def _resolve_run_budget_micro(
+    user_id: str, project_id: int | str | None = None
+) -> int | None:
     """查启动时可用额度作 in-run 成本熔断预算（含宽限）；不可用返回 None（不熔断）。
 
     预算 = available_micro ×(1 + COST_GUARD_GRACE_RATIO)。available_micro 为 None
     （旧平台接口 / 查询失败）或查询抛错时返回 None：熔断退化关闭，仍由发送前闸口
     兜底，绝不因预算查询失败阻断 run。
+
+    project_id：传入时平台把项目 org 钱包可用余额并入 available_micro（实扣瀑布
+    含 org_wallet），否则项目付钱的长任务会被熔断按「个人预算」提前掐掉。
     """
     try:
-        status = await check_quota_status(user_id)
+        status = await check_quota_status(user_id, project_id=project_id)
     except Exception:
         logger.warning("resolve run budget failed user_id=%s", user_id, exc_info=True)
         return None
@@ -477,7 +482,16 @@ class AgentRunService:
             # 退化为只靠发送前闸口），绝不阻断 run。
             budget_micro = None
             if billing_mode == "platform" and cancel_controller is not None and user_id:
-                budget_micro = await _resolve_run_budget_micro(user_id)
+                # 项目归属从会话行取（本 run 的计费归属就是它）；读不到按 None，
+                # 预算退化为个人口径，绝不因此阻断 run。
+                try:
+                    _row = self._sessions_service.get_session(session_id) or {}
+                    run_project_id = _row.get("project_id")
+                except Exception:  # noqa: BLE001 - 预算查询失败不阻断 run
+                    run_project_id = None
+                budget_micro = await _resolve_run_budget_micro(
+                    user_id, project_id=run_project_id
+                )
             billing_state = BillingRunState(
                 session_id=session_id,
                 budget_micro=budget_micro,

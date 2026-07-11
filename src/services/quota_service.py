@@ -5,11 +5,13 @@
   （下次额度刷新日期）；旧的次数 ``remaining`` 字段已不再使用。
 
   分层计费：MatMaster 平台启用真实光子后，还会附带 ``photon_remaining``（光子余额）
-  与 ``photon_overflow_enabled``（用户光子代扣偏好，opt-in）。发送前闸口语义为「免费
-  额度耗尽，且（用户没开光子代扣 或 光子也耗尽）才拦截」——免费额度用完后，只有
-  **开启了代扣且仍有光子余额**的用户才继续（溢出走光子）。光子代扣是 opt-in：没开代扣
-  时实扣侧会 skip，故闸口必须同时看 overflow 偏好，否则会把这类用户误放行导致漏扣。
-  未启用光子时 photon_remaining 为 None，闸口退化为只看金额额度，行为与之前一致。
+  与 ``photon_overflow_enabled``（用户光子代扣偏好，opt-in）。项目扣费上线后，
+  调用方传 project_id 时再附带 ``org_wallet_pass``（项目扣费能否兜底，平台聚合判定）。
+  发送前闸口语义与实扣瀑布同序（免费额度 -> 项目 -> 光子）：「免费额度耗尽，且项目
+  扣费兜不了底，且（用户没开光子代扣 或 光子也耗尽）才拦截」。光子代扣是 opt-in：
+  没开代扣时实扣侧会 skip，故闸口必须同时看 overflow 偏好，否则会把这类用户误放行
+  导致漏扣。未启用光子时 photon_remaining 为 None、未传 project 时 org_wallet_pass
+  为 False，闸口逐级退化，行为与之前一致。
 
 扣费由 billing usage 上报在 MatMaster 平台侧按金额实时完成，evo 不再做按次扣减
 （已移除 use_quota）；模型级次数限制并入金额额度（已移除 check_model_quota）。
@@ -54,11 +56,23 @@ class QuotaStatus:
     debt_micro: int = 0
     settlement_blocked: bool = False
     settlement_block_reason: str | None = None
+    org_wallet_pass: bool = False
+    """项目扣费此刻能否兜底（平台按 project 判定：Nacos 开 + 用户偏好开 +
+    项目 org 解析成功 + org 钱包余额（减在途预留）>0 + 成员门放行）。
+
+    只有调用方传了 project_id 平台才会计算；缺失/未传/平台故障一律 False
+    （fail-closed：闸口少放行不会多扣钱）。实扣瀑布是 免费额度 -> 项目 -> 光子，
+    闸口据此在免费额度耗尽后放行「项目付钱」的用户——否则没光子（或没开光子
+    代扣）的项目用户会被拦在发送前，org_wallet 源根本没机会出手。"""
     available_micro: int | None = None
-    """可用额度（micro CNY）= 免费额度 +（仅开代扣）光子折算，与发送前闸口/实扣同口径。
+    """可用额度（micro CNY）= 免费额度 +（项目门放行时）项目 org 钱包余额 +
+    （仅开代扣）光子折算，与发送前闸口/实扣瀑布同序同口径。项目部分只在
+    传了 project_id 且平台判定 org_wallet_pass 时并入。
 
     仅供「一次 run 内成本熔断」取预算快照用，不参与发送前闸口判定（is_exhausted）。
     旧平台接口不返回该字段时为 None（调用方据此关闭熔断、退化为只靠发送前闸口）。
+    注意项目部分是**共享池快照**：org 钱包全组织共用，并发 run 各自拿到全额，
+    合计可能超花——预算本就是软闸（有宽限比例），实扣侧余额行锁才是硬闸。
     """
 
     @property
@@ -76,6 +90,10 @@ class QuotaStatus:
         if self.settlement_blocked:
             return True
         if self.remaining_yuan > 0:
+            return False
+        # 与实扣瀑布同序（免费额度 -> 项目 -> 光子）：项目扣费能兜底就放行。
+        # org_wallet_pass 已在平台侧聚合全部判据（含用户偏好与成员门），这里不再拆开看。
+        if self.org_wallet_pass:
             return False
         if (
             self.photon_overflow_enabled
@@ -106,13 +124,19 @@ def _coerce_number(value: Any) -> float | None:
     return None
 
 
-async def check_quota_status(user_id: str) -> QuotaStatus:
+async def check_quota_status(
+    user_id: str, project_id: int | str | None = None
+) -> QuotaStatus:
     """查询用户剩余金额额度 + 下次刷新时间。
 
     只读 ``credit_remaining``（金额，元）；缺失或非法时按 0 处理（视为额度耗尽）。
     请求异常向上抛出。
+
+    project_id 可选：传入时平台附带项目扣费判定 org_wallet_pass（见字段说明），
+    并把项目可用余额并入 available_micro（熔断预算自动受益，无需单独处理）。
+    调用方能拿到会话归属就应该传——不传等于放弃「项目付钱」用户的闸口放行。
     """
-    inner = await fetch_quota_info(user_id)
+    inner = await fetch_quota_info(user_id, project_id=project_id)
     credit = _coerce_number(inner.get("credit_remaining"))
     remaining = max(0.0, credit) if credit is not None else 0.0
     reset_at = inner.get("credit_reset_at")
@@ -138,10 +162,12 @@ async def check_quota_status(user_id: str) -> QuotaStatus:
     # 可用额度（micro）：旧平台接口不返回则为 None（关闭 in-run 熔断）。
     available_raw = inner.get("available_micro")
     available_micro = int(available_raw) if isinstance(available_raw, int) else None
+    # 项目扣费兜底判定：缺失/非法按 False（旧平台接口没有该字段 = 不放行）。
+    org_wallet_pass = bool(inner.get("org_wallet_pass"))
     logger.info(
         "check_quota_status response: user_id=%s remaining=%s reset_at=%s "
         "photon_remaining=%s photon_overflow_enabled=%s debt_micro=%s "
-        "settlement_blocked=%s",
+        "settlement_blocked=%s org_wallet_pass=%s project_id=%s",
         user_id,
         remaining,
         reset_at,
@@ -149,6 +175,8 @@ async def check_quota_status(user_id: str) -> QuotaStatus:
         photon_overflow_enabled,
         debt_micro,
         settlement_blocked,
+        org_wallet_pass,
+        project_id,
     )
     return QuotaStatus(
         remaining_yuan=remaining,
@@ -158,5 +186,6 @@ async def check_quota_status(user_id: str) -> QuotaStatus:
         debt_micro=debt_micro,
         settlement_blocked=settlement_blocked,
         settlement_block_reason=settlement_block_reason,
+        org_wallet_pass=org_wallet_pass,
         available_micro=available_micro,
     )
