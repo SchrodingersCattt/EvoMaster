@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import inspect
 from collections.abc import AsyncIterator, Callable
+from contextlib import aclosing
 from typing import Any
 
 from matmaster.types.stream_drain import DrainResult
@@ -32,28 +33,33 @@ async def drain_run_stream(
     from matmaster.types.events import RunResultEvent
 
     events: list[Any] = []
-    async for event in stream:
-        if isinstance(event, RunResultEvent):
-            if forward_terminal and on_event is not None:
+    # aclosing: the early return below must close the generator in *this*
+    # task's context. Abandoning it hands cleanup to the event loop's asyncgen
+    # GC finalizer, which runs in a fresh Context and breaks ContextVar token
+    # resets in the stream's scopes (e.g. BillingLLMProvider.billing_scope).
+    async with aclosing(stream) as stream:
+        async for event in stream:
+            if isinstance(event, RunResultEvent):
+                if forward_terminal and on_event is not None:
+                    result = on_event(event)
+                    if inspect.isawaitable(result):
+                        await result
+                return DrainResult(
+                    status=event.status,
+                    reason=event.reason,
+                    final_content=event.final_content,
+                    num_turns=event.num_turns,
+                    usage=event.usage,
+                    usage_vendor_by_turn=tuple(
+                        dict(item) for item in (event.usage_vendor_by_turn or [])
+                    ),
+                    messages=event.messages,
+                    finish_detail=event.finish_detail,
+                    events=events,
+                )
+            events.append(event)
+            if on_event is not None:
                 result = on_event(event)
                 if inspect.isawaitable(result):
                     await result
-            return DrainResult(
-                status=event.status,
-                reason=event.reason,
-                final_content=event.final_content,
-                num_turns=event.num_turns,
-                usage=event.usage,
-                usage_vendor_by_turn=tuple(
-                    dict(item) for item in (event.usage_vendor_by_turn or [])
-                ),
-                messages=event.messages,
-                finish_detail=event.finish_detail,
-                events=events,
-            )
-        events.append(event)
-        if on_event is not None:
-            result = on_event(event)
-            if inspect.isawaitable(result):
-                await result
     raise RuntimeError("run_stream ended without RunResultEvent")

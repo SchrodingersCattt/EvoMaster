@@ -86,6 +86,27 @@ async def test_drain_run_stream_copies_finish_detail() -> None:
 
 
 @pytest.mark.asyncio
+async def test_drain_run_stream_closes_stream_before_returning() -> None:
+    # 终止事件触发提前 return 时,生成器必须在 drain 返回前于当前任务内被
+    # aclose;否则会留给事件循环的 GC finalizer 在新 Context 里收尾,导致
+    # 生成器内 ContextVar token reset 跨 Context 报错(billing_scope 场景)。
+    closed = False
+
+    async def stream():
+        nonlocal closed
+        try:
+            yield ResponseEvent(source="agent", content="child")
+            yield RunResultEvent(source="agent", status="completed", reason="natural")
+        finally:
+            closed = True
+
+    result = await drain_run_stream(stream())
+
+    assert result.status == "completed"
+    assert closed
+
+
+@pytest.mark.asyncio
 async def test_drain_run_stream_forward_terminal_forwards_run_result_last() -> None:
     seen: list[str] = []
 
