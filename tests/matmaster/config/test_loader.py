@@ -139,14 +139,14 @@ profiles:
         assert "litellm" in cfg.providers
         assert cfg.resolve(model_override="p1").profile.model == "test-model"
 
-    def test_repo_llm_config_profiles_current_gpt55(self) -> None:
+    def test_repo_llm_config_profiles_current_gpt56_sol(self) -> None:
         repo_root = Path(__file__).resolve().parents[3]
 
         cfg = load_llm_config(repo_root / "config" / "llm_config.yaml")
-        resolved = cfg.resolve(model_override="matmaster/gpt-5.5")
+        resolved = cfg.resolve(model_override="matmaster/gpt-5.6-sol")
 
-        assert resolved.profile_key == "matmaster/gpt-5.5"
-        assert resolved.profile.model == "matmaster/gpt-5.5"
+        assert resolved.profile_key == "matmaster/gpt-5.6-sol"
+        assert resolved.profile.model == "matmaster/gpt-5.6-sol"
 
     def test_repo_llm_config_includes_native_anthropic_opus(self) -> None:
         repo_root = Path(__file__).resolve().parents[3]
@@ -180,20 +180,20 @@ class TestRealLlmConfigResponsesMigration:
 
         assert cfg.providers["litellm-responses"].transport == "responses"
 
-        gpt = cfg.profiles["matmaster/gpt-5.5"]
+        gpt = cfg.profiles["matmaster/gpt-5.6-sol"]
         assert gpt.provider == "litellm-responses"
-        assert gpt.model == "matmaster/gpt-5.5"
+        assert gpt.model == "matmaster/gpt-5.6-sol"
         assert gpt.reasoning_effort == "xhigh"
         assert gpt.reasoning_summary == "detailed"
 
-        resolved = cfg.resolve(model_override="matmaster/gpt-5.5")
+        resolved = cfg.resolve(model_override="matmaster/gpt-5.6-sol")
         assert resolved.provider.transport == "responses"
 
         assert cfg.default == "matmaster/qwen3.7-max"
         assert cfg.profiles["matmaster/qwen3.7-max"].provider == "litellm-qwen"
-        glm = cfg.profiles["matmaster/glm-5.2"]
+        glm = cfg.profiles["matmaster/zhipu/glm-5.2"]
         assert glm.provider == "litellm"
-        assert glm.model == "matmaster/glm-5.2"
+        assert glm.model == "matmaster/zhipu/glm-5.2"
         assert glm.context_limit == 1_000_000
         assert glm.supports_vision is False
 
@@ -204,9 +204,9 @@ class TestRealLlmConfigResponsesMigration:
         repo_root = Path(__file__).resolve().parents[3]
         cfg = load_llm_config(repo_root / "config" / "llm_config.yaml")
 
-        provider = build_provider(cfg, model_override="matmaster/gpt-5.5")
+        provider = build_provider(cfg, model_override="matmaster/gpt-5.6-sol")
         assert isinstance(provider, ResponsesTransport)
-        assert provider._model == "matmaster/gpt-5.5"
+        assert provider._model == "matmaster/gpt-5.6-sol"
 
 
 class TestRealLlmConfigVendorWiring:
@@ -222,7 +222,6 @@ class TestRealLlmConfigVendorWiring:
         assert cfg.providers["litellm-anthropic"].vendor == "bedrock"
 
         assert cfg.profiles["matmaster/qwen3.7-max"].provider == "litellm-qwen"
-        assert cfg.profiles["matmaster/dsk-v4p"].provider == "litellm-deepseek"
         assert cfg.profiles["matmaster/DeepSeek-v4-Pro"].provider == "litellm-deepseek"
         assert cfg.profiles["gemini-3.1-pro-preview"].provider == "litellm"
 

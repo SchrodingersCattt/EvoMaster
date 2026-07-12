@@ -64,9 +64,9 @@ profiles:
     max_retries: 3
     retry_delay: 1.0
 
-  matmaster/glm-5.2:
+  matmaster/zhipu/glm-5.2:
     provider: litellm
-    model: matmaster/glm-5.2
+    model: matmaster/zhipu/glm-5.2
     reasoning_effort: max
     context_limit: 1000000
     timeout: 1200
@@ -75,24 +75,13 @@ profiles:
     max_retries: 3
     retry_delay: 1.0
 
-  matmaster/gpt-5.5:
+  matmaster/gpt-5.6-sol:
     provider: litellm-responses
-    model: matmaster/gpt-5.5
+    model: matmaster/gpt-5.6-sol
     reasoning_effort: xhigh
     reasoning_summary: detailed
     context_limit: 256000
     supports_vision: true
-    timeout: 1200
-    stream_timeout: 480
-    stream_idle_timeout: 60
-    max_retries: 3
-    retry_delay: 1.0
-
-  matmaster/dsk-v4p:
-    provider: litellm-deepseek
-    model: aliyun/deepseek-v4-pro
-    reasoning_effort: max
-    context_limit: 200000
     timeout: 1200
     stream_timeout: 480
     stream_idle_timeout: 60
