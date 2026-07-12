@@ -187,7 +187,14 @@ class BillingLLMProvider:
         try:
             yield
         finally:
-            self._spawn_id_var.reset(token)
+            # 与 usage_collector.billing_scope 同款兜底:该 scope 包在 async
+            # generator 的 yield 外层,若生成器被遗弃后由事件循环的 GC finalizer
+            # 在新 Context 里关闭,reset(token) 会抛 "created in a different
+            # Context";此时直接清值,保证 teardown 不中断。
+            try:
+                self._spawn_id_var.reset(token)
+            except ValueError:
+                self._spawn_id_var.set(None)
 
     async def _report(
         self,
