@@ -158,11 +158,17 @@ No credentials are included in this evidence.
 - The current MatMaster test image ID 49106 was Ready (`status=2`) and resolved
   to
   `registry.dp.tech/dev/dp/native/test-110680/matmaster:9c2b37b5-20260612-082905`.
-- Exact lookup of `matmaster-test-c1-m2` returned HTTP 404. The stable prebuilt
-  template does not yet exist.
-- Creating a disposable template was rejected before mutation because the test
-  account has reached its owner quota (`1/1`). Its existing owned template is
-  unrelated (`cpu-test`, `c16_m32_cpu`) and was not modified or deleted.
+- The first disposable-template attempt was rejected before mutation because
+  the test account had reached its owner quota (`1/1`). After confirming that
+  the owned `cpu-test` template had no visible Sandbox instances, it was
+  explicitly deleted and replaced with the stable prebuilt
+  `matmaster-test-c1-m2` template.
+- Exact lookup verifies that `matmaster-test-c1-m2` is owned by the current
+  account, Public, active, bound to `c1_m2_cpu` and the Ready MatMaster image,
+  and has a warmup pool size of zero. The create request set
+  `pause_enabled=false`; the current lookup response omits that field and
+  reports no `image_cache_status`, so those runtime properties remain to be
+  verified by a successful Sandbox launch.
 - The same account could resolve and submit create against another user's
   Public `doc-compiler` template using `c1_m2_cpu`, confirming Public template
   visibility and create authorization.
@@ -175,8 +181,8 @@ Current Gate interpretation:
 
 - live SKU existence and displayed zero price: passed;
 - ordinary-user lookup/create authorization for a Public template: passed;
-- MatMaster image pull through a MatMaster template: blocked by missing template
-  and owner quota;
+- stable Public MatMaster template provisioning: passed;
+- MatMaster image pull through that template: not yet rerun after provisioning;
 - `/personal` and `/share` mount/read/write/persistence: failed before runtime
   connection because CSI mount timed out;
 - deployed `FreeSkuNames`, trade result, and orphan-cleanup configuration: still

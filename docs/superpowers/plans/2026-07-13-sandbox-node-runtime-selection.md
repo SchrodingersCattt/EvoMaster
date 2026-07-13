@@ -211,9 +211,12 @@ Node SKU，不提交 Sandbox profile、SKU 或任意 `sandbox_template_name`。
 
 - `c1_m2_cpu` 当前返回 SKU ID 456、1C2G、`0.00 RMB/h`，但仍未取得部署侧
   `FreeSkuNames` 与 trade 对账证据；G0.6 仅部分通过。
-- test 当前 MatMaster image ID 49106 为 Ready，完整 registry URL 已解析；稳定
-  `matmaster-test-c1-m2` template 不存在，且现有 test 用户 owner template 配额为 `1/1`，
-  disposable template 在创建前被 400 拒绝，未修改其已有 `cpu-test`。
+- test 当前 MatMaster image ID 49106 为 Ready，完整 registry URL 已解析。首次 disposable
+  template 创建因 owner 配额 `1/1` 被 400 拒绝；确认原 owner template `cpu-test` 无可见
+  Sandbox 后，已按明确授权删除并创建稳定 Public `matmaster-test-c1-m2`，绑定
+  `c1_m2_cpu`、该 MatMaster image、`replicas=0`。精确 lookup 已验证 owner、Public、active、
+  SKU、image 与 warmup pool；当前响应未回传 `pause_enabled` 和 `image_cache_status`，需在
+  Sandbox 成功启动后继续验证。
 - 当前用户可 lookup 并提交创建其他 owner 的 Public `doc-compiler`（`c1_m2_cpu`），Public
   访问语义通过；创建随后因 CSI mount `deadline_exceeded` 返回 500，未获得 sandbox ID，按唯一
   run ID 对账未发现可见残留。因此 G0.4 的 `/personal`、`/share` 挂载/持久化仍阻塞发布。
