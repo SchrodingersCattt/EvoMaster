@@ -206,6 +206,20 @@ Node SKU，不提交 Sandbox profile、SKU 或任意 `sandbox_template_name`。
 | G0.12（磁盘、pause、二进制） | 2026-06《问题收集》记录默认 overlay 30GB、默认 text 下载会破坏二进制、GPU pause 行为不透明；当前 Launching 已增加 `extra_ephemeral_storage_gb` 和 `pause_enabled`，但 live 行为未验 | profile/catalog 显示实际临时盘容量；第一版 public template 的 `extra_ephemeral_storage_gb` 固定为 0（当前服务只允许 private template 扩盘）；CPU template 显式 `pause_enabled=false`；driver 对二进制统一走 bytes | 用大文件验证 30Gi base、冷镜像和 cache；传输 `.pt/.tar/.gz` 后校验 hash；运行长命令验证 pause/resume/never-timeout 组合和实际 metadata；如需扩盘，先推动平台放开 public template 扩盘能力 |
 | G0.13（Node 原生停止能力） | 当前 Bohrium Core/bohrctl 表明 `turnoffAfter` 按创建、重启或修改后的固定时长关机，Paused 状态可 restart、数据保留且标称不计费；当前 MatMaster 已支持 restart，但默认 `turnoffAfter=-1` 且只有 delete adapter | 第一版 `run_end` 在最后一个 live lease 结束后 stop 为 Paused，不 delete；未来 `idle_timeout` 复用 provider 定时关机，lease 和 DB desired state 仍是并发与对账真相源 | 在 test 对同一 Node 完成 create → 写盘 → stop/自动关机 → 确认账单停止 → restart → 校验数据；验证当前可用 stop/modify OpenAPI 版本、`turnoffAfter` 单位/精度/重置语义、长任务不会误停，以及 Paused 是否另收磁盘费用 |
 
+2026-07-13 test live preflight/首次 smoke 结果（脱敏证据见
+`docs/integrations/launching-sandbox-contract.md`）：
+
+- `c1_m2_cpu` 当前返回 SKU ID 456、1C2G、`0.00 RMB/h`，但仍未取得部署侧
+  `FreeSkuNames` 与 trade 对账证据；G0.6 仅部分通过。
+- test 当前 MatMaster image ID 49106 为 Ready，完整 registry URL 已解析；稳定
+  `matmaster-test-c1-m2` template 不存在，且现有 test 用户 owner template 配额为 `1/1`，
+  disposable template 在创建前被 400 拒绝，未修改其已有 `cpu-test`。
+- 当前用户可 lookup 并提交创建其他 owner 的 Public `doc-compiler`（`c1_m2_cpu`），Public
+  访问语义通过；创建随后因 CSI mount `deadline_exceeded` 返回 500，未获得 sandbox ID，按唯一
+  run ID 对账未发现可见残留。因此 G0.4 的 `/personal`、`/share` 挂载/持久化仍阻塞发布。
+- test 客户端入口固定为 `https://openapi.test.dp.tech`；PoC 已改为按 test/uat/prod 解析 host，
+  并支持从 gitignored `.env.test` 安全加载现有 Bohrium 身份变量。
+
 另外还有两个非阻断但必须在上线前给出明确配置的项目：
 
 - 如果 test/uat/prod 共享 template namespace，template name 必须带环境后缀；若各环境

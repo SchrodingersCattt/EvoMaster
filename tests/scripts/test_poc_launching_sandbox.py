@@ -64,7 +64,44 @@ def test_default_cli_is_dry_run_and_redacts_environment_secret(
     captured = capsys.readouterr()
     assert captured.err == ""
     assert '"mode": "dry-run"' in captured.out
+    assert '"base_url": "https://openapi.test.dp.tech"' in captured.out
     assert "must-not-leak" not in captured.out
+
+
+def test_env_file_loads_bohrium_identity_without_leaking(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    for name in (
+        "BOHRIUM_ACCESS_KEY",
+        "BOHRIUM_USER_ID",
+        "BOHRIUM_ORG_ID",
+        "BOHRIUM_PROJECT_ID",
+        "LBG_SDBX_USER_ID",
+        "LBG_SDBX_ORG_ID",
+    ):
+        monkeypatch.delenv(name, raising=False)
+    env_file = tmp_path / ".env.test"
+    env_file.write_text(
+        "\n".join(
+            (
+                "BOHRIUM_ACCESS_KEY=env-file-secret",
+                "BOHRIUM_USER_ID=101",
+                "BOHRIUM_ORG_ID=202",
+                "BOHRIUM_PROJECT_ID=303",
+            )
+        ),
+        encoding="utf-8",
+    )
+
+    assert main(["--env", "test", "--env-file", str(env_file)]) == 0
+
+    captured = capsys.readouterr()
+    assert "env-file-secret" not in captured.out
+    assert '"user_id": true' in captured.out
+    assert '"org_id": true' in captured.out
+    assert '"project_id": true' in captured.out
 
 
 def test_redacted_plan_contains_no_access_keys() -> None:
@@ -147,6 +184,7 @@ class _FakeOpenApi:
         self.created_templates: list[dict[str, Any]] = []
         self.deleted_templates: list[str] = []
         self.created_sandboxes: list[dict[str, Any]] = []
+        self.listed_sandboxes: list[dict[str, Any]] = []
 
     def request(
         self,
@@ -218,6 +256,9 @@ class _FakeOpenApi:
     def delete_sandbox_set_template(self, name: str) -> dict[str, Any]:
         self.deleted_templates.append(name)
         return {"status": "deleted"}
+
+    def list_sandboxes(self) -> list[dict[str, Any]]:
+        return list(self.listed_sandboxes)
 
 
 class _FakeE2B:
@@ -338,3 +379,26 @@ def test_image_cache_retry_classifier_rejects_ambiguous_gateway_failure() -> Non
     assert not SandboxContractSmoke._is_image_cache_not_ready(
         ContractError("request failed [504]: image cache is not ready")
     )
+
+
+def test_ambiguous_create_is_reconciled_and_killed_without_retry() -> None:
+    runtime = _FakeOpenApi(
+        runtime=True,
+        create_error_once=ContractError("request failed [504]: gateway timeout"),
+    )
+    runtime.listed_sandboxes = [
+        {
+            "sandboxID": "orphan-from-timeout",
+            "templateID": _config().template_name,
+            "metadata": {"matmaster.contract.run-id": _config().run_id},
+        }
+    ]
+    owner = _FakeOpenApi(runtime=False)
+    e2b = _FakeE2B()
+
+    with pytest.raises(ContractError, match="504"):
+        SandboxContractSmoke(_config(), runtime, owner, e2b).run()
+
+    assert runtime.create_attempts == 1
+    assert e2b.killed == ["orphan-from-timeout"]
+    assert owner.deleted_templates == [_config().template_name]

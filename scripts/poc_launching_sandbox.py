@@ -23,11 +23,17 @@ from decimal import Decimal, InvalidOperation
 from typing import Any, Protocol
 
 LBG_VERSION = "4.0.0b56"
-DEFAULT_BASE_URL = "https://open.bohrium.com"
+DEFAULT_BASE_URLS = {
+    "test": "https://openapi.test.dp.tech",
+    "uat": "https://openapi.uat.dp.tech",
+    "prod": "https://open.bohrium.com",
+}
 DEFAULT_SKU_NAME = "c1_m2_cpu"
 DEFAULT_TIMEOUT_SECONDS = 7200
 IMAGE_CACHE_WAIT_SECONDS = 600
 IMAGE_CACHE_POLL_SECONDS = 5
+AMBIGUOUS_RECONCILE_ATTEMPTS = 3
+AMBIGUOUS_RECONCILE_INTERVAL_SECONDS = 2
 MOUNT_USER_STORAGE_KEY = "bohr.launching.io/mount-user-storage"
 PUBLIC_VISIBILITY = 1
 ACTIVE_TEMPLATE_STATUS = 1
@@ -62,6 +68,8 @@ class OpenApiClient(Protocol):
     ) -> dict[str, Any]: ...
 
     def delete_sandbox_set_template(self, name: str) -> dict[str, Any]: ...
+
+    def list_sandboxes(self) -> list[dict[str, Any]]: ...
 
 
 class E2BClient(Protocol):
@@ -413,12 +421,17 @@ class SandboxContractSmoke:
             response = self._create_sandbox_once(metadata)
         except Exception as exc:
             if not self._is_image_cache_not_ready(exc):
+                self._reconcile_ambiguous_create()
                 raise
             self._wait_for_image_cache()
             # The first request was rejected by Launching's pre-create image-cache
             # gate with HTTP 400, before E2B received it. Retrying this one explicit
             # case is safe; 502/504 and transport failures are never retried.
-            response = self._create_sandbox_once(metadata)
+            try:
+                response = self._create_sandbox_once(metadata)
+            except Exception:
+                self._reconcile_ambiguous_create()
+                raise
         sandbox_id = _sandbox_id(response)
         self.active_sandboxes.append(sandbox_id)
         return sandbox_id
@@ -454,6 +467,55 @@ class SandboxContractSmoke:
                     f"{IMAGE_CACHE_WAIT_SECONDS}s"
                 )
             time.sleep(IMAGE_CACHE_POLL_SECONDS)
+
+    def _reconcile_ambiguous_create(self) -> None:
+        for attempt in range(AMBIGUOUS_RECONCILE_ATTEMPTS):
+            try:
+                rows = self.runtime_openapi.list_sandboxes()
+            except Exception as exc:  # noqa: BLE001 - retain primary create error
+                self.cleanup_errors.append(
+                    f"ambiguous create reconciliation failed: {exc}"
+                )
+                return
+            found = False
+            for row in rows:
+                if not isinstance(row, dict):
+                    continue
+                metadata = self._sandbox_metadata(row)
+                if metadata.get("matmaster.contract.run-id") != self.config.run_id:
+                    continue
+                template = (
+                    row.get("template")
+                    or row.get("templateID")
+                    or row.get("template_id")
+                )
+                if template and str(template) != self.config.template_name:
+                    continue
+                try:
+                    sandbox_id = _sandbox_id(row)
+                except ContractError:
+                    continue
+                if sandbox_id not in self.active_sandboxes:
+                    self.active_sandboxes.append(sandbox_id)
+                found = True
+            if found:
+                return
+            if attempt + 1 < AMBIGUOUS_RECONCILE_ATTEMPTS:
+                time.sleep(AMBIGUOUS_RECONCILE_INTERVAL_SECONDS)
+
+    @staticmethod
+    def _sandbox_metadata(row: dict[str, Any]) -> dict[str, Any]:
+        value = row.get("metadata")
+        if isinstance(value, dict):
+            return value
+        if isinstance(value, str):
+            try:
+                parsed = json.loads(value)
+            except ValueError:
+                return {}
+            if isinstance(parsed, dict):
+                return parsed
+        return {}
 
     def _kill(self, sandbox_id: str) -> None:
         response = self.e2b.sandbox_kill(sandbox_id)
@@ -619,17 +681,41 @@ def _default_template_name(environment: str) -> str:
     return f"matmaster-{environment}-c1-m2"
 
 
+def _load_env_file(path: str) -> None:
+    try:
+        from dotenv import load_dotenv
+    except ImportError as exc:
+        raise ContractError("--env-file requires python-dotenv") from exc
+    if not load_dotenv(path, override=False):
+        raise ContractError(f"environment file not found or empty: {path}")
+
+
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description=__doc__)
+    env_parser = argparse.ArgumentParser(add_help=False, allow_abbrev=False)
+    env_parser.add_argument("--env-file", default=None)
+    env_args, _ = env_parser.parse_known_args(argv)
+    if env_args.env_file:
+        _load_env_file(str(env_args.env_file))
+
+    parser = argparse.ArgumentParser(description=__doc__, allow_abbrev=False)
+    parser.add_argument("--env-file", default=None)
     parser.add_argument("--env", choices=("test", "uat", "prod"), default="test")
-    parser.add_argument("--base-url", default=DEFAULT_BASE_URL)
+    parser.add_argument("--base-url", default=None)
     parser.add_argument("--template-name", default=None)
     parser.add_argument("--sku-name", default=DEFAULT_SKU_NAME)
     parser.add_argument("--image", default=None)
     parser.add_argument("--timeout-seconds", type=int, default=DEFAULT_TIMEOUT_SECONDS)
     parser.add_argument("--request-timeout-seconds", type=float, default=600.0)
-    parser.add_argument("--user-id", default=os.environ.get("LBG_SDBX_USER_ID", ""))
-    parser.add_argument("--org-id", default=os.environ.get("LBG_SDBX_ORG_ID", ""))
+    parser.add_argument(
+        "--user-id",
+        default=os.environ.get("LBG_SDBX_USER_ID")
+        or os.environ.get("BOHRIUM_USER_ID", ""),
+    )
+    parser.add_argument(
+        "--org-id",
+        default=os.environ.get("LBG_SDBX_ORG_ID")
+        or os.environ.get("BOHRIUM_ORG_ID", ""),
+    )
     parser.add_argument(
         "--project-id", default=os.environ.get("BOHRIUM_PROJECT_ID", "")
     )
@@ -653,7 +739,7 @@ def config_from_args(args: argparse.Namespace) -> SmokeConfig:
     ).strip()
     return SmokeConfig(
         environment=args.env,
-        base_url=_clean_base_url(args.base_url),
+        base_url=_clean_base_url(args.base_url or DEFAULT_BASE_URLS[args.env]),
         access_key=access_key,
         template_access_key=template_access_key,
         user_id=str(args.user_id),

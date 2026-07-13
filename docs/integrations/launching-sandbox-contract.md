@@ -1,8 +1,9 @@
 # Launching Sandbox contract smoke
 
 This document records the executable contract used before MatMaster enables
-Sandbox as the default runtime. Source inspection is complete; live test/uat/prod
-results must be recorded separately and must not be inferred from this document.
+Sandbox as the default runtime. Source inspection is complete. The dated test
+evidence below is environment-specific and must not be inferred to apply to
+uat/prod.
 
 ## Pinned client contract
 
@@ -26,6 +27,7 @@ access, and never prints access keys:
 
 ```bash
 uv run python scripts/poc_launching_sandbox.py --env test
+uv run python scripts/poc_launching_sandbox.py --env test --env-file .env.test
 ```
 
 The output describes the selected environment, template, SKU, lifecycle, and
@@ -37,19 +39,28 @@ Use an isolated test account and project. Do not reuse credentials copied from
 design documents, chat logs, shell history, or repository examples.
 
 ```bash
-export BOHRIUM_ACCESS_KEY='<test-user-access-key>'
-export LBG_SDBX_USER_ID='<test-user-id>'
-export LBG_SDBX_ORG_ID='<test-org-id>'
-export BOHRIUM_PROJECT_ID='<test-project-id>'
-
 uv run --with 'lbg==4.0.0b56' python \
   scripts/poc_launching_sandbox.py \
   --env test \
+  --env-file .env.test \
   --smoke \
   --template-name matmaster-test-c1-m2 \
   --sku-name c1_m2_cpu \
   --confirmed-free-sku c1_m2_cpu
 ```
+
+The env file may use either `LBG_SDBX_USER_ID`/`LBG_SDBX_ORG_ID` or the
+existing MatMaster names `BOHRIUM_USER_ID`/`BOHRIUM_ORG_ID`, together with
+`BOHRIUM_ACCESS_KEY` and `BOHRIUM_PROJECT_ID`. It is loaded with
+`python-dotenv`, is never sourced as shell code, and must remain gitignored.
+
+Default API hosts follow the selected environment:
+
+- test: `https://openapi.test.dp.tech`
+- uat: `https://openapi.uat.dp.tech`
+- prod: `https://open.bohrium.com`
+
+Use `--base-url` only for an explicitly verified alternative gateway.
 
 `--confirmed-free-sku` is intentionally separate from the live price check.
 The public SKU response can prove that the displayed price is `0.00 RMB/h`, but
@@ -67,14 +78,11 @@ the two-Sandbox contract, and deletes the template in `finally`:
 
 ```bash
 export BOHRIUM_TEMPLATE_ACCESS_KEY='<ci-owner-test-access-key>'
-export BOHRIUM_ACCESS_KEY='<ordinary-test-user-access-key>'
-export LBG_SDBX_USER_ID='<ordinary-test-user-id>'
-export LBG_SDBX_ORG_ID='<ordinary-test-org-id>'
-export BOHRIUM_PROJECT_ID='<ordinary-test-project-id>'
 
 uv run --with 'lbg==4.0.0b56' python \
   scripts/poc_launching_sandbox.py \
   --env test \
+  --env-file .env.test \
   --smoke \
   --create-disposable-template \
   --require-distinct-template-owner \
@@ -126,14 +134,53 @@ retries once only after the cache reaches a terminal Ready/Failed state.
 If create returns an ambiguous gateway failure:
 
 1. Stop the smoke run.
-2. List recent Sandboxes for the exact template and run ID.
-3. Kill every matching resource explicitly.
+2. Let the script list recent Sandboxes for its exact unique run ID; it kills
+   every returned match in `finally` without retrying create.
+3. If the script reports reconciliation failure, list and kill matching
+   resources manually.
 4. Confirm the deployed orphan-cleanup switch and its observed result.
 5. Only then start a new smoke run.
 
 If the script obtained a Sandbox ID before a later check failed, it attempts
 cleanup automatically. Any failed cleanup is surfaced as a failed contract,
 not hidden as a warning.
+
+## Live test evidence: test, 2026-07-13
+
+No credentials are included in this evidence.
+
+- The environment-specific OpenAPI entry is
+  `https://openapi.test.dp.tech`. The production default
+  `https://open.bohrium.com` rejected the test AK with HTTP 401, which led to
+  adding environment-aware host resolution to the script.
+- `/skus` returned `c1_m2_cpu`, SKU ID 456, CPU 1, memory 2, and
+  `0.00 RMB/h`.
+- The current MatMaster test image ID 49106 was Ready (`status=2`) and resolved
+  to
+  `registry.dp.tech/dev/dp/native/test-110680/matmaster:9c2b37b5-20260612-082905`.
+- Exact lookup of `matmaster-test-c1-m2` returned HTTP 404. The stable prebuilt
+  template does not yet exist.
+- Creating a disposable template was rejected before mutation because the test
+  account has reached its owner quota (`1/1`). Its existing owned template is
+  unrelated (`cpu-test`, `c16_m32_cpu`) and was not modified or deleted.
+- The same account could resolve and submit create against another user's
+  Public `doc-compiler` template using `c1_m2_cpu`, confirming Public template
+  visibility and create authorization.
+- That create failed before returning a Sandbox ID because CSI mount setup
+  timed out (`failed to perform csi mount: deadline_exceeded`). A follow-up
+  Sandbox list found no resource matching run ID `81dc6836b670`, so there was
+  no visible instance to kill.
+
+Current Gate interpretation:
+
+- live SKU existence and displayed zero price: passed;
+- ordinary-user lookup/create authorization for a Public template: passed;
+- MatMaster image pull through a MatMaster template: blocked by missing template
+  and owner quota;
+- `/personal` and `/share` mount/read/write/persistence: failed before runtime
+  connection because CSI mount timed out;
+- deployed `FreeSkuNames`, trade result, and orphan-cleanup configuration: still
+  require platform-side evidence.
 
 ## Evidence still required outside the script
 
