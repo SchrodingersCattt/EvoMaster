@@ -417,19 +417,25 @@ class SandboxContractSmoke:
             MOUNT_USER_STORAGE_KEY: "true",
             "matmaster.contract.run-id": self.config.run_id,
         }
-        try:
-            response = self._create_sandbox_once(metadata)
-        except Exception as exc:
-            if not self._is_image_cache_not_ready(exc):
-                self._reconcile_ambiguous_create()
-                raise
-            self._wait_for_image_cache()
-            # The first request was rejected by Launching's pre-create image-cache
-            # gate with HTTP 400, before E2B received it. Retrying this one explicit
-            # case is safe; 502/504 and transport failures are never retried.
+        cache_deadline = time.monotonic() + IMAGE_CACHE_WAIT_SECONDS
+        while True:
             try:
                 response = self._create_sandbox_once(metadata)
-            except Exception:
+                break
+            except Exception as exc:
+                if self._is_image_cache_not_ready(exc):
+                    if time.monotonic() >= cache_deadline:
+                        raise ContractError(
+                            "template image cache did not become ready within "
+                            f"{IMAGE_CACHE_WAIT_SECONDS}s"
+                        ) from exc
+                    # Launching rejected this request at its HTTP 400 pre-create
+                    # image-cache gate, before E2B received it. Some deployments
+                    # omit image_cache_status from template lookup, so the explicit
+                    # create rejection is the portable readiness probe. 502/504,
+                    # transport failures, and every other error are never retried.
+                    time.sleep(IMAGE_CACHE_POLL_SECONDS)
+                    continue
                 self._reconcile_ambiguous_create()
                 raise
         sandbox_id = _sandbox_id(response)
@@ -448,25 +454,13 @@ class SandboxContractSmoke:
     def _is_image_cache_not_ready(exc: Exception) -> bool:
         message = str(exc).lower()
         return (
-            "[400]" in message and "image cache" in message and "not ready" in message
+            "[400]" in message
+            and "image cache" in message
+            and (
+                "not ready" in message
+                or ("still warming up" in message and "status: creating" in message)
+            )
         )
-
-    def _wait_for_image_cache(self) -> None:
-        deadline = time.monotonic() + IMAGE_CACHE_WAIT_SECONDS
-        while True:
-            row = self._lookup_template()
-            try:
-                status = int(row.get("image_cache_status"))
-            except (TypeError, ValueError):
-                status = -1
-            if status in (2, 3):
-                return
-            if time.monotonic() >= deadline:
-                raise ContractError(
-                    f"template image cache did not become terminal within "
-                    f"{IMAGE_CACHE_WAIT_SECONDS}s"
-                )
-            time.sleep(IMAGE_CACHE_POLL_SECONDS)
 
     def _reconcile_ambiguous_create(self) -> None:
         for attempt in range(AMBIGUOUS_RECONCILE_ATTEMPTS):

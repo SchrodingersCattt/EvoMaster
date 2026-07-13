@@ -128,8 +128,12 @@ can mean the gateway timed out while the backend continued creating the
 resource. Blindly retrying can create multiple orphan Sandboxes. The sole
 automatic retry is an explicit HTTP 400 response saying that the template image
 cache is not ready: Launching returns that response from its pre-create gate
-before forwarding the request to E2B. The script polls exact template state and
-retries once only after the cache reaches a terminal Ready/Failed state.
+before forwarding the request to E2B. Test currently omits
+`image_cache_status` from both owner-list and exact-lookup responses, so the
+script uses only that explicit pre-create rejection as its portable readiness
+probe. It retries at a fixed interval for at most 600 seconds. A 5xx, transport
+failure, or any other response still stops create immediately and triggers
+run-ID reconciliation without a blind retry.
 
 If create returns an ambiguous gateway failure:
 
@@ -176,13 +180,20 @@ No credentials are included in this evidence.
   timed out (`failed to perform csi mount: deadline_exceeded`). A follow-up
   Sandbox list found no resource matching run ID `81dc6836b670`, so there was
   no visible instance to kill.
+- A live smoke against the newly provisioned `matmaster-test-c1-m2` then stayed
+  at Launching's pre-create image-cache gate for the full 600-second bounded
+  wait. Every response was HTTP 400 with cache status `creating`; no request
+  reached E2B. Final reconciliation found no Sandbox matching run ID
+  `a9b219eb989c`, and the template remained active and unchanged. Owner-list
+  and exact-lookup responses both omitted `image_cache_status`.
 
 Current Gate interpretation:
 
 - live SKU existence and displayed zero price: passed;
 - ordinary-user lookup/create authorization for a Public template: passed;
 - stable Public MatMaster template provisioning: passed;
-- MatMaster image pull through that template: not yet rerun after provisioning;
+- MatMaster image cache/pull through that template: blocked in Launching cache
+  status `creating` after a bounded 600-second wait;
 - `/personal` and `/share` mount/read/write/persistence: failed before runtime
   connection because CSI mount timed out;
 - deployed `FreeSkuNames`, trade result, and orphan-cleanup configuration: still

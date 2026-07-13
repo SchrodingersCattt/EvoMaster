@@ -217,6 +217,10 @@ Node SKU，不提交 Sandbox profile、SKU 或任意 `sandbox_template_name`。
   `c1_m2_cpu`、该 MatMaster image、`replicas=0`。精确 lookup 已验证 owner、Public、active、
   SKU、image 与 warmup pool；当前响应未回传 `pause_enabled` 和 `image_cache_status`，需在
   Sandbox 成功启动后继续验证。
+- 使用该稳定 template 的 live smoke 在 Launching pre-create image-cache gate 连续等待
+  600 秒后仍为 HTTP 400 `status: creating`，请求未进入 E2B；run ID `a9b219eb989c` 最终
+  对账无可见 Sandbox 残留，template 保持 active 且未改变。test 的 owner list 与 exact
+  lookup 都不回传 `image_cache_status`，因此 G0 当前新增平台侧 image-cache 阻塞。
 - 当前用户可 lookup 并提交创建其他 owner 的 Public `doc-compiler`（`c1_m2_cpu`），Public
   访问语义通过；创建随后因 CSI mount `deadline_exceeded` 返回 500，未获得 sandbox ID，按唯一
   run ID 对账未发现可见残留。因此 G0.4 的 `/personal`、`/share` 挂载/持久化仍阻塞发布。

@@ -355,11 +355,14 @@ def test_smoke_failure_still_kills_live_sandbox_and_deletes_template() -> None:
     assert owner.deleted_templates == [_config().template_name]
 
 
-def test_smoke_retries_only_explicit_pre_create_image_cache_gate() -> None:
+def test_smoke_retries_only_explicit_pre_create_image_cache_gate(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(MODULE.time, "sleep", lambda _seconds: None)
     runtime = _FakeOpenApi(
         runtime=True,
         create_error_once=ContractError(
-            "request failed [400] image cache is not ready"
+            "request failed [400] image cache is still warming up " "(status: creating)"
         ),
     )
     owner = _FakeOpenApi(runtime=False)
@@ -375,6 +378,12 @@ def test_smoke_retries_only_explicit_pre_create_image_cache_gate() -> None:
 def test_image_cache_retry_classifier_rejects_ambiguous_gateway_failure() -> None:
     assert SandboxContractSmoke._is_image_cache_not_ready(
         ContractError("request failed [400]: image cache is not ready")
+    )
+    assert SandboxContractSmoke._is_image_cache_not_ready(
+        ContractError(
+            "request failed [400]: image cache is still warming up "
+            "(status: creating)"
+        )
     )
     assert not SandboxContractSmoke._is_image_cache_not_ready(
         ContractError("request failed [504]: image cache is not ready")
