@@ -37,6 +37,7 @@ class HistoricalNodeStopOutcome(str, Enum):
     """Terminal outcomes for one explicitly audited historical slot."""
 
     STOPPED_TO_PAUSED = "STOPPED_TO_PAUSED"
+    ALREADY_STOPPED_TO_PAUSED = "ALREADY_STOPPED_TO_PAUSED"
     SKIPPED_SLOT_CHANGED = "SKIPPED_SLOT_CHANGED"
     SKIPPED_CONCURRENT_LEASE = "SKIPPED_CONCURRENT_LEASE"
     PROVIDER_MISSING_SLOT_REMOVED = "PROVIDER_MISSING_SLOT_REMOVED"
@@ -646,6 +647,34 @@ class BohriumNodeLeaseManager:
             if not self._nodes.mark_paused(slot_id, node_id):
                 raise RuntimeError("Bohrium historical node stop state was fenced")
         return HistoricalNodeStopOutcome.STOPPED_TO_PAUSED
+
+    def reconcile_stopped_unleased_ready_slot(
+        self, row: dict[str, Any]
+    ) -> HistoricalNodeStopOutcome:
+        """Reconcile one provider-stopped historical ready slot to paused."""
+        identity = NodeIdentity(
+            str(row["user_id"]),
+            str(row["org_id"]),
+            int(row["project_id"]),
+            int(row["sku_id"]),
+        )
+        slot_id = int(row["id"])
+        node_id = int(row["node_id"])
+        with self._slot_lock(identity):
+            current = self._nodes.find_by_id(slot_id)
+            if (
+                not current
+                or current.get("state") != "ready"
+                or current.get("node_id") is None
+                or int(current["node_id"]) != node_id
+            ):
+                return HistoricalNodeStopOutcome.SKIPPED_SLOT_CHANGED
+            self._leases.delete_expired_for_slot(slot_id)
+            if self._leases.count_for_slot(slot_id) > 0:
+                return HistoricalNodeStopOutcome.SKIPPED_CONCURRENT_LEASE
+            if not self._nodes.mark_ready_paused(slot_id, node_id):
+                return HistoricalNodeStopOutcome.SKIPPED_SLOT_CHANGED
+        return HistoricalNodeStopOutcome.ALREADY_STOPPED_TO_PAUSED
 
     def retry_stopping(
         self,

@@ -194,6 +194,18 @@ class _Nodes:
             self.row["state"] = "paused"
             return True
 
+    def mark_ready_paused(self, slot_id, node_id):
+        with self._lock:
+            if (
+                not self.row
+                or self.row["id"] != slot_id
+                or self.row["node_id"] != node_id
+                or self.row["state"] != "ready"
+            ):
+                return False
+            self.row["state"] = "paused"
+            return True
+
     def record_stop_error(self, slot_id, node_id, error):
         with self._lock:
             matched = bool(
@@ -550,6 +562,61 @@ def test_historical_ready_slot_without_lease_stops_and_becomes_paused():
     assert outcome is HistoricalNodeStopOutcome.STOPPED_TO_PAUSED
     assert provider.stop_count == 1
     assert nodes.row["state"] == "paused"
+
+
+def test_historical_already_stopped_slot_becomes_paused_without_provider_call():
+    manager, nodes, leases, provider = _manager()
+    handle = manager.acquire(
+        NodeIdentity("u1", "o1", 99, 456),
+        session_id="session-1",
+        invocation_id="inv-1",
+        access_key="ak",
+        creator_id=1,
+    )
+    leases.release(handle.invocation_id, handle.lease_token)
+
+    outcome = manager.reconcile_stopped_unleased_ready_slot(dict(nodes.row))
+
+    assert outcome is HistoricalNodeStopOutcome.ALREADY_STOPPED_TO_PAUSED
+    assert provider.stop_count == 0
+    assert nodes.row["state"] == "paused"
+
+
+def test_historical_already_stopped_slot_with_concurrent_lease_is_skipped():
+    manager, nodes, _leases, provider = _manager()
+    manager.acquire(
+        NodeIdentity("u1", "o1", 99, 456),
+        session_id="session-1",
+        invocation_id="inv-1",
+        access_key="ak",
+        creator_id=1,
+    )
+
+    outcome = manager.reconcile_stopped_unleased_ready_slot(dict(nodes.row))
+
+    assert outcome is HistoricalNodeStopOutcome.SKIPPED_CONCURRENT_LEASE
+    assert provider.stop_count == 0
+    assert nodes.row["state"] == "ready"
+
+
+def test_historical_already_stopped_slot_changed_since_audit_is_skipped():
+    manager, nodes, leases, provider = _manager()
+    handle = manager.acquire(
+        NodeIdentity("u1", "o1", 99, 456),
+        session_id="session-1",
+        invocation_id="inv-1",
+        access_key="ak",
+        creator_id=1,
+    )
+    leases.release(handle.invocation_id, handle.lease_token)
+    candidate = dict(nodes.row)
+    nodes.row["node_id"] = 172
+
+    outcome = manager.reconcile_stopped_unleased_ready_slot(candidate)
+
+    assert outcome is HistoricalNodeStopOutcome.SKIPPED_SLOT_CHANGED
+    assert provider.stop_count == 0
+    assert nodes.row["state"] == "ready"
 
 
 def test_historical_ready_slot_with_concurrent_lease_is_skipped():

@@ -222,6 +222,19 @@ def test_delete_stopping_slot_is_fenced_by_slot_node_and_state(monkeypatch):
     assert conn.committed is True
 
 
+def test_mark_ready_paused_is_fenced_by_slot_node_and_ready_state(monkeypatch):
+    conn = _FakeConnection()
+    table = _make_table(monkeypatch, conn)
+
+    assert table.mark_ready_paused(7, 42) is True
+    assert conn.cursor_obj.params == (7, 42)
+    assert "id = %s" in conn.cursor_obj.sql
+    assert "node_id = %s" in conn.cursor_obj.sql
+    assert "state = 'ready'" in conn.cursor_obj.sql
+    assert "state = 'paused'" in conn.cursor_obj.sql
+    assert conn.committed is True
+
+
 def test_recycler_release_requires_token_and_still_expired_deadline(monkeypatch):
     conn = _FakeConnection()
     table = _make_table(monkeypatch, conn, BohriumNodeLeasesTable)

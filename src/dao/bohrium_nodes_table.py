@@ -284,6 +284,24 @@ class BohriumNodesTable(BaseTable):
                 conn.commit()
                 return cursor.rowcount > 0
 
+    def mark_ready_paused(self, slot_id: int, node_id: int) -> bool:
+        """provider 已停止时把仍为 ready 的历史槽位对账为 paused。"""
+        with self.get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    f"""
+                    UPDATE {self.table_name}
+                    SET state = 'paused', creating_invocation_id = NULL,
+                        creating_lease_token = NULL,
+                        creating_lease_expires_at = NULL,
+                        last_error = NULL, updated_at = NOW()
+                    WHERE id = %s AND node_id = %s AND state = 'ready'
+                    """,
+                    (slot_id, node_id),
+                )
+                conn.commit()
+                return cursor.rowcount > 0
+
     def list_expired_creating_slots(self, limit: int) -> list[dict[str, Any]]:
         """扫描 create/restart Worker 失联或准备失败后的槽位。"""
         with self.get_connection() as conn:
