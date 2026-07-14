@@ -407,6 +407,7 @@ class AgentRunService:
                 bohrium_required=bohrium_required,
                 workspace=workspace,
                 bohrium_node_sku_id=bohrium_node_sku_id,
+                invocation_id=invocation_id,
             )
             bohrium_svc = stage_result.bohrium_svc
             if stage_result.abort_result is not None:
@@ -776,6 +777,7 @@ class AgentRunService:
                         session_id=session_id,
                         pg_for_run=playground,
                         ssh_attached=ssh_attached,
+                        invocation_id=invocation_id,
                     )
                 except Exception:
                     logger.warning("Bohrium cleanup error", exc_info=True)

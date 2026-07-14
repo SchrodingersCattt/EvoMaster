@@ -81,6 +81,7 @@ async def run_bohrium_stage(
     bohrium_required: bool,
     workspace: str | None,
     bohrium_node_sku_id: int | None = None,
+    invocation_id: str | None = None,
 ) -> BohriumStageResult:
     """Run Bohrium setup and physically rebind the execution environment.
 
@@ -100,6 +101,7 @@ async def run_bohrium_stage(
         bohrium_required=effective_bohrium_required,
         workspace=workspace,
         bohrium_node_sku_id=bohrium_node_sku_id,
+        invocation_id=invocation_id,
     )
     ssh_attached = bohrium_result.ssh_attached
     if bohrium_result.abort_result is not None:

@@ -142,6 +142,80 @@ def test_successful_setup_returns_execution_binding_and_stores_runtime(
     assert SESSIONS["sess-ok"]["bohrium_node_reuse_tracked"] is True
 
 
+def test_invocation_setup_uses_fenced_lease_and_cleanup_releases_it() -> None:
+    from src.services.bohrium_node_lifecycle import NodeIdentity, NodeLease
+
+    identity = NodeIdentity("u1", "o1", 99, 12345)
+    lease = NodeLease(
+        identity=identity,
+        node_slot_id=7,
+        node_id=42,
+        session_id="sess-lease",
+        invocation_id="inv-1",
+        lease_token="token-1",
+        ip="10.0.0.1",
+        password="secret",
+    )
+    manager = MagicMock()
+    manager.acquire.return_value = lease
+    heartbeat = MagicMock()
+    original_session = MagicMock(is_open=True)
+    pg = _make_pg(original_session)
+    ssh = MagicMock(is_open=True, remote_project_root="/remote/proj")
+    sessions_service = MagicMock()
+    sessions_service.get_session.return_value = {
+        "user_id": "u1",
+        "org_id": "o1",
+        "project_id": 99,
+    }
+
+    with (
+        patch.object(arb, "SSHSession", return_value=ssh),
+        patch.object(arb, "_run_clear_remote_proxy", MagicMock()),
+        patch.object(arb, "_remote_session_workspace_root", return_value="/share"),
+        patch.object(arb, "get_bohrium_node_lease_manager", return_value=manager),
+        patch.object(arb, "NodeLeaseHeartbeat", return_value=heartbeat),
+        patch.object(arb.UserService, "get_bohrium_access_key", return_value="ak"),
+    ):
+        svc = _make_bohrium_service(sessions_service)
+        result = svc._setup_bohrium_for_run(
+            session_id="sess-lease",
+            pg=pg,
+            run_creds={"access_key": "ak", "project_id": 99},
+            user_id_for_ak="u1",
+            org_id="o1",
+            event_callback=MagicMock(),
+            run_started_at=0.0,
+            bohrium_node_sku_id=12345,
+            invocation_id="inv-1",
+        )
+
+        assert result.ssh_attached is True
+        manager.acquire.assert_called_once_with(
+            identity,
+            session_id="sess-lease",
+            invocation_id="inv-1",
+            access_key="ak",
+            creator_id=arb._creator_id_from_user("u1"),
+        )
+        heartbeat.start.assert_called_once_with()
+
+        svc._cleanup_bohrium_after_run(
+            session_id="sess-lease",
+            event_callback=MagicMock(),
+            pg_for_run=pg,
+            ssh_attached=True,
+            invocation_id="inv-1",
+        )
+
+    heartbeat.stop.assert_called_once_with()
+    manager.release.assert_called_once_with(
+        lease,
+        access_key="ak",
+        creator_id=arb._creator_id_from_user("u1"),
+    )
+
+
 def test_cleanup_destroys_created_node_when_reuse_table_insert_fails() -> None:
     node_svc = MagicMock()
     nodes_table = MagicMock()
@@ -392,6 +466,83 @@ def test_cleanup_restores_when_ssh_attached_false(
     assert pg._owns_session is True
     ssh_session.close.assert_called_once()
     assert "bohrium_runtime" not in SESSIONS["sess-x"]
+
+
+def test_lease_cleanup_does_not_depend_on_session_lookup() -> None:
+    heartbeat = MagicMock()
+    manager = MagicMock()
+    lease = MagicMock(invocation_id="inv-1", node_id=42)
+    SESSIONS["sess-lease-error"] = {
+        "bohrium_node_lease_runtimes": {
+            "inv-1": {
+                "heartbeat": heartbeat,
+                "lease": lease,
+                "manager": manager,
+                "access_key": "ak",
+                "creator_id": 1,
+            }
+        }
+    }
+    sessions_service = MagicMock()
+    sessions_service.get_session.side_effect = RuntimeError("db unavailable")
+    svc = _make_bohrium_service(sessions_service)
+
+    svc._cleanup_bohrium_after_run(
+        session_id="sess-lease-error",
+        event_callback=MagicMock(),
+        pg_for_run=None,
+        ssh_attached=False,
+        invocation_id="inv-1",
+    )
+
+    heartbeat.stop.assert_called_once_with()
+    manager.release.assert_called_once_with(lease, access_key="ak", creator_id=1)
+    sessions_service.get_session.assert_not_called()
+
+
+def test_lease_cleanup_only_releases_current_invocation() -> None:
+    heartbeat_1 = MagicMock()
+    heartbeat_2 = MagicMock()
+    manager = MagicMock()
+    lease_1 = MagicMock(invocation_id="inv-1", node_id=41)
+    lease_2 = MagicMock(invocation_id="inv-2", node_id=42)
+    runtime_2 = {
+        "heartbeat": heartbeat_2,
+        "lease": lease_2,
+        "manager": manager,
+        "access_key": "ak",
+        "creator_id": 1,
+    }
+    SESSIONS["sess-concurrent-leases"] = {
+        "bohrium_node_lease_runtimes": {
+            "inv-1": {
+                "heartbeat": heartbeat_1,
+                "lease": lease_1,
+                "manager": manager,
+                "access_key": "ak",
+                "creator_id": 1,
+            },
+            "inv-2": runtime_2,
+        }
+    }
+    sessions_service = MagicMock()
+    svc = _make_bohrium_service(sessions_service)
+
+    svc._cleanup_bohrium_after_run(
+        session_id="sess-concurrent-leases",
+        event_callback=MagicMock(),
+        pg_for_run=None,
+        ssh_attached=False,
+        invocation_id="inv-1",
+    )
+
+    heartbeat_1.stop.assert_called_once_with()
+    heartbeat_2.stop.assert_not_called()
+    manager.release.assert_called_once_with(lease_1, access_key="ak", creator_id=1)
+    assert SESSIONS["sess-concurrent-leases"]["bohrium_node_lease_runtimes"] == {
+        "inv-2": runtime_2
+    }
+    sessions_service.get_session.assert_not_called()
 
 
 def test_setup_with_required_bohrium_can_continue_after_retry_success() -> None:

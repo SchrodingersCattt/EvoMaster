@@ -3,7 +3,10 @@ from __future__ import annotations
 import pytest
 
 from src.services import bohrium_node_service as node_module
-from src.services.bohrium_node_service import BohriumNodeService
+from src.services.bohrium_node_service import (
+    BohriumNodeNotFoundError,
+    BohriumNodeService,
+)
 from src.utils.logger import LogContext
 
 
@@ -164,3 +167,45 @@ def test_create_node_records_platform_code_failure(
     assert len(span.exceptions) == 1
     assert "record not found" in str(span.exceptions[0])
     assert "secret-ak" not in span.attributes["bohrium.request.body_json"]
+
+
+def test_stop_node_uses_pause_contract_instead_of_delete(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+
+    class _StopResponse(_FakeResponse):
+        content = b'{"code": 0}'
+
+    monkeypatch.setattr(
+        node_module.httpx,
+        "Client",
+        lambda timeout: _FakeClient(_StopResponse({"code": 0}), captured),
+    )
+
+    _service().stop_node("secret-ak", 123, 42, creator_id=110680)
+
+    assert captured["url"].endswith("/openapi/v1/node/stop/123")
+    assert captured["json"] == {
+        "creatorId": 110680,
+        "projectId": 42,
+        "device": "container",
+        "stopType": 1,
+    }
+
+
+def test_stop_node_reports_provider_deleted_node(monkeypatch: pytest.MonkeyPatch):
+    captured: dict[str, object] = {}
+
+    class _MissingResponse(_FakeResponse):
+        content = b'{"code": 404}'
+        status_code = 404
+
+    monkeypatch.setattr(
+        node_module.httpx,
+        "Client",
+        lambda timeout: _FakeClient(_MissingResponse({"code": 404}), captured),
+    )
+
+    with pytest.raises(BohriumNodeNotFoundError):
+        _service().stop_node("secret-ak", 123, 42, creator_id=110680)

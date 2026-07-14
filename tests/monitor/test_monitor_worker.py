@@ -2,7 +2,7 @@
 
 只验证「外壳 ↔ 巡检单元」的接缝：``_run_monitor_loop`` 每轮先后调用
 ``BohriumMonitor.tick()``、``BohriumCompletionScheduler.tick()`` 与
-``StaleSessionReconciler.tick()``、各记一条
+``BohriumNodeRecycler.tick()``、``StaleSessionReconciler.tick()``、各记一条
 summary、收到 ``_stop_event`` 后干净退出。各 tick 单元自身的行为（透传
 summary / 吞异常）分别由 ``tests/services/test_bohrium_poller.py`` 与
 ``tests/services/test_bohrium_completion_scheduler.py`` 覆盖，这里不重复。
@@ -36,6 +36,11 @@ def test_run_monitor_loop_ticks_all_jobs_each_round(monkeypatch, caplog):
             ticks.append("stale_sessions")
             return {"scanned": 7, "fixed_active": 2}
 
+    class _StubNodeRecycler:
+        def tick(self) -> dict[str, int]:
+            ticks.append("node_recycler")
+            return {"expired_released": 2, "stop_retried": 1}
+
     monitor_worker._stop_event.clear()
     monkeypatch.setattr(monitor_worker, "BohriumMonitor", lambda: _StubMonitor())
     monkeypatch.setattr(
@@ -43,6 +48,9 @@ def test_run_monitor_loop_ticks_all_jobs_each_round(monkeypatch, caplog):
     )
     monkeypatch.setattr(
         monitor_worker, "StaleSessionReconciler", lambda: _StubStaleReconciler()
+    )
+    monkeypatch.setattr(
+        monitor_worker, "BohriumNodeRecycler", lambda: _StubNodeRecycler()
     )
     monkeypatch.setattr(monitor_worker, "_TICK_INTERVAL", 0.0)
 
@@ -53,7 +61,7 @@ def test_run_monitor_loop_ticks_all_jobs_each_round(monkeypatch, caplog):
         monitor_worker._stop_event.clear()  # 复位模块级单例，避免污染后续测试
 
     # poller 设了 stop 之后本轮后续 job 仍执行（先完成本轮再退出）
-    assert ticks == ["poll", "delivery", "stale_sessions"]
+    assert ticks == ["poll", "delivery", "node_recycler", "stale_sessions"]
     assert any(
         "bohrium" in r.getMessage() and "'claimed': 3" in r.getMessage()
         for r in caplog.records
@@ -62,6 +70,10 @@ def test_run_monitor_loop_ticks_all_jobs_each_round(monkeypatch, caplog):
         "delivery" in r.getMessage() and "'triggered': 1" in r.getMessage()
         for r in caplog.records
     ), "应记录本轮 BohriumCompletionScheduler.tick() 返回的 summary"
+    assert any(
+        "node_recycler" in r.getMessage() and "'expired_released': 2" in r.getMessage()
+        for r in caplog.records
+    ), "应记录本轮 BohriumNodeRecycler.tick() 返回的 summary"
     assert any(
         "stale_sessions" in r.getMessage() and "'fixed_active': 2" in r.getMessage()
         for r in caplog.records

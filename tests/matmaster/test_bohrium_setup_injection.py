@@ -72,6 +72,7 @@ class TestBohriumSetupServiceOrchestration:
                 session_id="session-123",
                 playground=object(),
                 run_started_at=1000.0,
+                invocation_id="inv-123",
             )
 
         mock_load.assert_called_once_with("session-123")
@@ -82,6 +83,7 @@ class TestBohriumSetupServiceOrchestration:
         assert kwargs["user_id_for_ak"] == "u1"
         assert kwargs["org_id"] == "org1"
         assert kwargs["event_callback"] is event_cb
+        assert kwargs["invocation_id"] == "inv-123"
         assert result is expected
 
     @pytest.mark.asyncio
@@ -98,6 +100,7 @@ class TestBohriumSetupServiceOrchestration:
                 session_id="s1",
                 pg_for_run=object(),
                 ssh_attached=True,
+                invocation_id="inv-1",
             )
 
         mock_cleanup.assert_called_once()
@@ -105,6 +108,7 @@ class TestBohriumSetupServiceOrchestration:
         assert kwargs["session_id"] == "s1"
         assert kwargs["event_callback"] is event_cb
         assert kwargs["ssh_attached"] is True
+        assert kwargs["invocation_id"] == "inv-1"
 
     @pytest.mark.asyncio
     async def test_run_setup_delegates_bohrium_required_flag(self):
