@@ -72,6 +72,10 @@ class _FakeClient:
         self._captured.update({"url": url, "headers": headers, "json": json})
         return self._response
 
+    def get(self, url: str, *, params: dict, headers: dict) -> _FakeResponse:
+        self._captured.update({"url": url, "params": params, "headers": headers})
+        return self._response
+
 
 def _service() -> BohriumNodeService:
     service = BohriumNodeService()
@@ -209,3 +213,37 @@ def test_stop_node_reports_provider_deleted_node(monkeypatch: pytest.MonkeyPatch
 
     with pytest.raises(BohriumNodeNotFoundError):
         _service().stop_node("secret-ak", 123, 42, creator_id=110680)
+
+
+def test_node_list_log_redacts_access_key(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    captured: dict[str, object] = {}
+    response = _FakeResponse(
+        {
+            "code": 0,
+            "data": {
+                "items": [
+                    {
+                        "nodeId": 123,
+                        "status": 2,
+                        "imageName": "matmaster:v1",
+                    }
+                ]
+            },
+        }
+    )
+    monkeypatch.setattr(
+        node_module.httpx,
+        "Client",
+        lambda timeout: _FakeClient(response, captured),
+    )
+    caplog.set_level("INFO", logger=node_module.__name__)
+
+    detail = _service().get_node_detail("secret-ak", 123)
+
+    assert detail is not None
+    assert captured["headers"]["accessKey"] == "secret-ak"
+    assert "accessKey: <redacted>" in caplog.text
+    assert "secret-ak" not in caplog.text

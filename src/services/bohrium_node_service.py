@@ -207,9 +207,11 @@ class BohriumNodeService:
     def _fetch_node_list(self, access_key: str) -> list[dict[str, Any]]:
         """请求 node/list 返回 items，供 get_node_info / get_node_detail 复用。"""
         url = f"{self._host}/openapi/v1/node/list?queryType=private"
-        ak_esc = access_key.replace("'", "'\\''")
-        curl_cmd = f"curl -v -X GET '{url}' -H 'accessKey: {ak_esc}'"
-        logger.info('Bohrium node/list curl (copy to reproduce): %s', curl_cmd)
+        logger.info(
+            "Bohrium node/list request: curl -v -X GET '%s' "
+            "-H 'accessKey: <redacted>'",
+            url,
+        )
         with httpx.Client(timeout=30.0) as client:
             r = client.get(
                 f"{self._host}/openapi/v1/node/list",
