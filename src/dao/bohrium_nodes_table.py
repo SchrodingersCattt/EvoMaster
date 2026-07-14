@@ -111,6 +111,51 @@ class BohriumNodesTable(BaseTable):
                 conn.commit()
                 return cursor.rowcount > 0
 
+    def set_lifecycle_policy(
+        self,
+        slot_id: int,
+        lifecycle_policy: str,
+        idle_timeout_seconds: int | None,
+    ) -> bool:
+        """在槽位短锁内写入最近一次成功 acquire 的 desired policy。"""
+        with self.get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    f"""
+                    UPDATE {self.table_name}
+                    SET lifecycle_policy = %s, idle_timeout_seconds = %s,
+                        updated_at = NOW()
+                    WHERE id = %s
+                      AND state IN ('creating', 'ready', 'paused', 'idle')
+                    """,
+                    (lifecycle_policy, idle_timeout_seconds, slot_id),
+                )
+                conn.commit()
+                return cursor.rowcount > 0
+
+    def claim_idle_for_acquire(
+        self,
+        slot_id: int,
+        node_id: int,
+        lifecycle_policy: str,
+        idle_timeout_seconds: int | None,
+    ) -> bool:
+        """新 invocation 原子取消 idle deadline 并恢复 ready。"""
+        with self.get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    f"""
+                    UPDATE {self.table_name}
+                    SET state = 'ready', lifecycle_policy = %s,
+                        idle_timeout_seconds = %s, idle_expires_at = NULL,
+                        last_error = NULL, last_used_at = NOW(), updated_at = NOW()
+                    WHERE id = %s AND node_id = %s AND state = 'idle'
+                    """,
+                    (lifecycle_policy, idle_timeout_seconds, slot_id, node_id),
+                )
+                conn.commit()
+                return cursor.rowcount > 0
+
     def attach_creating_node(
         self, slot_id: int, creating_lease_token: str, node_id: int
     ) -> bool:
@@ -213,7 +258,7 @@ class BohriumNodesTable(BaseTable):
                 return cursor.rowcount > 0
 
     def mark_stopping(self, slot_id: int, node_id: int) -> bool:
-        """最后一个 lease 释放后把 ready 槽位切到 stopping。"""
+        """把无 live lease 的 ready/idle 槽位切到 stopping。"""
         with self.get_connection() as conn:
             with conn.cursor() as cursor:
                 cursor.execute(
@@ -221,7 +266,61 @@ class BohriumNodesTable(BaseTable):
                     UPDATE {self.table_name}
                     SET state = 'stopping', last_used_at = NOW(),
                         last_error = NULL, updated_at = NOW()
+                    WHERE id = %s AND node_id = %s
+                      AND state IN ('ready', 'idle')
+                    """,
+                    (slot_id, node_id),
+                )
+                conn.commit()
+                return cursor.rowcount > 0
+
+    def mark_idle(
+        self,
+        slot_id: int,
+        node_id: int,
+        lifecycle_policy: str,
+        idle_timeout_seconds: int | None,
+    ) -> bool:
+        """最后一个 lease 释放后将 ready 槽位转为 idle。"""
+        with self.get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    f"""
+                    UPDATE {self.table_name}
+                    SET state = 'idle', lifecycle_policy = %s,
+                        idle_timeout_seconds = %s,
+                        idle_expires_at = CASE
+                            WHEN %s IS NULL THEN NULL
+                            ELSE DATE_ADD(NOW(), INTERVAL %s SECOND)
+                        END,
+                        last_used_at = NOW(), last_error = NULL,
+                        updated_at = NOW()
                     WHERE id = %s AND node_id = %s AND state = 'ready'
+                    """,
+                    (
+                        lifecycle_policy,
+                        idle_timeout_seconds,
+                        idle_timeout_seconds,
+                        idle_timeout_seconds,
+                        slot_id,
+                        node_id,
+                    ),
+                )
+                conn.commit()
+                return cursor.rowcount > 0
+
+    def mark_stopping_due_idle(self, slot_id: int, node_id: int) -> bool:
+        """只 claim 仍已到期的 idle_timeout 槽位，避免旧扫描误停复用节点。"""
+        with self.get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    f"""
+                    UPDATE {self.table_name}
+                    SET state = 'stopping', last_error = NULL, updated_at = NOW()
+                    WHERE id = %s AND node_id = %s AND state = 'idle'
+                      AND lifecycle_policy = 'idle_timeout'
+                      AND idle_expires_at IS NOT NULL
+                      AND idle_expires_at <= NOW()
                     """,
                     (slot_id, node_id),
                 )
@@ -276,6 +375,7 @@ class BohriumNodesTable(BaseTable):
                     SET state = 'paused', creating_invocation_id = NULL,
                         creating_lease_token = NULL,
                         creating_lease_expires_at = NULL,
+                        idle_expires_at = NULL,
                         last_error = NULL, updated_at = NOW()
                     WHERE id = %s AND node_id = %s AND state = 'stopping'
                     """,
@@ -294,6 +394,7 @@ class BohriumNodesTable(BaseTable):
                     SET state = 'paused', creating_invocation_id = NULL,
                         creating_lease_token = NULL,
                         creating_lease_expires_at = NULL,
+                        idle_expires_at = NULL,
                         last_error = NULL, updated_at = NOW()
                     WHERE id = %s AND node_id = %s AND state = 'ready'
                     """,
@@ -359,6 +460,27 @@ class BohriumNodesTable(BaseTable):
                     LIMIT %s
                     """,
                     (min_age_seconds, limit),
+                )
+                return cursor.fetchall() or []
+
+    def list_due_idle_slots(self, limit: int) -> list[dict[str, Any]]:
+        """扫描已到期 idle_timeout；NULL deadline 的 keep_running 不会命中。"""
+        with self.get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    f"""
+                    SELECT id, user_id, org_id, project_id, sku_id, node_id,
+                           state, lifecycle_policy, idle_timeout_seconds,
+                           idle_expires_at, last_error, updated_at
+                    FROM {self.table_name}
+                    WHERE state = 'idle'
+                      AND lifecycle_policy = 'idle_timeout'
+                      AND idle_expires_at IS NOT NULL
+                      AND idle_expires_at <= NOW()
+                    ORDER BY idle_expires_at ASC
+                    LIMIT %s
+                    """,
+                    (limit,),
                 )
                 return cursor.fetchall() or []
 

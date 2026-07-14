@@ -37,14 +37,16 @@ from src.services.bohrium_run_support import (
     _load_run_credentials,
     _remote_session_workspace_root,
 )
+from src.services.bohrium_runtime_config import (
+    BOHRIUM_REMOTE_USER_PLUGINS_ROOT,
+    BOHRIUM_REMOTE_USER_SKILLS_ROOT,
+    CLEAR_REMOTE_PROXY_SCRIPT,
+)
 from src.services.sessions_service import SESSIONS
 from src.services.user_service import BohriumAccessKeyFetchResult, UserService
 from src.utils.constant import BOHRIUM_DEFAULT_IMAGE_ID, BOHRIUM_DEFAULT_IMAGE_NAME
 
 logger = logging.getLogger(__name__)
-
-_BOHRIUM_REMOTE_USER_SKILLS_ROOT = "/personal/.matmaster/skills"
-_BOHRIUM_REMOTE_USER_PLUGINS_ROOT = "/personal/.matmaster/plugins"
 
 
 def _resolve_bohrium_node_sku_id(sku_id: int | None) -> int:
@@ -54,41 +56,6 @@ def _resolve_bohrium_node_sku_id(sku_id: int | None) -> int:
         if parsed > 0:
             return parsed
     return int(os.environ.get("BOHRIUM_SKU_ID", DEFAULT_SKU_ID))
-
-
-# Bash snippet for root on Bohrium SSH nodes: wget/curl/git/pip + env.
-# GNU wget only accepts ``use_proxy = on|off``; ``use_proxy = no`` is invalid and
-# leaves /etc/wgetrc proxy (e.g. ga.dp.tech:8118) in effect.
-# Pip reads ``~/.pip/pip.conf`` / ``/etc/pip.conf`` ``[global] proxy=`` independently
-# of shell env; strip those lines so ``pip install`` does not force ga.dp.tech.
-_CLEAR_REMOTE_PROXY_SCRIPT: str = (
-    "rm -f /root/speedUp.sh /speedUp.sh; "
-    "printf %s\\n "
-    "'# matmaster-evo: disable platform proxy for OSS/outbound' "
-    "'use_proxy = off' "
-    "'proxy =' "
-    "'http_proxy =' "
-    "'https_proxy =' "
-    "'ftp_proxy =' "
-    "> /root/.wgetrc; "
-    "printf %s\\n "
-    "'# matmaster-evo: disable curl default proxy' "
-    "'proxy = \"\"' "
-    "'noproxy = \"*\"' "
-    "> /root/.curlrc; "
-    "git config --global --unset-all http.proxy 2>/dev/null; true; "
-    "git config --global --unset-all https.proxy 2>/dev/null; true; "
-    "[ -f /root/.pip/pip.conf ] && sed -i "
-    "'/^[[:space:]]*proxy[[:space:]]*=/d' "
-    "/root/.pip/pip.conf 2>/dev/null; true; "
-    "[ -f /etc/pip.conf ] && sed -i "
-    "'/^[[:space:]]*proxy[[:space:]]*=/d' "
-    "/etc/pip.conf 2>/dev/null; true; "
-    "export http_proxy= https_proxy= HTTP_PROXY= HTTPS_PROXY= ALL_PROXY= "
-    "NO_PROXY= no_proxy= ftp_proxy= FTP_PROXY=; "
-    "unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY ALL_PROXY "
-    "NO_PROXY no_proxy ftp_proxy FTP_PROXY WGETRC 2>/dev/null; "
-)
 
 
 def _store_bohrium_runtime(
@@ -146,10 +113,10 @@ def _restore_bohrium_runtime_state(session_id: str, pg: Any | None) -> None:
 
 
 def _configure_remote_user_skill_root(ssh_session: Any) -> None:
-    ssh_session.remote_user_skills_root = _BOHRIUM_REMOTE_USER_SKILLS_ROOT
+    ssh_session.remote_user_skills_root = BOHRIUM_REMOTE_USER_SKILLS_ROOT
     ssh_session.remote_skill_roots = [
-        _BOHRIUM_REMOTE_USER_PLUGINS_ROOT,
-        _BOHRIUM_REMOTE_USER_SKILLS_ROOT,
+        BOHRIUM_REMOTE_USER_PLUGINS_ROOT,
+        BOHRIUM_REMOTE_USER_SKILLS_ROOT,
     ]
 
 
@@ -167,7 +134,7 @@ def _run_clear_remote_proxy(pg: Any, phase: str) -> None:
             "run_agent: clear_remote_proxy (%s) running (wgetrc/curlrc/pip.conf + env)",
             phase,
         )
-        result = session.exec_bash(_CLEAR_REMOTE_PROXY_SCRIPT, timeout=20)
+        result = session.exec_bash(CLEAR_REMOTE_PROXY_SCRIPT, timeout=20)
         exit_code = result.get("exit_code", -1)
         out = (result.get("output") or result.get("stdout") or "").strip()
         if exit_code == 0:
@@ -240,6 +207,8 @@ class BohriumSetupService:
         run_started_at: float,
         workspace: str | None = None,
         bohrium_node_sku_id: int | None = None,
+        bohrium_node_lifecycle_policy: str = "run_end",
+        bohrium_node_idle_timeout_seconds: int | None = None,
         invocation_id: str | None = None,
     ) -> BohriumSetupResult:
         return _setup_bohrium_for_run(
@@ -252,6 +221,8 @@ class BohriumSetupService:
             run_started_at=run_started_at,
             workspace=workspace,
             bohrium_node_sku_id=bohrium_node_sku_id,
+            bohrium_node_lifecycle_policy=bohrium_node_lifecycle_policy,
+            bohrium_node_idle_timeout_seconds=bohrium_node_idle_timeout_seconds,
             invocation_id=invocation_id,
         )
 
@@ -349,6 +320,8 @@ class BohriumSetupService:
         bohrium_required: bool = False,
         workspace: str | None = None,
         bohrium_node_sku_id: int | None = None,
+        bohrium_node_lifecycle_policy: str = "run_end",
+        bohrium_node_idle_timeout_seconds: int | None = None,
         invocation_id: str | None = None,
     ) -> BohriumSetupResult:
         """Load credentials, bridge events, and run setup in the executor."""
@@ -365,6 +338,8 @@ class BohriumSetupService:
                 bohrium_required=bohrium_required,
                 workspace=workspace,
                 bohrium_node_sku_id=bohrium_node_sku_id,
+                bohrium_node_lifecycle_policy=bohrium_node_lifecycle_policy,
+                bohrium_node_idle_timeout_seconds=(bohrium_node_idle_timeout_seconds),
                 invocation_id=invocation_id,
             ),
         )
@@ -379,6 +354,8 @@ class BohriumSetupService:
         bohrium_required: bool = False,
         workspace: str | None = None,
         bohrium_node_sku_id: int | None = None,
+        bohrium_node_lifecycle_policy: str = "run_end",
+        bohrium_node_idle_timeout_seconds: int | None = None,
         invocation_id: str | None = None,
     ) -> BohriumSetupResult:
         run_creds, user_id_for_ak, org_id = self._load_run_credentials(session_id)
@@ -447,6 +424,8 @@ class BohriumSetupService:
             run_started_at=run_started_at,
             workspace=workspace,
             bohrium_node_sku_id=bohrium_node_sku_id,
+            bohrium_node_lifecycle_policy=bohrium_node_lifecycle_policy,
+            bohrium_node_idle_timeout_seconds=bohrium_node_idle_timeout_seconds,
             invocation_id=invocation_id,
         )
 
@@ -485,6 +464,8 @@ def _setup_bohrium_for_run(
     run_started_at: float,
     workspace: str | None = None,
     bohrium_node_sku_id: int | None = None,
+    bohrium_node_lifecycle_policy: str = "run_end",
+    bohrium_node_idle_timeout_seconds: int | None = None,
     invocation_id: str | None = None,
 ) -> BohriumSetupResult:
     """Prepare Bohrium node and SSH session for the run when credentials exist."""
@@ -530,6 +511,8 @@ def _setup_bohrium_for_run(
                 invocation_id=invocation_id,
                 access_key=access_key,
                 creator_id=_creator_id_from_user(user_id_for_ak),
+                lifecycle_policy=bohrium_node_lifecycle_policy,
+                idle_timeout_seconds=bohrium_node_idle_timeout_seconds,
             )
             node_id = node_lease.node_id
             node_ip = node_lease.ip

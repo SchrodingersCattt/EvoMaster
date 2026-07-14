@@ -121,6 +121,29 @@ class _Nodes:
             self.row["creating_lease_token"] = None
             return True
 
+    def set_lifecycle_policy(self, slot_id, policy, idle_timeout_seconds):
+        with self._lock:
+            if not self.row or self.row["id"] != slot_id:
+                return False
+            self.row["lifecycle_policy"] = policy
+            self.row["idle_timeout_seconds"] = idle_timeout_seconds
+            return True
+
+    def claim_idle_for_acquire(self, slot_id, node_id, policy, idle_timeout_seconds):
+        with self._lock:
+            if (
+                not self.row
+                or self.row["id"] != slot_id
+                or self.row["node_id"] != node_id
+                or self.row["state"] != "idle"
+            ):
+                return False
+            self.row["state"] = "ready"
+            self.row["lifecycle_policy"] = policy
+            self.row["idle_timeout_seconds"] = idle_timeout_seconds
+            self.row["idle_expires_at"] = None
+            return True
+
     def attach_creating_node(self, slot_id, token, node_id):
         with self._lock:
             if (
@@ -148,7 +171,38 @@ class _Nodes:
                 not self.row
                 or self.row["id"] != slot_id
                 or self.row["node_id"] != node_id
+                or self.row["state"] not in {"ready", "idle"}
+            ):
+                return False
+            self.row["state"] = "stopping"
+            return True
+
+    def mark_idle(self, slot_id, node_id, policy, idle_timeout_seconds):
+        with self._lock:
+            if (
+                not self.row
+                or self.row["id"] != slot_id
+                or self.row["node_id"] != node_id
                 or self.row["state"] != "ready"
+            ):
+                return False
+            self.row["state"] = "idle"
+            self.row["lifecycle_policy"] = policy
+            self.row["idle_timeout_seconds"] = idle_timeout_seconds
+            self.row["idle_expires_at"] = (
+                object() if idle_timeout_seconds is not None else None
+            )
+            return True
+
+    def mark_stopping_due_idle(self, slot_id, node_id):
+        with self._lock:
+            if (
+                not self.row
+                or self.row["id"] != slot_id
+                or self.row["node_id"] != node_id
+                or self.row["state"] != "idle"
+                or self.row.get("lifecycle_policy") != "idle_timeout"
+                or self.row.get("idle_expires_at") is None
             ):
                 return False
             self.row["state"] = "stopping"
@@ -192,6 +246,7 @@ class _Nodes:
             ):
                 return False
             self.row["state"] = "paused"
+            self.row["idle_expires_at"] = None
             return True
 
     def mark_ready_paused(self, slot_id, node_id):

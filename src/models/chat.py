@@ -540,6 +540,13 @@ class StructureSelection(BaseModel):
     atoms: list[StructureSelectionAtom] = Field(default_factory=list)
 
 
+class BohriumNodeStopRequest(BaseModel):
+    """手动关闭当前用户在指定项目/SKU 下的共享 Node 槽位。"""
+
+    project_id: int = Field(gt=0)
+    sku_id: int = Field(gt=0)
+
+
 class ChatSendRequest(BaseModel):
     """POST /chat/sessions/{session_id}/stream 请求体：不传或 content 为空则仅拉历史+ping；有 content 则发送消息并返回本次运行的 SSE 流"""
 
@@ -587,6 +594,16 @@ class ChatSendRequest(BaseModel):
         gt=0,
         description="可选，本轮 Bohrium 会话节点 SKU ID；透传为 node/add 与 node/restart 的 skuId，未传则使用平台默认",
     )
+    bohrium_node_lifecycle_policy: Literal[
+        "run_end", "idle_timeout", "keep_running"
+    ] = Field(
+        default="run_end",
+        description="本轮 Bohrium Node 最后一个 lease 释放后的关闭策略",
+    )
+    bohrium_node_idle_timeout_seconds: int | None = Field(
+        default=None,
+        description="idle_timeout 策略的空闲时长；仅允许 900/1800/7200 秒",
+    )
     replace_last_turn: bool = Field(
         default=False,
         description="为 true 时先物理删除最后一条 User/query 及之后的所有事件，再以新 content 发送；用于编辑重发",
@@ -604,6 +621,15 @@ class ChatSendRequest(BaseModel):
         default=None,
         description="内部发起的完成通知控制；缺省时按 origin 约定默认（用户发送路径恒为 None=保持现状）",
     )
+
+    @model_validator(mode="after")
+    def validate_bohrium_node_lifecycle(self):
+        if self.bohrium_node_lifecycle_policy == "idle_timeout":
+            if self.bohrium_node_idle_timeout_seconds not in {900, 1800, 7200}:
+                raise ValueError("unsupported Bohrium Node idle timeout")
+        elif self.bohrium_node_idle_timeout_seconds is not None:
+            raise ValueError("idle timeout is only valid for idle_timeout policy")
+        return self
 
     model_config = ConfigDict(
         json_schema_extra={

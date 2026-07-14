@@ -9,6 +9,9 @@ from collections.abc import AsyncGenerator, Callable
 from datetime import datetime, timezone
 from functools import lru_cache
 
+from clients.matmaster_platform.runtime_preference import (
+    get_user_level_runtime_preference,
+)
 from matmaster.config.exp import DEFAULT_MODE, SUPPORTED_MODES
 from matmaster.context.sources.turn_input import TurnInput, TurnInstructionTag
 from src.dao.redis_dao import STREAM_CHANNEL_PREFIX, get_redis_dao, user_wakeup_channel
@@ -233,6 +236,8 @@ class ChatStreamService:
         bohrium_submit_confirmation_required: bool | None = None,
         bohrium_job_max_runtime_seconds: int | None = None,
         bohrium_node_sku_id: int | None = None,
+        bohrium_node_lifecycle_policy: str = "run_end",
+        bohrium_node_idle_timeout_seconds: int | None = None,
         workspace: str | None = None,
         origin: str | None = None,
         delivery: dict | None = None,
@@ -286,6 +291,8 @@ class ChatStreamService:
             ),
             "bohrium_job_max_runtime_seconds": bohrium_job_max_runtime_seconds,
             "bohrium_node_sku_id": bohrium_node_sku_id,
+            "bohrium_node_lifecycle_policy": bohrium_node_lifecycle_policy,
+            "bohrium_node_idle_timeout_seconds": bohrium_node_idle_timeout_seconds,
             "workspace": workspace_value,
             "origin": origin,
             "delivery": delivery,
@@ -407,6 +414,25 @@ class ChatStreamService:
                 status="error", reason="programmatic_trigger_disabled"
             )
 
+        node_lifecycle_policy = "run_end"
+        node_idle_timeout_seconds = None
+        try:
+            runtime_preference = get_user_level_runtime_preference(owner)
+            node_lifecycle_policy = (
+                runtime_preference.bohrium_node_lifecycle_policy or "run_end"
+            )
+            node_idle_timeout_seconds = (
+                runtime_preference.bohrium_node_idle_timeout_seconds
+            )
+        except Exception:
+            logger.warning(
+                "trigger node lifecycle preference lookup failed; fallback run_end "
+                "session_id=%s user_id=%s",
+                sid,
+                owner,
+                exc_info=True,
+            )
+
         if dedup_key and get_redis_dao().dedup_key_exists(dedup_key):
             logger.info(
                 "trigger prepare deduped session_id=%s dedup_key=%s", sid, dedup_key
@@ -450,6 +476,8 @@ class ChatStreamService:
             mode=resolved_mode,
             model=model_val,
             byok_credential_id=None,
+            bohrium_node_lifecycle_policy=node_lifecycle_policy,
+            bohrium_node_idle_timeout_seconds=node_idle_timeout_seconds,
             workspace=workspace,
             origin=origin,
             delivery=delivery_payload,
@@ -880,6 +908,8 @@ class ChatStreamService:
             ),
             bohrium_job_max_runtime_seconds=req.bohrium_job_max_runtime_seconds,
             bohrium_node_sku_id=req.bohrium_node_sku_id,
+            bohrium_node_lifecycle_policy=req.bohrium_node_lifecycle_policy,
+            bohrium_node_idle_timeout_seconds=(req.bohrium_node_idle_timeout_seconds),
             workspace=resolved_directory.remote_workdir,
             origin=None,
             delivery=None,

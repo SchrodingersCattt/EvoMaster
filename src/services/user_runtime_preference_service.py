@@ -28,6 +28,9 @@ class UserRuntimePreference:
     user_bohrium_submit_confirmation_required: bool | None = None
     bohrium_job_max_runtime_seconds: int | None = None
     bohrium_node_sku_id: int | None = None
+    bohrium_node_lifecycle_policy: str = "run_end"
+    bohrium_node_idle_timeout_seconds: int | None = None
+    bohrium_node_lifecycle_prompt_enabled: bool = True
     programmatic_trigger_enabled: bool | None = None
     loaded: bool = False
 
@@ -74,6 +77,13 @@ def get_user_runtime_preference(
         ),
         bohrium_job_max_runtime_seconds=user_level.bohrium_job_max_runtime_seconds,
         bohrium_node_sku_id=user_level.bohrium_node_sku_id,
+        bohrium_node_lifecycle_policy=user_level.bohrium_node_lifecycle_policy,
+        bohrium_node_idle_timeout_seconds=(
+            user_level.bohrium_node_idle_timeout_seconds
+        ),
+        bohrium_node_lifecycle_prompt_enabled=(
+            user_level.bohrium_node_lifecycle_prompt_enabled
+        ),
         programmatic_trigger_enabled=user_level.programmatic_trigger_enabled,
         loaded=user_level.loaded,
     )

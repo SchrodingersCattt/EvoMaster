@@ -99,6 +99,10 @@ async def _run_agent_and_reply_feishu(
         ),
         bohrium_job_max_runtime_seconds=runtime_pref.bohrium_job_max_runtime_seconds,
         bohrium_node_sku_id=runtime_pref.bohrium_node_sku_id,
+        bohrium_node_lifecycle_policy=runtime_pref.bohrium_node_lifecycle_policy,
+        bohrium_node_idle_timeout_seconds=(
+            runtime_pref.bohrium_node_idle_timeout_seconds
+        ),
     )
     try:
         # 传 project：飞书入口的会话归属就是 runtime_pref.project_id，

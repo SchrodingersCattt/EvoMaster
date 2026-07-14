@@ -33,6 +33,35 @@ logger = logging.getLogger(__name__)
 _SLOT_LOCK_PREFIX = "matmaster:bohrium:node-slot:"
 
 
+class NodeLifecyclePolicy(str, Enum):
+    RUN_END = "run_end"
+    IDLE_TIMEOUT = "idle_timeout"
+    KEEP_RUNNING = "keep_running"
+
+
+NODE_IDLE_TIMEOUT_OPTIONS_SECONDS = frozenset({900, 1800, 7200})
+
+
+def resolve_node_lifecycle(
+    policy: str | NodeLifecyclePolicy | None,
+    idle_timeout_seconds: int | None,
+) -> tuple[NodeLifecyclePolicy, int | None]:
+    """Validate and normalize one per-invocation lifecycle snapshot."""
+    try:
+        resolved = NodeLifecyclePolicy(policy or NodeLifecyclePolicy.RUN_END)
+    except ValueError as exc:
+        raise ValueError(
+            f"unsupported Bohrium Node lifecycle policy: {policy}"
+        ) from exc
+    if resolved is NodeLifecyclePolicy.IDLE_TIMEOUT:
+        if idle_timeout_seconds not in NODE_IDLE_TIMEOUT_OPTIONS_SECONDS:
+            raise ValueError("unsupported Bohrium Node idle timeout")
+        return resolved, idle_timeout_seconds
+    if idle_timeout_seconds is not None:
+        raise ValueError("idle timeout is only valid for idle_timeout policy")
+    return resolved, None
+
+
 class HistoricalNodeStopOutcome(str, Enum):
     """Terminal outcomes for one explicitly audited historical slot."""
 
@@ -197,8 +226,13 @@ class BohriumNodeLeaseManager:
         access_key: str,
         creator_id: int = 0,
         expected_image_name: str | None = None,
+        lifecycle_policy: str | NodeLifecyclePolicy | None = None,
+        idle_timeout_seconds: int | None = None,
     ) -> NodeLease:
         """Acquire an invocation lease, creating or restarting the shared Node."""
+        policy, idle_timeout_seconds = resolve_node_lifecycle(
+            lifecycle_policy, idle_timeout_seconds
+        )
         if expected_image_name is None:
             expected_image_name = (
                 os.environ.get("BOHRIUM_EXPECTED_IMAGE_NAME")
@@ -244,6 +278,10 @@ class BohriumNodeLeaseManager:
                 state = str(row.get("state") or "ready")
                 node_id = row.get("node_id")
                 if state == "ready" and node_id is not None:
+                    if not self._nodes.set_lifecycle_policy(
+                        int(row["id"]), policy.value, idle_timeout_seconds
+                    ):
+                        continue
                     self._leases.acquire(
                         int(row["id"]),
                         session_id,
@@ -252,6 +290,28 @@ class BohriumNodeLeaseManager:
                         self._config.lease_ttl_seconds,
                     )
                     action = "reuse"
+                elif state == "idle" and node_id is not None:
+                    if self._nodes.claim_idle_for_acquire(
+                        int(row["id"]),
+                        int(node_id),
+                        policy.value,
+                        idle_timeout_seconds,
+                    ):
+                        self._leases.acquire(
+                            int(row["id"]),
+                            session_id,
+                            invocation_id,
+                            lease_token,
+                            self._config.lease_ttl_seconds,
+                        )
+                        row = {
+                            **row,
+                            "state": "ready",
+                            "lifecycle_policy": policy.value,
+                            "idle_timeout_seconds": idle_timeout_seconds,
+                            "idle_expires_at": None,
+                        }
+                        action = "reuse"
                 elif state == "paused" and node_id is not None:
                     if self._nodes.begin_restart(
                         int(row["id"]),
@@ -260,9 +320,15 @@ class BohriumNodeLeaseManager:
                         creation_token,
                         self._config.creation_ttl_seconds,
                     ):
+                        self._nodes.set_lifecycle_policy(
+                            int(row["id"]), policy.value, idle_timeout_seconds
+                        )
                         action = "restart"
                 elif state == "creating":
                     if row.get("creating_lease_token") == creation_token:
+                        self._nodes.set_lifecycle_policy(
+                            int(row["id"]), policy.value, idle_timeout_seconds
+                        )
                         action = "create" if node_id is None else "restart"
                     elif self._nodes.claim_expired_creation(
                         int(row["id"]),
@@ -270,6 +336,9 @@ class BohriumNodeLeaseManager:
                         creation_token,
                         self._config.creation_ttl_seconds,
                     ):
+                        self._nodes.set_lifecycle_policy(
+                            int(row["id"]), policy.value, idle_timeout_seconds
+                        )
                         action = "create" if node_id is None else "restart"
 
             if action == "reuse" and row is not None:
@@ -476,6 +545,11 @@ class BohriumNodeLeaseManager:
             self._config.lease_ttl_seconds,
         )
 
+    def _has_leases_after_expired_cleanup(self, slot_id: int) -> bool:
+        """Fence a heartbeat racing an expired-lease cleanup before stop claims."""
+        self._leases.delete_expired_for_slot(slot_id)
+        return self._leases.count_for_slot(slot_id) > 0
+
     def release(
         self,
         lease: NodeLease,
@@ -527,7 +601,7 @@ class BohriumNodeLeaseManager:
             )
             if not release_fn(lease.invocation_id, lease.lease_token):
                 return None if expired_only else False
-            if self._leases.count_live(lease.node_slot_id) > 0:
+            if self._has_leases_after_expired_cleanup(lease.node_slot_id):
                 self._nodes.update_last_used_at(
                     identity.user_id,
                     identity.org_id,
@@ -535,6 +609,23 @@ class BohriumNodeLeaseManager:
                     identity.sku_id,
                     lease.node_id,
                 )
+                return False
+            current = self._nodes.find_by_id(lease.node_slot_id)
+            policy, idle_timeout_seconds = resolve_node_lifecycle(
+                current.get("lifecycle_policy") if current else None,
+                current.get("idle_timeout_seconds") if current else None,
+            )
+            if policy in {
+                NodeLifecyclePolicy.IDLE_TIMEOUT,
+                NodeLifecyclePolicy.KEEP_RUNNING,
+            }:
+                if not self._nodes.mark_idle(
+                    lease.node_slot_id,
+                    lease.node_id,
+                    policy.value,
+                    idle_timeout_seconds,
+                ):
+                    return False
                 return False
             if not self._nodes.mark_stopping(lease.node_slot_id, lease.node_id):
                 return False
@@ -559,6 +650,108 @@ class BohriumNodeLeaseManager:
             raise
         with self._slot_lock(identity):
             if not self._nodes.mark_paused(lease.node_slot_id, lease.node_id):
+                raise RuntimeError("Bohrium node stop state was fenced")
+        return True
+
+    def manual_stop(
+        self,
+        identity: NodeIdentity,
+        *,
+        access_key: str,
+        creator_id: int = 0,
+    ) -> bool:
+        """Stop one user-selected idle/ready slot without interrupting live leases."""
+        with self._slot_lock(identity):
+            row = self._nodes.find_one_for_reuse(
+                identity.user_id,
+                identity.org_id,
+                identity.project_id,
+                identity.sku_id,
+            )
+            if not row or row.get("node_id") is None:
+                return False
+            state = str(row.get("state") or "")
+            if state == "paused":
+                return False
+            if self._has_leases_after_expired_cleanup(int(row["id"])):
+                raise RuntimeError("Bohrium Node has a live lease")
+            if state not in {"ready", "idle"}:
+                raise RuntimeError(f"Bohrium Node cannot stop from state {state}")
+            node_id = int(row["node_id"])
+            if not self._nodes.mark_stopping(int(row["id"]), node_id):
+                return False
+        return self._stop_claimed_slot(
+            identity,
+            int(row["id"]),
+            node_id,
+            access_key=access_key,
+            creator_id=creator_id,
+        )
+
+    def stop_due_idle(
+        self,
+        row: dict[str, Any],
+        *,
+        access_key: str,
+        creator_id: int = 0,
+    ) -> bool:
+        """Stop a due idle_timeout candidate after a locked CAS recheck."""
+        identity = NodeIdentity(
+            str(row["user_id"]),
+            str(row["org_id"]),
+            int(row["project_id"]),
+            int(row["sku_id"]),
+        )
+        slot_id = int(row["id"])
+        node_id = int(row["node_id"])
+        with self._slot_lock(identity):
+            current = self._nodes.find_by_id(slot_id)
+            if (
+                not current
+                or current.get("state") != "idle"
+                or current.get("node_id") is None
+                or int(current["node_id"]) != node_id
+                or self._has_leases_after_expired_cleanup(slot_id)
+                or not self._nodes.mark_stopping_due_idle(slot_id, node_id)
+            ):
+                return False
+        return self._stop_claimed_slot(
+            identity,
+            slot_id,
+            node_id,
+            access_key=access_key,
+            creator_id=creator_id,
+        )
+
+    def _stop_claimed_slot(
+        self,
+        identity: NodeIdentity,
+        slot_id: int,
+        node_id: int,
+        *,
+        access_key: str,
+        creator_id: int,
+    ) -> bool:
+        try:
+            self._node_service.stop_node(
+                access_key,
+                node_id,
+                identity.project_id,
+                creator_id=creator_id,
+            )
+        except BohriumNodeNotFoundError:
+            return self._nodes.delete_by_node(
+                identity.user_id,
+                identity.org_id,
+                identity.project_id,
+                identity.sku_id,
+                node_id,
+            )
+        except Exception as exc:
+            self._nodes.record_stop_error(slot_id, node_id, str(exc))
+            raise
+        with self._slot_lock(identity):
+            if not self._nodes.mark_paused(slot_id, node_id):
                 raise RuntimeError("Bohrium node stop state was fenced")
         return True
 
@@ -696,7 +889,7 @@ class BohriumNodeLeaseManager:
             current = self._nodes.find_by_id(slot_id)
             if not current or current.get("state") != "stopping":
                 return False
-            if self._leases.count_live(slot_id) > 0:
+            if self._has_leases_after_expired_cleanup(slot_id):
                 return False
         try:
             self._node_service.stop_node(
@@ -742,7 +935,7 @@ class BohriumNodeLeaseManager:
                 not current
                 or current.get("state") != "creating"
                 or current.get("creating_lease_token") != token
-                or self._leases.count_live(slot_id) > 0
+                or self._has_leases_after_expired_cleanup(slot_id)
             ):
                 return False
             if node_id is None:

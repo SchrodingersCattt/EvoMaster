@@ -90,6 +90,8 @@ class BohriumNodeRecycler:
             "creating_recycled": 0,
             "stopping_scanned": 0,
             "stop_retried": 0,
+            "idle_scanned": 0,
+            "idle_stopped": 0,
             "expired_scanned": 0,
             "expired_released": 0,
             "skipped_credentials": 0,
@@ -117,6 +119,7 @@ class BohriumNodeRecycler:
             self._recycle_creating(summary)
             self._retry_stopping(summary)
             self._release_expired(summary)
+            self._stop_due_idle(summary)
             return summary
         except Exception:
             summary["tick_failed"] = 1
@@ -214,5 +217,27 @@ class BohriumNodeRecycler:
                 logger.warning(
                     "Bohrium expired node lease recycle failed invocation_id=%s",
                     lease_row.get("invocation_id"),
+                    exc_info=True,
+                )
+
+    def _stop_due_idle(self, summary: dict[str, int]) -> None:
+        rows = self._nodes.list_due_idle_slots(self._config.batch_size)
+        summary["idle_scanned"] = len(rows)
+        for row in rows:
+            try:
+                access_key = self._load_access_key(row, summary)
+                if not access_key:
+                    continue
+                if self._manager.stop_due_idle(
+                    row,
+                    access_key=access_key,
+                    creator_id=_creator_id_from_user(row.get("user_id")),
+                ):
+                    summary["idle_stopped"] += 1
+            except Exception:
+                summary["errors"] += 1
+                logger.warning(
+                    "Bohrium due idle node recycle failed slot_id=%s",
+                    row.get("id"),
                     exc_info=True,
                 )

@@ -188,6 +188,8 @@ def test_invocation_setup_uses_fenced_lease_and_cleanup_releases_it() -> None:
             run_started_at=0.0,
             bohrium_node_sku_id=12345,
             invocation_id="inv-1",
+            bohrium_node_lifecycle_policy="idle_timeout",
+            bohrium_node_idle_timeout_seconds=1800,
         )
 
         assert result.ssh_attached is True
@@ -197,6 +199,8 @@ def test_invocation_setup_uses_fenced_lease_and_cleanup_releases_it() -> None:
             invocation_id="inv-1",
             access_key="ak",
             creator_id=arb._creator_id_from_user("u1"),
+            lifecycle_policy="idle_timeout",
+            idle_timeout_seconds=1800,
         )
         heartbeat.start.assert_called_once_with()
 

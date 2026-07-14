@@ -235,6 +235,66 @@ def test_mark_ready_paused_is_fenced_by_slot_node_and_ready_state(monkeypatch):
     assert conn.committed is True
 
 
+def test_mark_idle_persists_policy_and_allowlisted_deadline(monkeypatch):
+    conn = _FakeConnection()
+    table = _make_table(monkeypatch, conn)
+
+    assert table.mark_idle(7, 42, "idle_timeout", 1800) is True
+    assert conn.cursor_obj.params == (
+        "idle_timeout",
+        1800,
+        1800,
+        1800,
+        7,
+        42,
+    )
+    assert "state = 'idle'" in conn.cursor_obj.sql
+    assert "DATE_ADD(NOW(), INTERVAL %s SECOND)" in conn.cursor_obj.sql
+    assert "state = 'ready'" in conn.cursor_obj.sql
+
+
+def test_claim_idle_for_acquire_clears_deadline_and_sets_latest_policy(monkeypatch):
+    conn = _FakeConnection()
+    table = _make_table(monkeypatch, conn)
+
+    assert table.claim_idle_for_acquire(7, 42, "keep_running", None) is True
+    assert conn.cursor_obj.params == ("keep_running", None, 7, 42)
+    assert "state = 'ready'" in conn.cursor_obj.sql
+    assert "idle_expires_at = NULL" in conn.cursor_obj.sql
+    assert "state = 'idle'" in conn.cursor_obj.sql
+
+
+def test_due_idle_scan_excludes_keep_running_null_deadlines(monkeypatch):
+    rows = [{"id": 7, "lifecycle_policy": "idle_timeout"}]
+    conn = _FakeConnection(fetchall_result=rows)
+    table = _make_table(monkeypatch, conn)
+
+    assert table.list_due_idle_slots(100) == rows
+    assert conn.cursor_obj.params == (100,)
+    assert "state = 'idle'" in conn.cursor_obj.sql
+    assert "idle_expires_at IS NOT NULL" in conn.cursor_obj.sql
+    assert "idle_expires_at <= NOW()" in conn.cursor_obj.sql
+
+
+def test_mark_stopping_due_idle_rechecks_policy_and_deadline(monkeypatch):
+    conn = _FakeConnection()
+    table = _make_table(monkeypatch, conn)
+
+    assert table.mark_stopping_due_idle(7, 42) is True
+    assert conn.cursor_obj.params == (7, 42)
+    assert "state = 'idle'" in conn.cursor_obj.sql
+    assert "lifecycle_policy = 'idle_timeout'" in conn.cursor_obj.sql
+    assert "idle_expires_at <= NOW()" in conn.cursor_obj.sql
+
+
+def test_mark_paused_clears_idle_deadline(monkeypatch):
+    conn = _FakeConnection()
+    table = _make_table(monkeypatch, conn)
+
+    assert table.mark_paused(7, 42) is True
+    assert "idle_expires_at = NULL" in conn.cursor_obj.sql
+
+
 def test_recycler_release_requires_token_and_still_expired_deadline(monkeypatch):
     conn = _FakeConnection()
     table = _make_table(monkeypatch, conn, BohriumNodeLeasesTable)

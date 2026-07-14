@@ -24,6 +24,9 @@ class UserLevelRuntimePreference:
     bohrium_submit_confirmation_required: bool | None = None
     bohrium_job_max_runtime_seconds: int | None = None
     bohrium_node_sku_id: int | None = None
+    bohrium_node_lifecycle_policy: str = "run_end"
+    bohrium_node_idle_timeout_seconds: int | None = None
+    bohrium_node_lifecycle_prompt_enabled: bool = True
     programmatic_trigger_enabled: bool | None = None
     loaded: bool = False
 
@@ -58,6 +61,16 @@ def _coerce_positive_int(value: Any) -> int | None:
     except (TypeError, ValueError):
         return None
     return parsed if parsed > 0 else None
+
+
+def _coerce_node_lifecycle(data: dict[str, Any]) -> tuple[str, int | None]:
+    policy = data.get("bohrium_node_lifecycle_policy")
+    timeout = _coerce_positive_int(data.get("bohrium_node_idle_timeout_seconds"))
+    if policy == "idle_timeout" and timeout in {900, 1800, 7200}:
+        return policy, timeout
+    if policy in {"run_end", "keep_running"} and timeout is None:
+        return policy, None
+    return "run_end", None
 
 
 def get_user_level_runtime_preference(user_id: str) -> UserLevelRuntimePreference:
@@ -104,6 +117,7 @@ def get_user_level_runtime_preference(user_id: str) -> UserLevelRuntimePreferenc
         )
         return UserLevelRuntimePreference()
     data = body.get("data") or {}
+    lifecycle_policy, idle_timeout_seconds = _coerce_node_lifecycle(data)
     return UserLevelRuntimePreference(
         project_id=_coerce_project_id(data.get("last_selected_project_id")),
         model=_coerce_model(data.get("last_selected_model")),
@@ -116,6 +130,13 @@ def get_user_level_runtime_preference(user_id: str) -> UserLevelRuntimePreferenc
             data.get("bohrium_job_max_runtime_seconds")
         ),
         bohrium_node_sku_id=_coerce_positive_int(data.get("bohrium_node_sku_id")),
+        bohrium_node_lifecycle_policy=lifecycle_policy,
+        bohrium_node_idle_timeout_seconds=idle_timeout_seconds,
+        bohrium_node_lifecycle_prompt_enabled=(
+            data.get("bohrium_node_lifecycle_prompt_enabled")
+            if isinstance(data.get("bohrium_node_lifecycle_prompt_enabled"), bool)
+            else True
+        ),
         programmatic_trigger_enabled=(
             data.get("programmatic_trigger_enabled")
             if isinstance(data.get("programmatic_trigger_enabled"), bool)

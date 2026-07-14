@@ -34,6 +34,10 @@ class _Leases:
 
 
 class _Nodes:
+    def list_due_idle_slots(self, limit):
+        assert limit == 10
+        return []
+
     def list_expired_creating_slots(self, limit):
         assert limit == 10
         return [
@@ -118,10 +122,48 @@ def test_tick_retries_stopping_slots_and_releases_expired_invocations():
     assert summary["stop_retried"] == 1
     assert summary["creating_scanned"] == 1
     assert summary["creating_recycled"] == 1
+    assert summary["idle_scanned"] == 0
+    assert summary["tick_failed"] == 0
     assert manager.creating[0][1] == "ak:u3:o3"
     assert manager.retried[0][1] == "ak:u2:o2"
     assert manager.expired[0][0]["invocation_id"] == "inv-expired"
     assert redis.released
+
+
+def test_tick_stops_only_due_idle_timeout_slots():
+    redis = _Redis()
+    manager = _Manager()
+    nodes = _Nodes()
+    due = {
+        "id": 10,
+        "user_id": "4",
+        "org_id": "o4",
+        "project_id": 102,
+        "sku_id": 456,
+        "node_id": 174,
+        "state": "idle",
+        "lifecycle_policy": "idle_timeout",
+        "idle_timeout_seconds": 900,
+    }
+    nodes.list_due_idle_slots = lambda limit: [due]
+    manager.stop_due_idle = lambda row, *, access_key, creator_id: (
+        row == due and access_key == "ak:4:o4" and creator_id == 4
+    )
+    recycler = BohriumNodeRecycler(
+        redis=redis,
+        leases_table=_Leases(),
+        nodes_table=nodes,
+        lease_manager=manager,
+        access_key_loader=lambda user_id, org_id: f"ak:{user_id}:{org_id}",
+        config=BohriumNodeRecyclerConfig(
+            batch_size=10, lock_ttl_seconds=30, stop_retry_min_age_seconds=5
+        ),
+    )
+
+    summary = recycler.tick()
+
+    assert summary["idle_scanned"] == 1
+    assert summary["idle_stopped"] == 1
 
 
 def test_tick_fails_closed_when_redis_is_unavailable():
