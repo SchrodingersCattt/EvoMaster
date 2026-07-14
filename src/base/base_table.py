@@ -39,7 +39,7 @@ class BaseTable(ABC):  # noqa: B024
             conn = pymysql.connect(**self.db_config)
             yield conn
         except BaseException as e:
-            logger.error(f"数据库连接错误: {e}")
+            logger.error("数据库连接错误 error_type=%s", type(e).__name__)
             if conn:
                 conn.rollback()
             raise
@@ -74,7 +74,11 @@ class BaseTable(ABC):  # noqa: B024
 
                 conn.commit()
         except BaseException as e:
-            logger.error(f"{self.__class__.__name__} 初始化失败: {e}")
+            logger.error(
+                "%s 初始化失败 error_type=%s",
+                self.__class__.__name__,
+                type(e).__name__,
+            )
             raise
 
     # ========== 通用 CRUD 方法（可选使用）==========

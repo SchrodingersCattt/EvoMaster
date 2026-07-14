@@ -126,6 +126,21 @@ class BohriumNodeLeasesTable(BaseTable):
                 row: dict[str, Any] | None = cursor.fetchone()
         return int((row or {}).get("lease_count") or 0)
 
+    def count_for_slot(self, node_slot_id: int) -> int:
+        """统计槽位全部 lease，供停机 claim 排除临界过期续租竞态。"""
+        with self.get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    f"""
+                    SELECT COUNT(*) AS lease_count
+                    FROM {self.table_name}
+                    WHERE node_slot_id = %s
+                    """,
+                    (node_slot_id,),
+                )
+                row: dict[str, Any] | None = cursor.fetchone()
+        return int((row or {}).get("lease_count") or 0)
+
     def delete_expired_for_slot(self, node_slot_id: int) -> int:
         """原子退休槽位的过期 lease；并发 heartbeat 由行锁和期限条件仲裁。"""
         with self.get_connection() as conn:

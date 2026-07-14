@@ -239,6 +239,7 @@ class _Leases:
     def __init__(self, events=None) -> None:
         self.rows: dict[str, dict] = {}
         self.renew_expired_before_delete = False
+        self.expire_after_delete = False
         self.events = events if events is not None else []
         self._lock = threading.Lock()
 
@@ -291,6 +292,14 @@ class _Leases:
                 if row["slot_id"] == slot_id and row["live"] and not row["expired"]
             )
 
+    def count_for_slot(self, slot_id):
+        with self._lock:
+            return sum(
+                1
+                for row in self.rows.values()
+                if row["slot_id"] == slot_id and row["live"]
+            )
+
     def delete_expired_for_slot(self, slot_id):
         with self._lock:
             if self.renew_expired_before_delete:
@@ -304,6 +313,10 @@ class _Leases:
             ]
             for invocation_id in expired:
                 del self.rows[invocation_id]
+            if self.expire_after_delete:
+                for row in self.rows.values():
+                    if row["slot_id"] == slot_id:
+                        row["expired"] = True
             return len(expired)
 
 
@@ -576,6 +589,26 @@ def test_historical_slot_skips_lease_renewed_during_expired_cleanup():
 
     assert outcome is HistoricalNodeStopOutcome.SKIPPED_CONCURRENT_LEASE
     assert leases.count_live(handle.node_slot_id) == 1
+    assert provider.stop_count == 0
+    assert nodes.row["state"] == "ready"
+
+
+def test_historical_slot_skips_lease_crossing_deadline_after_cleanup():
+    manager, nodes, leases, provider = _manager()
+    manager.acquire(
+        NodeIdentity("u1", "o1", 99, 456),
+        session_id="session-1",
+        invocation_id="inv-1",
+        access_key="ak",
+        creator_id=1,
+    )
+    leases.expire_after_delete = True
+
+    outcome = manager.stop_unleased_ready_slot(
+        dict(nodes.row), access_key="ak", creator_id=1
+    )
+
+    assert outcome is HistoricalNodeStopOutcome.SKIPPED_CONCURRENT_LEASE
     assert provider.stop_count == 0
     assert nodes.row["state"] == "ready"
 

@@ -174,6 +174,16 @@ def test_count_live_leases_excludes_expired_rows(monkeypatch):
     assert "lease_expires_at > NOW()" in conn.cursor_obj.sql
 
 
+def test_count_slot_leases_includes_rows_crossing_their_deadline(monkeypatch):
+    conn = _FakeConnection(fetchone_result={"lease_count": 1})
+    table = _make_table(monkeypatch, conn, BohriumNodeLeasesTable)
+
+    assert table.count_for_slot(7) == 1
+    assert conn.cursor_obj.params == (7,)
+    assert "node_slot_id = %s" in conn.cursor_obj.sql
+    assert "lease_expires_at" not in conn.cursor_obj.sql
+
+
 def test_delete_expired_leases_for_slot_is_deadline_fenced(monkeypatch):
     conn = _FakeConnection(rowcount=2)
     table = _make_table(monkeypatch, conn, BohriumNodeLeasesTable)

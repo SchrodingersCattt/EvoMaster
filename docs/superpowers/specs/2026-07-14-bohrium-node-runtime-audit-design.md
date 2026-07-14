@@ -57,9 +57,9 @@ SERVICE_ENV=test uv run python scripts/audit_bohrium_node_runtime.py \
    但 HTTP 请求仍使用完整密钥。
 5. apply 模式只对 `status=2` 候选调用 lifecycle manager。manager 在现有 Redis 槽位锁下
    重新读取槽位，确认 `state='ready'`、`node_id` 未变化；随后用带到期条件的 DELETE 原子
-   退休过期 lease，再确认没有 live lease，最后原子切换为 `stopping`。这样并发 heartbeat
-   要么先续期并被 live 检查拦截，要么在过期行删除后无法复活。provider stop 在锁外执行，
-   成功后重新加锁切换为 `paused`。
+   退休过期 lease，再确认槽位已不存在任何 lease 行，最后原子切换为 `stopping`。这里故意
+   不只统计 live lease：清理时尚未过期、统计时刚过期的临界 lease 仍会阻止本轮停机，避免
+   随后的 heartbeat 将其复活。provider stop 在锁外执行，成功后重新加锁切换为 `paused`。
 6. stop 失败时保留 `stopping` 并写入 `last_error`，由现有 monitor recycler 重试；竞态检查
    失败则跳过，不调用 provider。
 
@@ -117,6 +117,7 @@ apply 执行失败，进程以 3 退出；否则存在 `AUDIT_INCOMPLETE` 时以
 - apply 只处理 status=2，未知/缺失状态不调用 stop；
 - 槽位改变或出现并发 lease 时跳过；
 - 过期 lease 与 heartbeat 竞态时，续期成功必须跳过，退休成功后 lease 不得复活；
+- lease 在过期清理和停机 claim 之间刚好跨过 deadline 时，本轮必须保守跳过；
 - stop 成功进入 paused，超时保留 stopping/error，404 对账删除不存在槽位；
 - apply 失败优先返回退出码 3；
 - `node/list` adapter 日志只出现脱敏密钥。

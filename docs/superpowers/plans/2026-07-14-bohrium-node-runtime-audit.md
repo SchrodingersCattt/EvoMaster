@@ -196,14 +196,15 @@ git commit -m "feat: add Bohrium node runtime audit"
 
 - [ ] **Step 1: Write failing lifecycle tests**
 
-Cover six cases with the existing in-memory fakes:
+Cover seven cases with the existing in-memory fakes:
 
 1. unchanged ready slot without leases stops once and becomes paused;
 2. a live lease produces `SKIPPED_CONCURRENT_LEASE` and no provider call;
 3. an expired lease racing heartbeat is either retired or renewed and skipped;
-4. changed/missing slot or Node ID produces `SKIPPED_SLOT_CHANGED`;
-5. stop timeout leaves `stopping`, records an error, and re-raises;
-6. provider not-found uses a precise stopping-slot delete CAS and distinguishes
+4. a lease crossing its deadline after cleanup still conservatively skips;
+5. changed/missing slot or Node ID produces `SKIPPED_SLOT_CHANGED`;
+6. stop timeout leaves `stopping`, records an error, and re-raises;
+7. provider not-found uses a precise stopping-slot delete CAS and distinguishes
    removed, already-absent, and changed slots.
 
 - [ ] **Step 2: Run focused tests and verify RED**
@@ -221,7 +222,8 @@ Build `NodeIdentity` from the candidate. Under `_slot_lock`:
 - re-read by slot ID;
 - require `state == 'ready'` and the same `node_id`;
 - delete only leases for the slot whose deadline is still expired;
-- count live leases and skip if any exist;
+- count all remaining lease rows and skip if any exist, including a row that crossed
+  its deadline between cleanup and claim;
 - call `mark_stopping(slot_id, node_id)` and treat a false CAS as slot changed.
 
 Release the lock before `stop_node`. On not-found, reacquire the lock, reread the
@@ -295,8 +297,10 @@ git commit -m "feat: batch stop audited Bohrium nodes"
 ### Task 5: Redact `node/list` logs and verify the completed command
 
 **Files:**
+- Modify: `src/base/base_table.py`
 - Modify: `src/services/bohrium_node_service.py`
 - Modify: `src/services/user_service.py`
+- Modify: `tests/dao/test_base_table_db_config.py`
 - Modify: `tests/services/test_bohrium_node_service.py`
 - Modify: `tests/matmaster/services/test_user_service.py`
 

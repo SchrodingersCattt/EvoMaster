@@ -612,7 +612,7 @@ class BohriumNodeLeaseManager:
             ):
                 return HistoricalNodeStopOutcome.SKIPPED_SLOT_CHANGED
             self._leases.delete_expired_for_slot(slot_id)
-            if self._leases.count_live(slot_id) > 0:
+            if self._leases.count_for_slot(slot_id) > 0:
                 return HistoricalNodeStopOutcome.SKIPPED_CONCURRENT_LEASE
             if not self._nodes.mark_stopping(slot_id, node_id):
                 return HistoricalNodeStopOutcome.SKIPPED_SLOT_CHANGED
