@@ -172,6 +172,19 @@ def test_cli_exit_codes_for_incomplete_and_database_failure(capsys):
     assert "database secret" not in output
 
 
+def test_cli_redacts_production_dependency_initialization_failure(monkeypatch, capsys):
+    def fail_dependencies():
+        raise ConnectionError("database failed with secret-ak")
+
+    monkeypatch.setattr(MODULE, "_build_production_dependencies", fail_dependencies)
+
+    assert main([]) == 1
+    output = capsys.readouterr().out
+    assert "AUDIT_QUERY_FAILED\tConnectionError" in output
+    assert "database failed" not in output
+    assert "secret-ak" not in output
+
+
 @pytest.mark.parametrize("limit", ["0", "1001", "not-an-int"])
 def test_cli_rejects_invalid_limit(limit):
     with pytest.raises(SystemExit) as exc_info:

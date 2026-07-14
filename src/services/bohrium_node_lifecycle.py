@@ -40,6 +40,7 @@ class HistoricalNodeStopOutcome(str, Enum):
     SKIPPED_SLOT_CHANGED = "SKIPPED_SLOT_CHANGED"
     SKIPPED_CONCURRENT_LEASE = "SKIPPED_CONCURRENT_LEASE"
     PROVIDER_MISSING_SLOT_REMOVED = "PROVIDER_MISSING_SLOT_REMOVED"
+    PROVIDER_MISSING_SLOT_ALREADY_ABSENT = "PROVIDER_MISSING_SLOT_ALREADY_ABSENT"
 
 
 @dataclass(frozen=True)
@@ -610,6 +611,7 @@ class BohriumNodeLeaseManager:
                 or int(current["node_id"]) != node_id
             ):
                 return HistoricalNodeStopOutcome.SKIPPED_SLOT_CHANGED
+            self._leases.delete_expired_for_slot(slot_id)
             if self._leases.count_live(slot_id) > 0:
                 return HistoricalNodeStopOutcome.SKIPPED_CONCURRENT_LEASE
             if not self._nodes.mark_stopping(slot_id, node_id):
@@ -622,14 +624,21 @@ class BohriumNodeLeaseManager:
                 creator_id=creator_id,
             )
         except BohriumNodeNotFoundError:
-            self._nodes.delete_by_node(
-                identity.user_id,
-                identity.org_id,
-                identity.project_id,
-                identity.sku_id,
-                node_id,
-            )
-            return HistoricalNodeStopOutcome.PROVIDER_MISSING_SLOT_REMOVED
+            with self._slot_lock(identity):
+                current = self._nodes.find_by_id(slot_id)
+                if current is None:
+                    return (
+                        HistoricalNodeStopOutcome.PROVIDER_MISSING_SLOT_ALREADY_ABSENT
+                    )
+                if (
+                    current.get("state") != "stopping"
+                    or current.get("node_id") is None
+                    or int(current["node_id"]) != node_id
+                ):
+                    return HistoricalNodeStopOutcome.SKIPPED_SLOT_CHANGED
+                if self._nodes.delete_stopping_slot(slot_id, node_id):
+                    return HistoricalNodeStopOutcome.PROVIDER_MISSING_SLOT_REMOVED
+                return HistoricalNodeStopOutcome.SKIPPED_SLOT_CHANGED
         except Exception as exc:
             self._nodes.record_stop_error(slot_id, node_id, str(exc))
             raise

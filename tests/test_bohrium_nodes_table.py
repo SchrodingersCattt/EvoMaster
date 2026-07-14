@@ -174,6 +174,18 @@ def test_count_live_leases_excludes_expired_rows(monkeypatch):
     assert "lease_expires_at > NOW()" in conn.cursor_obj.sql
 
 
+def test_delete_expired_leases_for_slot_is_deadline_fenced(monkeypatch):
+    conn = _FakeConnection(rowcount=2)
+    table = _make_table(monkeypatch, conn, BohriumNodeLeasesTable)
+
+    assert table.delete_expired_for_slot(7) == 2
+    assert conn.cursor_obj.params == (7,)
+    assert "DELETE FROM bohrium_node_leases" in conn.cursor_obj.sql
+    assert "node_slot_id = %s" in conn.cursor_obj.sql
+    assert "lease_expires_at <= NOW()" in conn.cursor_obj.sql
+    assert conn.committed is True
+
+
 def test_list_ready_without_live_leases_is_read_only_and_oldest_first(monkeypatch):
     rows = [{"id": 1, "node_id": 20079820}]
     conn = _FakeConnection(fetchall_result=rows)
@@ -186,6 +198,18 @@ def test_list_ready_without_live_leases_is_read_only_and_oldest_first(monkeypatc
     assert "l.id IS NULL" in conn.cursor_obj.sql
     assert "ORDER BY n.last_used_at ASC, n.id ASC" in conn.cursor_obj.sql
     assert conn.committed is False
+
+
+def test_delete_stopping_slot_is_fenced_by_slot_node_and_state(monkeypatch):
+    conn = _FakeConnection()
+    table = _make_table(monkeypatch, conn)
+
+    assert table.delete_stopping_slot(7, 42) is True
+    assert conn.cursor_obj.params == (7, 42)
+    assert "id = %s" in conn.cursor_obj.sql
+    assert "node_id = %s" in conn.cursor_obj.sql
+    assert "state = 'stopping'" in conn.cursor_obj.sql
+    assert conn.committed is True
 
 
 def test_recycler_release_requires_token_and_still_expired_deadline(monkeypatch):

@@ -455,6 +455,20 @@ class BohriumNodesTable(BaseTable):
                 conn.commit()
                 return cursor.rowcount > 0
 
+    def delete_stopping_slot(self, slot_id: int, node_id: int) -> bool:
+        """仅删除仍指向目标 Node 的 stopping 槽位。"""
+        with self.get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    f"""
+                    DELETE FROM {self.table_name}
+                    WHERE id = %s AND node_id = %s AND state = 'stopping'
+                    """,
+                    (slot_id, node_id),
+                )
+                conn.commit()
+                return cursor.rowcount > 0
+
 
 @lru_cache
 def get_bohrium_nodes_table() -> BohriumNodesTable:

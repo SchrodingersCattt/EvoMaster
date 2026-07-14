@@ -222,10 +222,23 @@ class _Nodes:
             self.row = None
             return True
 
+    def delete_stopping_slot(self, slot_id, node_id):
+        with self._lock:
+            if (
+                not self.row
+                or self.row["id"] != slot_id
+                or self.row["node_id"] != node_id
+                or self.row["state"] != "stopping"
+            ):
+                return False
+            self.row = None
+            return True
+
 
 class _Leases:
     def __init__(self, events=None) -> None:
         self.rows: dict[str, dict] = {}
+        self.renew_expired_before_delete = False
         self.events = events if events is not None else []
         self._lock = threading.Lock()
 
@@ -244,7 +257,10 @@ class _Leases:
     def heartbeat(self, invocation_id, token, _ttl):
         with self._lock:
             row = self.rows.get(invocation_id)
-            return bool(row and row["token"] == token and row["live"])
+            if not row or row["token"] != token or not row["live"]:
+                return False
+            row["expired"] = False
+            return True
 
     def release(self, invocation_id, token):
         with self._lock:
@@ -272,8 +288,23 @@ class _Leases:
             return sum(
                 1
                 for row in self.rows.values()
-                if row["slot_id"] == slot_id and row["live"]
+                if row["slot_id"] == slot_id and row["live"] and not row["expired"]
             )
+
+    def delete_expired_for_slot(self, slot_id):
+        with self._lock:
+            if self.renew_expired_before_delete:
+                for row in self.rows.values():
+                    if row["slot_id"] == slot_id and row["expired"]:
+                        row["expired"] = False
+            expired = [
+                invocation_id
+                for invocation_id, row in self.rows.items()
+                if row["slot_id"] == slot_id and row["expired"]
+            ]
+            for invocation_id in expired:
+                del self.rows[invocation_id]
+            return len(expired)
 
 
 class _Provider:
@@ -283,6 +314,7 @@ class _Provider:
         self.restart_count = 0
         self.stop_failures = 0
         self.stop_missing = False
+        self.stop_hook = None
         self._lock = threading.Lock()
 
     def create_node(self, _access_key, _project_id, *, sku_id):
@@ -307,6 +339,8 @@ class _Provider:
 
     def stop_node(self, *_args, **_kwargs):
         with self._lock:
+            if self.stop_hook:
+                self.stop_hook()
             if self.stop_missing:
                 raise BohriumNodeNotFoundError("node missing")
             if self.stop_failures:
@@ -524,6 +558,28 @@ def test_historical_ready_slot_with_concurrent_lease_is_skipped():
     assert nodes.row["state"] == "ready"
 
 
+def test_historical_slot_skips_lease_renewed_during_expired_cleanup():
+    manager, nodes, leases, provider = _manager()
+    handle = manager.acquire(
+        NodeIdentity("u1", "o1", 99, 456),
+        session_id="session-1",
+        invocation_id="inv-1",
+        access_key="ak",
+        creator_id=1,
+    )
+    leases.rows[handle.invocation_id]["expired"] = True
+    leases.renew_expired_before_delete = True
+
+    outcome = manager.stop_unleased_ready_slot(
+        dict(nodes.row), access_key="ak", creator_id=1
+    )
+
+    assert outcome is HistoricalNodeStopOutcome.SKIPPED_CONCURRENT_LEASE
+    assert leases.count_live(handle.node_slot_id) == 1
+    assert provider.stop_count == 0
+    assert nodes.row["state"] == "ready"
+
+
 def test_historical_slot_changed_since_audit_is_skipped():
     manager, nodes, leases, provider = _manager()
     handle = manager.acquire(
@@ -580,6 +636,54 @@ def test_historical_provider_missing_node_removes_stale_slot():
     )
 
     assert outcome is HistoricalNodeStopOutcome.PROVIDER_MISSING_SLOT_REMOVED
+    assert nodes.row is None
+
+
+def test_historical_provider_missing_does_not_delete_changed_slot():
+    manager, nodes, leases, provider = _manager()
+    handle = manager.acquire(
+        NodeIdentity("u1", "o1", 99, 456),
+        session_id="session-1",
+        invocation_id="inv-1",
+        access_key="ak",
+        creator_id=1,
+    )
+    leases.release(handle.invocation_id, handle.lease_token)
+    provider.stop_missing = True
+
+    def replace_slot():
+        nodes.row.update({"node_id": 172, "state": "ready"})
+
+    provider.stop_hook = replace_slot
+    outcome = manager.stop_unleased_ready_slot(
+        dict(nodes.row), access_key="ak", creator_id=1
+    )
+
+    assert outcome is HistoricalNodeStopOutcome.SKIPPED_SLOT_CHANGED
+    assert nodes.row["node_id"] == 172
+
+
+def test_historical_provider_missing_reports_already_absent_slot():
+    manager, nodes, leases, provider = _manager()
+    handle = manager.acquire(
+        NodeIdentity("u1", "o1", 99, 456),
+        session_id="session-1",
+        invocation_id="inv-1",
+        access_key="ak",
+        creator_id=1,
+    )
+    leases.release(handle.invocation_id, handle.lease_token)
+    provider.stop_missing = True
+
+    def remove_slot():
+        nodes.row = None
+
+    provider.stop_hook = remove_slot
+    outcome = manager.stop_unleased_ready_slot(
+        dict(nodes.row), access_key="ak", creator_id=1
+    )
+
+    assert outcome is HistoricalNodeStopOutcome.PROVIDER_MISSING_SLOT_ALREADY_ABSENT
     assert nodes.row is None
 
 

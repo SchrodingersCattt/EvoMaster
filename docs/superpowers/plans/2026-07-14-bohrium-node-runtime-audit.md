@@ -180,26 +180,31 @@ git commit -m "feat: add Bohrium node runtime audit"
 ### Task 3: Add fenced stopping for unleased historical slots
 
 **Files:**
+- Modify: `src/dao/bohrium_node_leases_table.py`
+- Modify: `src/dao/bohrium_nodes_table.py`
 - Modify: `src/services/bohrium_node_lifecycle.py`
+- Modify: `tests/test_bohrium_nodes_table.py`
 - Modify: `tests/services/test_bohrium_node_lifecycle.py`
 
 **Interface:**
 - `HistoricalNodeStopOutcome` values:
   `STOPPED_TO_PAUSED`, `SKIPPED_SLOT_CHANGED`,
-  `SKIPPED_CONCURRENT_LEASE`, and `PROVIDER_MISSING_SLOT_REMOVED`.
+  `SKIPPED_CONCURRENT_LEASE`, `PROVIDER_MISSING_SLOT_REMOVED`, and
+  `PROVIDER_MISSING_SLOT_ALREADY_ABSENT`.
 - `BohriumNodeLeaseManager.stop_unleased_ready_slot(row, *, access_key,
   creator_id=0) -> HistoricalNodeStopOutcome`
 
 - [ ] **Step 1: Write failing lifecycle tests**
 
-Cover five cases with the existing in-memory fakes:
+Cover six cases with the existing in-memory fakes:
 
 1. unchanged ready slot without leases stops once and becomes paused;
 2. a live lease produces `SKIPPED_CONCURRENT_LEASE` and no provider call;
-3. changed/missing slot or Node ID produces `SKIPPED_SLOT_CHANGED`;
-4. stop timeout leaves `stopping`, records an error, and re-raises;
-5. provider not-found removes the stale slot and returns
-   `PROVIDER_MISSING_SLOT_REMOVED`.
+3. an expired lease racing heartbeat is either retired or renewed and skipped;
+4. changed/missing slot or Node ID produces `SKIPPED_SLOT_CHANGED`;
+5. stop timeout leaves `stopping`, records an error, and re-raises;
+6. provider not-found uses a precise stopping-slot delete CAS and distinguishes
+   removed, already-absent, and changed slots.
 
 - [ ] **Step 2: Run focused tests and verify RED**
 
@@ -215,12 +220,14 @@ Build `NodeIdentity` from the candidate. Under `_slot_lock`:
 
 - re-read by slot ID;
 - require `state == 'ready'` and the same `node_id`;
+- delete only leases for the slot whose deadline is still expired;
 - count live leases and skip if any exist;
 - call `mark_stopping(slot_id, node_id)` and treat a false CAS as slot changed.
 
-Release the lock before `stop_node`. On not-found, delete the matching slot using the
-existing identity key. On other exceptions, call `record_stop_error` and re-raise.
-After a successful provider stop, reacquire the lock and require
+Release the lock before `stop_node`. On not-found, reacquire the lock, reread the
+exact slot, and delete only `id + node_id + state='stopping'`; return distinct
+outcomes for removed, already-absent, and changed slots. On other exceptions, call
+`record_stop_error` and re-raise. After a successful provider stop, reacquire the lock and require
 `mark_paused(slot_id, node_id)`; a false result raises a fenced-state error.
 
 - [ ] **Step 4: Run lifecycle regression tests and commit**
@@ -289,7 +296,9 @@ git commit -m "feat: batch stop audited Bohrium nodes"
 
 **Files:**
 - Modify: `src/services/bohrium_node_service.py`
+- Modify: `src/services/user_service.py`
 - Modify: `tests/services/test_bohrium_node_service.py`
+- Modify: `tests/matmaster/services/test_user_service.py`
 
 - [ ] **Step 1: Write the failing redaction test**
 
@@ -307,6 +316,9 @@ uv run pytest tests/services/test_bohrium_node_service.py::test_node_list_log_re
 
 Keep the useful URL and method in the log but render the header as
 `accessKey: <redacted>`. Do not change actual request headers.
+Also keep existing-AK request failure logs useful by recording only the exception
+class, never the exception message. Guard production dependency construction with
+the same redacted exit-1 boundary as the candidate query.
 
 - [ ] **Step 4: Run focused and regression verification**
 

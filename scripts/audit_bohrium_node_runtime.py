@@ -279,8 +279,8 @@ def main(
         parser.error(
             "--apply and --confirm-stop-all-unleased-ready must be used together"
         )
-    dependencies = deps or _build_production_dependencies()
     try:
+        dependencies = deps or _build_production_dependencies()
         candidates = dependencies.candidate_loader(args.limit)
     except Exception as exc:
         print(f"AUDIT_QUERY_FAILED\t{type(exc).__name__}")
