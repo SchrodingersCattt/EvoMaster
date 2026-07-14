@@ -176,6 +176,10 @@ class BohriumNodeService:
         轮询 node/list 直到该节点 status=2（就绪）。返回包含 ip、nodePwd 的节点信息。
         """
         deadline = time.monotonic() + timeout
+        found = False
+        last_status: Any = None
+        last_starting_up_msg: Any = None
+        last_error_code: Any = None
         with httpx.Client(timeout=30.0) as client:
             while time.monotonic() < deadline:
                 r = client.get(
@@ -188,7 +192,11 @@ class BohriumNodeService:
                 items = (data.get('data') or {}).get('items') or []
                 for item in items:
                     if str(item.get('nodeId')) == str(node_id):
+                        found = True
                         status = item.get('status')
+                        last_status = status
+                        last_starting_up_msg = item.get('startingUpMsg')
+                        last_error_code = item.get('errCode')
                         if status == NODE_STATUS_READY:
                             logger.info(
                                 'Bohrium node ready node_id=%s ip=%s',
@@ -203,7 +211,10 @@ class BohriumNodeService:
                         break
                 time.sleep(poll_interval)
         raise TimeoutError(
-            f"Bohrium node node_id={node_id} did not become ready within {timeout}s"
+            f"Bohrium node node_id={node_id} did not become ready within {timeout}s; "
+            f"found={found} last_status={last_status!r} "
+            f"starting_up_msg={last_starting_up_msg!r} "
+            f"error_code={last_error_code!r}"
         )
 
     def _fetch_node_list(self, access_key: str) -> list[dict[str, Any]]:

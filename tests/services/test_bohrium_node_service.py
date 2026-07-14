@@ -247,3 +247,50 @@ def test_node_list_log_redacts_access_key(
     assert captured["headers"]["accessKey"] == "secret-ak"
     assert "accessKey: <redacted>" in caplog.text
     assert "secret-ak" not in caplog.text
+
+
+def test_wait_until_ready_timeout_reports_last_sanitized_observation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+    response = _FakeResponse(
+        {
+            "code": 0,
+            "data": {
+                "items": [
+                    {
+                        "nodeId": 123,
+                        "status": 1,
+                        "startingUpMsg": "waiting for capacity",
+                        "errCode": 203901,
+                        "ip": "10.0.0.1",
+                        "nodePwd": "secret-password",
+                    }
+                ]
+            },
+        }
+    )
+    monotonic_values = iter((100.0, 100.1, 100.6))
+    monkeypatch.setattr(
+        node_module.httpx,
+        "Client",
+        lambda timeout: _FakeClient(response, captured),
+    )
+    monkeypatch.setattr(node_module.time, "monotonic", lambda: next(monotonic_values))
+
+    with pytest.raises(TimeoutError) as exc_info:
+        _service().wait_until_ready(
+            "secret-ak",
+            123,
+            poll_interval=0,
+            timeout=0.5,
+        )
+
+    message = str(exc_info.value)
+    assert "found=True" in message
+    assert "last_status=1" in message
+    assert "starting_up_msg='waiting for capacity'" in message
+    assert "error_code=203901" in message
+    assert "secret-ak" not in message
+    assert "secret-password" not in message
+    assert "10.0.0.1" not in message
