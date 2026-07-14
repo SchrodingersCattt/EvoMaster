@@ -344,6 +344,27 @@ class BohriumNodesTable(BaseTable):
                 )
                 return cursor.fetchall() or []
 
+    def list_ready_without_live_leases(self, limit: int) -> list[dict[str, Any]]:
+        """只读扫描迁移前遗留的 ready 槽位，供人工运行态审计。"""
+        with self.get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    f"""
+                    SELECT n.id, n.user_id, n.org_id, n.project_id, n.sku_id,
+                           n.node_id, n.state, n.last_used_at, n.updated_at
+                    FROM {self.table_name} AS n
+                    LEFT JOIN bohrium_node_leases AS l
+                      ON l.node_slot_id = n.id
+                     AND l.lease_expires_at > NOW()
+                    WHERE n.state = 'ready' AND n.node_id IS NOT NULL
+                      AND l.id IS NULL
+                    ORDER BY n.last_used_at ASC, n.id ASC
+                    LIMIT %s
+                    """,
+                    (limit,),
+                )
+                return cursor.fetchall() or []
+
     def list_node_ids_for_user_org(self, user_id: str, org_id: str) -> set[int]:
         """按 user/org 返回已登记的 node_id 集合（跨 project）。"""
         with self.get_connection() as conn:

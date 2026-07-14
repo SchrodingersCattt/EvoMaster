@@ -174,6 +174,20 @@ def test_count_live_leases_excludes_expired_rows(monkeypatch):
     assert "lease_expires_at > NOW()" in conn.cursor_obj.sql
 
 
+def test_list_ready_without_live_leases_is_read_only_and_oldest_first(monkeypatch):
+    rows = [{"id": 1, "node_id": 20079820}]
+    conn = _FakeConnection(fetchall_result=rows)
+    table = _make_table(monkeypatch, conn)
+
+    assert table.list_ready_without_live_leases(1000) == rows
+    assert conn.cursor_obj.params == (1000,)
+    assert "n.state = 'ready'" in conn.cursor_obj.sql
+    assert "l.lease_expires_at > NOW()" in conn.cursor_obj.sql
+    assert "l.id IS NULL" in conn.cursor_obj.sql
+    assert "ORDER BY n.last_used_at ASC, n.id ASC" in conn.cursor_obj.sql
+    assert conn.committed is False
+
+
 def test_recycler_release_requires_token_and_still_expired_deadline(monkeypatch):
     conn = _FakeConnection()
     table = _make_table(monkeypatch, conn, BohriumNodeLeasesTable)
