@@ -395,6 +395,7 @@ class _Provider:
         self.stop_failures = 0
         self.stop_missing = False
         self.stop_hook = None
+        self.node_detail = {"node_id": 171, "status": 2}
         self._lock = threading.Lock()
 
     def create_node(self, _access_key, _project_id, *, sku_id):
@@ -409,6 +410,10 @@ class _Provider:
 
     def get_node_info(self, _access_key, node_id):
         return {"node_id": node_id, "ip": "10.0.0.1", "password": "pwd"}
+
+    def get_node_detail(self, _access_key, node_id):
+        assert node_id == 171
+        return self.node_detail
 
     def restart_node(self, *_args, **_kwargs):
         with self._lock:
@@ -582,6 +587,46 @@ def test_stop_timeout_keeps_stopping_state_for_monitor_retry():
     assert manager.retry_stopping(nodes.row, access_key="ak", creator_id=1) is True
     assert nodes.row["state"] == "paused"
     assert provider.stop_count == 1
+
+
+def test_retry_stopping_removes_slot_missing_from_provider():
+    manager, nodes, _leases, provider = _manager()
+    handle = manager.acquire(
+        NodeIdentity("u1", "o1", 99, 456),
+        session_id="session-1",
+        invocation_id="inv-1",
+        access_key="ak",
+        creator_id=1,
+    )
+    provider.stop_failures = 1
+
+    with pytest.raises(TimeoutError, match="stop timeout"):
+        manager.release(handle, access_key="ak", creator_id=1)
+
+    provider.node_detail = None
+    assert manager.retry_stopping(nodes.row, access_key="ak", creator_id=1) is True
+    assert nodes.row is None
+    assert provider.stop_count == 0
+
+
+def test_retry_stopping_reconciles_provider_stopped_to_paused():
+    manager, nodes, _leases, provider = _manager()
+    handle = manager.acquire(
+        NodeIdentity("u1", "o1", 99, 456),
+        session_id="session-1",
+        invocation_id="inv-1",
+        access_key="ak",
+        creator_id=1,
+    )
+    provider.stop_failures = 1
+
+    with pytest.raises(TimeoutError, match="stop timeout"):
+        manager.release(handle, access_key="ak", creator_id=1)
+
+    provider.node_detail = {"node_id": 171, "status": -1}
+    assert manager.retry_stopping(nodes.row, access_key="ak", creator_id=1) is True
+    assert nodes.row["state"] == "paused"
+    assert provider.stop_count == 0
 
 
 def test_provider_deleted_node_removes_stale_slot_after_last_release():

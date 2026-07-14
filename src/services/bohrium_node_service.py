@@ -32,6 +32,8 @@ DEFAULT_TURNOFF_AFTER = -1
 DEFAULT_SKU_ID = 388  # c2_m4_cpu
 # 节点就绪状态码（与 start.sh 中 STATUS=2 一致）
 NODE_STATUS_READY = 2
+# 节点已停机状态码（Bohrium Core machine status stopped）
+NODE_STATUS_STOPPED = -1
 # 轮询间隔与最大等待时间（秒）
 POLL_INTERVAL = 5
 POLL_TIMEOUT = 600  # 10 分钟

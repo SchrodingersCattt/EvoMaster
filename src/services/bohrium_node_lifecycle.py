@@ -19,6 +19,7 @@ from src.dao.bohrium_node_leases_table import get_bohrium_node_leases_table
 from src.dao.bohrium_nodes_table import get_bohrium_nodes_table
 from src.dao.redis_dao import get_redis_dao
 from src.services.bohrium_node_service import (
+    NODE_STATUS_STOPPED,
     BohriumNodeNotFoundError,
     get_bohrium_node_service,
 )
@@ -852,10 +853,30 @@ class BohriumNodeLeaseManager:
         node_id = int(row["node_id"])
         with self._slot_lock(identity):
             current = self._nodes.find_by_id(slot_id)
-            if not current or current.get("state") != "stopping":
+            if (
+                not current
+                or current.get("state") != "stopping"
+                or current.get("node_id") is None
+                or int(current["node_id"]) != node_id
+            ):
                 return False
             if self._has_leases_after_expired_cleanup(slot_id):
                 return False
+        detail = self._node_service.get_node_detail(access_key, node_id)
+        if detail is None or detail.get("status") == NODE_STATUS_STOPPED:
+            with self._slot_lock(identity):
+                current = self._nodes.find_by_id(slot_id)
+                if (
+                    not current
+                    or current.get("state") != "stopping"
+                    or current.get("node_id") is None
+                    or int(current["node_id"]) != node_id
+                    or self._has_leases_after_expired_cleanup(slot_id)
+                ):
+                    return False
+                if detail is None:
+                    return self._nodes.delete_stopping_slot(slot_id, node_id)
+                return self._nodes.mark_paused(slot_id, node_id)
         try:
             self._node_service.stop_node(
                 access_key,
@@ -864,17 +885,30 @@ class BohriumNodeLeaseManager:
                 creator_id=creator_id,
             )
         except BohriumNodeNotFoundError:
-            return self._nodes.delete_by_node(
-                identity.user_id,
-                identity.org_id,
-                identity.project_id,
-                identity.sku_id,
-                node_id,
-            )
+            with self._slot_lock(identity):
+                current = self._nodes.find_by_id(slot_id)
+                if (
+                    not current
+                    or current.get("state") != "stopping"
+                    or current.get("node_id") is None
+                    or int(current["node_id"]) != node_id
+                    or self._has_leases_after_expired_cleanup(slot_id)
+                ):
+                    return False
+                return self._nodes.delete_stopping_slot(slot_id, node_id)
         except Exception as exc:
             self._nodes.record_stop_error(slot_id, node_id, str(exc))
             raise
         with self._slot_lock(identity):
+            current = self._nodes.find_by_id(slot_id)
+            if (
+                not current
+                or current.get("state") != "stopping"
+                or current.get("node_id") is None
+                or int(current["node_id"]) != node_id
+                or self._has_leases_after_expired_cleanup(slot_id)
+            ):
+                return False
             return self._nodes.mark_paused(slot_id, node_id)
 
     def recycle_expired_creation(
