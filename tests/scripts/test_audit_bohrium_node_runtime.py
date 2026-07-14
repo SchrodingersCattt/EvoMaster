@@ -39,6 +39,7 @@ def _candidate(node_id: int, **overrides: Any) -> dict[str, Any]:
 def _deps(
     candidates: list[dict[str, Any]],
     *,
+    apply_preflight=lambda: True,
     access_key_loader=lambda _user_id, _org_id: "secret-ak",
     node_detail_loader=lambda _access_key, _node_id: {
         "status": 2,
@@ -48,6 +49,7 @@ def _deps(
     apply_stopped=lambda _candidate, _access_key: "ALREADY_STOPPED_TO_PAUSED",
 ):
     return AuditDependencies(
+        apply_preflight=apply_preflight,
         candidate_loader=lambda _limit: candidates,
         access_key_loader=access_key_loader,
         node_detail_loader=node_detail_loader,
@@ -135,6 +137,7 @@ def test_cli_dry_run_renders_report_and_passes_limit(capsys):
     limits: list[int] = []
     deps = _deps([])
     deps = AuditDependencies(
+        apply_preflight=deps.apply_preflight,
         candidate_loader=lambda limit: limits.append(limit) or [],
         access_key_loader=deps.access_key_loader,
         node_detail_loader=deps.node_detail_loader,
@@ -166,6 +169,7 @@ def test_cli_exit_codes_for_incomplete_and_database_failure(capsys):
 
     broken = _deps([])
     broken = AuditDependencies(
+        apply_preflight=broken.apply_preflight,
         candidate_loader=fail_query,
         access_key_loader=broken.access_key_loader,
         node_detail_loader=broken.node_detail_loader,
@@ -189,6 +193,88 @@ def test_cli_redacts_production_dependency_initialization_failure(monkeypatch, c
     assert "AUDIT_QUERY_FAILED\tConnectionError" in output
     assert "database failed" not in output
     assert "secret-ak" not in output
+
+
+def test_cli_dry_run_skips_apply_preflight(capsys):
+    preflight_calls: list[str] = []
+
+    assert (
+        main(
+            [],
+            deps=_deps(
+                [],
+                apply_preflight=lambda: preflight_calls.append("preflight") or False,
+            ),
+        )
+        == 0
+    )
+
+    assert preflight_calls == []
+    assert "APPLY_PREFLIGHT_FAILED" not in capsys.readouterr().out
+
+
+@pytest.mark.parametrize(
+    "apply_preflight",
+    [
+        lambda: False,
+        lambda: (_ for _ in ()).throw(ConnectionError("redis://secret")),
+    ],
+)
+def test_cli_apply_preflight_failure_exits_before_query_and_redacts_error(
+    apply_preflight, capsys
+):
+    query_calls: list[int] = []
+    deps = _deps([], apply_preflight=apply_preflight)
+    deps = AuditDependencies(
+        apply_preflight=deps.apply_preflight,
+        candidate_loader=lambda limit: query_calls.append(limit) or [],
+        access_key_loader=deps.access_key_loader,
+        node_detail_loader=deps.node_detail_loader,
+        apply_stop=deps.apply_stop,
+        apply_stopped=deps.apply_stopped,
+    )
+
+    assert (
+        main(
+            ["--apply", "--confirm-stop-all-unleased-ready"],
+            deps=deps,
+        )
+        == 1
+    )
+
+    output = capsys.readouterr().out
+    assert query_calls == []
+    assert output == "APPLY_PREFLIGHT_FAILED\tRedisUnavailable\n"
+    assert "redis://secret" not in output
+
+
+def test_cli_apply_preflight_success_continues(capsys):
+    preflight_calls: list[str] = []
+    query_calls: list[int] = []
+    deps = _deps(
+        [],
+        apply_preflight=lambda: preflight_calls.append("preflight") or True,
+    )
+    deps = AuditDependencies(
+        apply_preflight=deps.apply_preflight,
+        candidate_loader=lambda limit: query_calls.append(limit) or [],
+        access_key_loader=deps.access_key_loader,
+        node_detail_loader=deps.node_detail_loader,
+        apply_stop=deps.apply_stop,
+        apply_stopped=deps.apply_stopped,
+    )
+
+    assert (
+        main(
+            ["--limit", "10", "--apply", "--confirm-stop-all-unleased-ready"],
+            deps=deps,
+        )
+        == 0
+    )
+
+    assert preflight_calls == ["preflight"]
+    assert query_calls == [10]
+    assert "SUMMARY total=0 audit_incomplete=0" in capsys.readouterr().out
 
 
 @pytest.mark.parametrize("limit", ["0", "1001", "not-an-int"])
@@ -364,6 +450,7 @@ def test_apply_failure_continues_and_exit_three_precedes_incomplete(capsys):
 def test_production_dependencies_use_existing_access_key_only(monkeypatch):
     calls: list[str] = []
     manager_calls: list[str] = []
+    redis_calls: list[str] = []
     stop_calls: list[tuple[dict[str, Any], str, int]] = []
     reconcile_calls: list[dict[str, Any]] = []
 
@@ -374,6 +461,16 @@ def test_production_dependencies_use_existing_access_key_only(monkeypatch):
     class _NodeService:
         def get_node_detail(self, _access_key, _node_id):
             return None
+
+    class _RedisClient:
+        def ping(self):
+            redis_calls.append("ping")
+            return True
+
+    class _RedisDao:
+        def get_command_client(self):
+            redis_calls.append("client")
+            return _RedisClient()
 
     class _Manager:
         def stop_unleased_ready_slot(self, candidate, *, access_key, creator_id):
@@ -386,6 +483,7 @@ def test_production_dependencies_use_existing_access_key_only(monkeypatch):
 
     monkeypatch.setattr(MODULE, "get_bohrium_nodes_table", lambda: _Table())
     monkeypatch.setattr(MODULE, "get_bohrium_node_service", lambda: _NodeService())
+    monkeypatch.setattr(MODULE, "get_redis_dao", lambda: _RedisDao())
     monkeypatch.setattr(
         MODULE,
         "get_bohrium_node_lease_manager",
@@ -405,6 +503,8 @@ def test_production_dependencies_use_existing_access_key_only(monkeypatch):
     deps = MODULE._build_production_dependencies()
 
     assert manager_calls == []
+    assert deps.apply_preflight() is True
+    assert redis_calls == ["client", "ping"]
     assert deps.access_key_loader("u1", "o1") == "ak"
     assert calls == ["existing"]
     candidate = _candidate(1, user_id="110680")
@@ -413,3 +513,25 @@ def test_production_dependencies_use_existing_access_key_only(monkeypatch):
     assert manager_calls == ["manager", "manager"]
     assert stop_calls == [(candidate, "secret-ak", 110680)]
     assert reconcile_calls == [candidate]
+
+
+def test_production_apply_preflight_rejects_missing_redis_client(monkeypatch):
+    class _Table:
+        def list_ready_without_live_leases(self, _limit):
+            return []
+
+    class _NodeService:
+        def get_node_detail(self, _access_key, _node_id):
+            return None
+
+    class _RedisDao:
+        def get_command_client(self):
+            return None
+
+    monkeypatch.setattr(MODULE, "get_bohrium_nodes_table", lambda: _Table())
+    monkeypatch.setattr(MODULE, "get_bohrium_node_service", lambda: _NodeService())
+    monkeypatch.setattr(MODULE, "get_redis_dao", lambda: _RedisDao())
+
+    deps = MODULE._build_production_dependencies()
+
+    assert deps.apply_preflight() is False

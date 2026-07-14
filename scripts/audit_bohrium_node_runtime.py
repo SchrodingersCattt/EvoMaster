@@ -9,6 +9,7 @@ from dataclasses import dataclass, replace
 from typing import Any
 
 from src.dao.bohrium_nodes_table import get_bohrium_nodes_table
+from src.dao.redis_dao import get_redis_dao
 from src.services.bohrium_node_lifecycle import get_bohrium_node_lease_manager
 from src.services.bohrium_node_service import get_bohrium_node_service
 from src.services.bohrium_run_support import _creator_id_from_user
@@ -41,6 +42,7 @@ class AuditResult:
 
 @dataclass(frozen=True)
 class AuditDependencies:
+    apply_preflight: Callable[[], bool]
     candidate_loader: Callable[[int], list[dict[str, Any]]]
     access_key_loader: Callable[[str, str], str | None]
     node_detail_loader: Callable[[str, int], dict[str, Any] | None]
@@ -248,6 +250,10 @@ def _build_production_dependencies() -> AuditDependencies:
     nodes_table = get_bohrium_nodes_table()
     node_service = get_bohrium_node_service()
 
+    def apply_preflight() -> bool:
+        client = get_redis_dao().get_command_client()
+        return client is not None and bool(client.ping())
+
     def apply_stop(candidate: dict[str, Any], access_key: str) -> Any:
         return get_bohrium_node_lease_manager().stop_unleased_ready_slot(
             candidate,
@@ -261,6 +267,7 @@ def _build_production_dependencies() -> AuditDependencies:
         )
 
     return AuditDependencies(
+        apply_preflight=apply_preflight,
         candidate_loader=nodes_table.list_ready_without_live_leases,
         access_key_loader=UserService.get_existing_bohrium_access_key,
         node_detail_loader=node_service.get_node_detail,
@@ -299,6 +306,18 @@ def main(
         )
     try:
         dependencies = deps or _build_production_dependencies()
+    except Exception as exc:
+        print(f"AUDIT_QUERY_FAILED\t{type(exc).__name__}")
+        return 1
+    if args.apply:
+        try:
+            preflight_ready = dependencies.apply_preflight()
+        except Exception:
+            preflight_ready = False
+        if not preflight_ready:
+            print("APPLY_PREFLIGHT_FAILED\tRedisUnavailable")
+            return 1
+    try:
         candidates = dependencies.candidate_loader(args.limit)
     except Exception as exc:
         print(f"AUDIT_QUERY_FAILED\t{type(exc).__name__}")
