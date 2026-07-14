@@ -148,19 +148,16 @@ Node SKU，不提交 Sandbox profile、SKU 或任意 `sandbox_template_name`。
 3. Redis 分布式锁只保护槽位 create/replace/last-release 等短临界区，不覆盖整轮执行。第一个
    invocation 先原子占 `creating` 槽位再创建 Node；其他 invocation 等槽位 ready 后共享，不能
    因创建竞态再开一台。
-4. 第一版 lifecycle 仍为 `run_end`：每个 invocation finally 只释放自己的 lease；还有其他
-   live lease 时 Node 保持运行，最后一个 lease 释放后调用 Bohrium stop 进入 `Paused`，不 delete
-   节点。新 acquire 与最后释放在同一槽位锁/CAS 下判定，避免“刚复用就被另一 Worker 停掉”的
-   竞态。Paused 节点不计运行费用、保留磁盘和 `node_id`，下一次 invocation 走 restart 复用；
-   该计费与数据保留语义仍须以 live 环境对账为发布条件。
-5. 内部从第一版就使用 typed lifecycle policy，而不是在 Worker 中散落 `if run_end`：当前
-   `enabled_policies` 只有 `run_end`；resolved job snapshot 显式携带 policy 和 nullable
-   `idle_timeout_seconds`，因此队列中的旧任务行为不会随配置变化。
-6. 为以后“最后一个 invocation 结束后保留，空闲 N 分钟自动关闭”预留 `idle_timeout` policy；
-   时长必须来自服务端有限 allowlist，并有绝对 hard cap，不支持真正的 forever。第一版
-   allowlist 为空，前端不显示时长选择器，客户端提交 `idle_timeout` 返回 4xx。
-7. 用户偏好表和 Node 槽位表预留 lifecycle/idle timeout 字段；第一版 NULL 统一解析为
-   `run_end`，不会改变现有用户行为。
+4. lifecycle 支持 `run_end`、`idle_timeout` 和 `keep_running`。每个 invocation finally 只释放
+   自己的 lease；还有其他 live lease 时 Node 保持运行。最后一个 lease 释放后，`run_end` stop
+   为 Paused，`idle_timeout` 进入带绝对 deadline 的 idle，`keep_running` 进入无 deadline 的 idle。
+   新 acquire 与最后释放在同一槽位锁/CAS 下判定，避免“刚复用就被另一 Worker 停掉”的竞态。
+5. 内部使用 typed lifecycle policy，而不是在 Worker 中散落分支；resolved job snapshot 显式
+   携带 policy 和 nullable `idle_timeout_seconds`，因此队列中的旧任务行为不会随偏好变化。
+6. `idle_timeout` 的服务端 allowlist 固定为 900、1800、7200 秒。`keep_running` 表示 MatMaster
+   不自动 stop，不代表 provider 永久可用；平台运维、异常、镜像替换和用户手动关机仍可停止。
+7. 用户偏好增加 lifecycle/idle timeout 和是否每轮询问；NULL/旧请求统一解析为 `run_end`。
+   槽位记录 latest desired policy；并发下最后一次成功 acquire 的显式策略决定 last-release 行为。
 8. Bohrium 的 `turnoffAfter` 是从创建、重启或修改时刻起算的定时关机，不是根据 SSH、文件或
    CPU 活跃度计算的真正 idle detector；当前 MatMaster 默认 `-1` 实际上禁用了它。因此它只作为
    Node stop 的 provider 执行能力和失联兜底，不能代替 invocation lease/refcount。
