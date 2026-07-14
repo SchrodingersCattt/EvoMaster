@@ -194,8 +194,98 @@ def test_cli_requires_apply_and_confirmation_together(argv):
     assert exc_info.value.code == 2
 
 
+def test_dry_run_never_invokes_apply_stop():
+    stops: list[int] = []
+
+    result = audit_candidates(
+        [_candidate(1)],
+        access_key_loader=lambda _user, _org: "secret-ak",
+        node_detail_loader=lambda _ak, _node_id: {"status": 2},
+        apply_stop=lambda candidate, _ak: stops.append(candidate["node_id"]),
+    )
+
+    assert stops == []
+    assert result.rows[0].execution == "DRY_RUN"
+
+
+def test_apply_stops_only_status_two_candidates_and_renders_outcomes():
+    candidates = [_candidate(node_id) for node_id in range(1, 5)]
+    details = {
+        1: {"status": 2},
+        2: None,
+        3: {"status": 7},
+        4: {"status": 2},
+    }
+    stops: list[int] = []
+
+    def apply_stop(candidate, _access_key):
+        stops.append(candidate["node_id"])
+        if candidate["node_id"] == 1:
+            return "STOPPED_TO_PAUSED"
+        return "SKIPPED_CONCURRENT_LEASE"
+
+    result = audit_candidates(
+        candidates,
+        access_key_loader=lambda _user, _org: "secret-ak",
+        node_detail_loader=lambda _ak, node_id: details[node_id],
+        apply=True,
+        apply_stop=apply_stop,
+    )
+
+    assert stops == [1, 4]
+    assert [row.execution for row in result.rows] == [
+        "STOPPED_TO_PAUSED",
+        "NOT_ELIGIBLE",
+        "NOT_ELIGIBLE",
+        "SKIPPED_CONCURRENT_LEASE",
+    ]
+    assert result.apply_failed is False
+
+
+def test_apply_failure_continues_and_exit_three_precedes_incomplete(capsys):
+    candidates = [
+        _candidate(1),
+        _candidate(2),
+        _candidate(3, user_id="u2"),
+    ]
+    stops: list[int] = []
+
+    def access_key_loader(user_id, _org_id):
+        return None if user_id == "u2" else "secret-ak"
+
+    def apply_stop(candidate, _access_key):
+        stops.append(candidate["node_id"])
+        if candidate["node_id"] == 1:
+            raise TimeoutError("stop failed with secret-ak")
+        return "STOPPED_TO_PAUSED"
+
+    deps = _deps(
+        candidates,
+        access_key_loader=access_key_loader,
+        apply_stop=apply_stop,
+    )
+
+    assert (
+        main(
+            ["--apply", "--confirm-stop-all-unleased-ready"],
+            deps=deps,
+        )
+        == 3
+    )
+
+    output = capsys.readouterr().out
+    assert stops == [1, 2]
+    assert "FAILED_TimeoutError" in output
+    assert "STOPPED_TO_PAUSED" in output
+    assert "AUDIT_INCOMPLETE" in output
+    assert "stop failed" not in output
+    assert "secret-ak" not in output
+
+
 def test_production_dependencies_use_existing_access_key_only(monkeypatch):
     calls: list[str] = []
+    manager_calls: list[str] = []
+    stop_calls: list[tuple[dict[str, Any], str, int]] = []
 
     class _Table:
         def list_ready_without_live_leases(self, _limit):
@@ -206,12 +296,17 @@ def test_production_dependencies_use_existing_access_key_only(monkeypatch):
             return None
 
     class _Manager:
-        def stop_unleased_ready_slot(self, *_args, **_kwargs):
-            return "unused"
+        def stop_unleased_ready_slot(self, candidate, *, access_key, creator_id):
+            stop_calls.append((candidate, access_key, creator_id))
+            return "STOPPED_TO_PAUSED"
 
     monkeypatch.setattr(MODULE, "get_bohrium_nodes_table", lambda: _Table())
     monkeypatch.setattr(MODULE, "get_bohrium_node_service", lambda: _NodeService())
-    monkeypatch.setattr(MODULE, "get_bohrium_node_lease_manager", lambda: _Manager())
+    monkeypatch.setattr(
+        MODULE,
+        "get_bohrium_node_lease_manager",
+        lambda: manager_calls.append("manager") or _Manager(),
+    )
     monkeypatch.setattr(
         MODULE.UserService,
         "get_existing_bohrium_access_key",
@@ -225,5 +320,10 @@ def test_production_dependencies_use_existing_access_key_only(monkeypatch):
 
     deps = MODULE._build_production_dependencies()
 
+    assert manager_calls == []
     assert deps.access_key_loader("u1", "o1") == "ak"
     assert calls == ["existing"]
+    candidate = _candidate(1, user_id="110680")
+    assert deps.apply_stop(candidate, "secret-ak") == "STOPPED_TO_PAUSED"
+    assert manager_calls == ["manager"]
+    assert stop_calls == [(candidate, "secret-ak", 110680)]

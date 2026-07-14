@@ -235,10 +235,9 @@ def render_report(rows: Sequence[AuditRow]) -> str:
 def _build_production_dependencies() -> AuditDependencies:
     nodes_table = get_bohrium_nodes_table()
     node_service = get_bohrium_node_service()
-    manager = get_bohrium_node_lease_manager()
 
     def apply_stop(candidate: dict[str, Any], access_key: str) -> Any:
-        return manager.stop_unleased_ready_slot(
+        return get_bohrium_node_lease_manager().stop_unleased_ready_slot(
             candidate,
             access_key=access_key,
             creator_id=_creator_id_from_user(candidate.get("user_id")),
