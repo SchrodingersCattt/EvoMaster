@@ -11,6 +11,7 @@ import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
+from enum import Enum
 from functools import lru_cache
 from typing import Any
 
@@ -30,6 +31,15 @@ from src.utils.constant import (
 logger = logging.getLogger(__name__)
 
 _SLOT_LOCK_PREFIX = "matmaster:bohrium:node-slot:"
+
+
+class HistoricalNodeStopOutcome(str, Enum):
+    """Terminal outcomes for one explicitly audited historical slot."""
+
+    STOPPED_TO_PAUSED = "STOPPED_TO_PAUSED"
+    SKIPPED_SLOT_CHANGED = "SKIPPED_SLOT_CHANGED"
+    SKIPPED_CONCURRENT_LEASE = "SKIPPED_CONCURRENT_LEASE"
+    PROVIDER_MISSING_SLOT_REMOVED = "PROVIDER_MISSING_SLOT_REMOVED"
 
 
 @dataclass(frozen=True)
@@ -574,6 +584,59 @@ class BohriumNodeLeaseManager:
             password=None,
         )
         return self.release_expired(lease, access_key=access_key, creator_id=creator_id)
+
+    def stop_unleased_ready_slot(
+        self,
+        row: dict[str, Any],
+        *,
+        access_key: str,
+        creator_id: int = 0,
+    ) -> HistoricalNodeStopOutcome:
+        """Stop one audited ready slot after a fenced lease/state recheck."""
+        identity = NodeIdentity(
+            str(row["user_id"]),
+            str(row["org_id"]),
+            int(row["project_id"]),
+            int(row["sku_id"]),
+        )
+        slot_id = int(row["id"])
+        node_id = int(row["node_id"])
+        with self._slot_lock(identity):
+            current = self._nodes.find_by_id(slot_id)
+            if (
+                not current
+                or current.get("state") != "ready"
+                or current.get("node_id") is None
+                or int(current["node_id"]) != node_id
+            ):
+                return HistoricalNodeStopOutcome.SKIPPED_SLOT_CHANGED
+            if self._leases.count_live(slot_id) > 0:
+                return HistoricalNodeStopOutcome.SKIPPED_CONCURRENT_LEASE
+            if not self._nodes.mark_stopping(slot_id, node_id):
+                return HistoricalNodeStopOutcome.SKIPPED_SLOT_CHANGED
+        try:
+            self._node_service.stop_node(
+                access_key,
+                node_id,
+                identity.project_id,
+                creator_id=creator_id,
+            )
+        except BohriumNodeNotFoundError:
+            self._nodes.delete_by_node(
+                identity.user_id,
+                identity.org_id,
+                identity.project_id,
+                identity.sku_id,
+                node_id,
+            )
+            return HistoricalNodeStopOutcome.PROVIDER_MISSING_SLOT_REMOVED
+        except Exception as exc:
+            self._nodes.record_stop_error(slot_id, node_id, str(exc))
+            raise
+        with self._slot_lock(identity):
+            if not self._nodes.mark_paused(slot_id, node_id):
+                raise RuntimeError("Bohrium historical node stop state was fenced")
+        return HistoricalNodeStopOutcome.STOPPED_TO_PAUSED
 
     def retry_stopping(
         self,

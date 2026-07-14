@@ -8,6 +8,7 @@ import pytest
 
 from src.services.bohrium_node_lifecycle import (
     BohriumNodeLeaseManager,
+    HistoricalNodeStopOutcome,
     NodeIdentity,
     NodeLeaseConfig,
     NodeLeaseHeartbeat,
@@ -39,6 +40,7 @@ class _Nodes:
     def __init__(self, events=None) -> None:
         self.row = None
         self.attached_node_ids = []
+        self.stop_errors = []
         self.events = events if events is not None else []
         self._next_id = 1
         self._lock = threading.Lock()
@@ -192,13 +194,16 @@ class _Nodes:
             self.row["state"] = "paused"
             return True
 
-    def record_stop_error(self, slot_id, node_id, _error):
+    def record_stop_error(self, slot_id, node_id, error):
         with self._lock:
-            return bool(
+            matched = bool(
                 self.row
                 and self.row["id"] == slot_id
                 and self.row["node_id"] == node_id
             )
+            if matched:
+                self.stop_errors.append(error)
+            return matched
 
     def update_last_used_at(self, *_args):
         return True
@@ -477,6 +482,104 @@ def test_provider_deleted_node_removes_stale_slot_after_last_release():
     provider.stop_missing = True
 
     assert manager.release(handle, access_key="ak", creator_id=1) is True
+    assert nodes.row is None
+
+
+def test_historical_ready_slot_without_lease_stops_and_becomes_paused():
+    manager, nodes, leases, provider = _manager()
+    handle = manager.acquire(
+        NodeIdentity("u1", "o1", 99, 456),
+        session_id="session-1",
+        invocation_id="inv-1",
+        access_key="ak",
+        creator_id=1,
+    )
+    leases.release(handle.invocation_id, handle.lease_token)
+
+    outcome = manager.stop_unleased_ready_slot(
+        dict(nodes.row), access_key="ak", creator_id=1
+    )
+
+    assert outcome is HistoricalNodeStopOutcome.STOPPED_TO_PAUSED
+    assert provider.stop_count == 1
+    assert nodes.row["state"] == "paused"
+
+
+def test_historical_ready_slot_with_concurrent_lease_is_skipped():
+    manager, nodes, _leases, provider = _manager()
+    manager.acquire(
+        NodeIdentity("u1", "o1", 99, 456),
+        session_id="session-1",
+        invocation_id="inv-1",
+        access_key="ak",
+        creator_id=1,
+    )
+
+    outcome = manager.stop_unleased_ready_slot(
+        dict(nodes.row), access_key="ak", creator_id=1
+    )
+
+    assert outcome is HistoricalNodeStopOutcome.SKIPPED_CONCURRENT_LEASE
+    assert provider.stop_count == 0
+    assert nodes.row["state"] == "ready"
+
+
+def test_historical_slot_changed_since_audit_is_skipped():
+    manager, nodes, leases, provider = _manager()
+    handle = manager.acquire(
+        NodeIdentity("u1", "o1", 99, 456),
+        session_id="session-1",
+        invocation_id="inv-1",
+        access_key="ak",
+        creator_id=1,
+    )
+    leases.release(handle.invocation_id, handle.lease_token)
+    candidate = dict(nodes.row)
+    nodes.row["node_id"] = 172
+
+    outcome = manager.stop_unleased_ready_slot(candidate, access_key="ak", creator_id=1)
+
+    assert outcome is HistoricalNodeStopOutcome.SKIPPED_SLOT_CHANGED
+    assert provider.stop_count == 0
+    assert nodes.row["state"] == "ready"
+
+
+def test_historical_stop_timeout_keeps_stopping_and_records_error():
+    manager, nodes, leases, provider = _manager()
+    handle = manager.acquire(
+        NodeIdentity("u1", "o1", 99, 456),
+        session_id="session-1",
+        invocation_id="inv-1",
+        access_key="ak",
+        creator_id=1,
+    )
+    leases.release(handle.invocation_id, handle.lease_token)
+    provider.stop_failures = 1
+
+    with pytest.raises(TimeoutError, match="stop timeout"):
+        manager.stop_unleased_ready_slot(dict(nodes.row), access_key="ak", creator_id=1)
+
+    assert nodes.row["state"] == "stopping"
+    assert nodes.stop_errors == ["stop timeout"]
+
+
+def test_historical_provider_missing_node_removes_stale_slot():
+    manager, nodes, leases, provider = _manager()
+    handle = manager.acquire(
+        NodeIdentity("u1", "o1", 99, 456),
+        session_id="session-1",
+        invocation_id="inv-1",
+        access_key="ak",
+        creator_id=1,
+    )
+    leases.release(handle.invocation_id, handle.lease_token)
+    provider.stop_missing = True
+
+    outcome = manager.stop_unleased_ready_slot(
+        dict(nodes.row), access_key="ak", creator_id=1
+    )
+
+    assert outcome is HistoricalNodeStopOutcome.PROVIDER_MISSING_SLOT_REMOVED
     assert nodes.row is None
 
 
