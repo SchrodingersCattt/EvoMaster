@@ -9,6 +9,7 @@ from urllib.parse import quote
 
 import httpx
 
+from matmaster.bohrium.node_lifecycle import resolve_node_lifecycle
 from utils.env import MATMASTER_TOOLS_SERVER
 
 logger = logging.getLogger(__name__)
@@ -66,11 +67,11 @@ def _coerce_positive_int(value: Any) -> int | None:
 def _coerce_node_lifecycle(data: dict[str, Any]) -> tuple[str, int | None]:
     policy = data.get("bohrium_node_lifecycle_policy")
     timeout = _coerce_positive_int(data.get("bohrium_node_idle_timeout_seconds"))
-    if policy == "idle_timeout" and timeout in {900, 1800, 7200}:
-        return policy, timeout
-    if policy in {"run_end", "keep_running"} and timeout is None:
-        return policy, None
-    return "run_end", None
+    try:
+        resolved, timeout = resolve_node_lifecycle(policy, timeout)
+    except ValueError:
+        return "run_end", None
+    return resolved.value, timeout
 
 
 def get_user_level_runtime_preference(user_id: str) -> UserLevelRuntimePreference:

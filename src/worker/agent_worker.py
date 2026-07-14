@@ -355,7 +355,7 @@ def _run_worker_loop() -> None:
                     session_id,
                     task_id,
                 )
-        from src.services.bohrium_node_lifecycle import resolve_node_lifecycle
+        from matmaster.bohrium.node_lifecycle import resolve_node_lifecycle
 
         try:
             node_lifecycle_policy, bohrium_node_idle_timeout_seconds = (

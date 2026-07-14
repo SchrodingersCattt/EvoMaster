@@ -10,6 +10,7 @@ from matmaster.integration.workspace_resolver import (
     get_remote_session_workspace_root,
     load_workspace_config_dict,
 )
+from src.services.bohrium_node_progress import BohriumNodeStatus
 from src.services.user_service import BohriumAccessKeyFetchResult, UserService
 
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -82,7 +83,7 @@ def _creator_id_from_user(user_id: str | None) -> int:
 def _emit_node_status(
     event_callback: Callable[..., None],
     node_id: int | None,
-    status: str,
+    status: BohriumNodeStatus,
     message: str,
     ip: str | None = None,
 ) -> None:

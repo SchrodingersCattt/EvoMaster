@@ -486,7 +486,7 @@ def test_production_dependencies_use_existing_access_key_only(monkeypatch):
     monkeypatch.setattr(MODULE, "get_redis_dao", lambda: _RedisDao())
     monkeypatch.setattr(
         MODULE,
-        "get_bohrium_node_lease_manager",
+        "get_bohrium_node_reconciliation_service",
         lambda: manager_calls.append("manager") or _Manager(),
     )
     monkeypatch.setattr(

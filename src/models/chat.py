@@ -21,6 +21,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from matmaster.bohrium.node_lifecycle import resolve_node_lifecycle
 from src.base.base_res import BaseResponse
 
 
@@ -617,11 +618,10 @@ class ChatSendRequest(BaseModel):
 
     @model_validator(mode="after")
     def validate_bohrium_node_lifecycle(self):
-        if self.bohrium_node_lifecycle_policy == "idle_timeout":
-            if self.bohrium_node_idle_timeout_seconds not in {900, 1800, 7200}:
-                raise ValueError("unsupported Bohrium Node idle timeout")
-        elif self.bohrium_node_idle_timeout_seconds is not None:
-            raise ValueError("idle timeout is only valid for idle_timeout policy")
+        resolve_node_lifecycle(
+            self.bohrium_node_lifecycle_policy,
+            self.bohrium_node_idle_timeout_seconds,
+        )
         return self
 
     model_config = ConfigDict(

@@ -10,7 +10,9 @@ from typing import Any
 
 from src.dao.bohrium_nodes_table import get_bohrium_nodes_table
 from src.dao.redis_dao import get_redis_dao
-from src.services.bohrium_node_lifecycle import get_bohrium_node_lease_manager
+from src.services.bohrium_node_reconciliation import (
+    get_bohrium_node_reconciliation_service,
+)
 from src.services.bohrium_node_service import get_bohrium_node_service
 from src.services.bohrium_run_support import _creator_id_from_user
 from src.services.user_service import UserService
@@ -255,14 +257,14 @@ def _build_production_dependencies() -> AuditDependencies:
         return client is not None and bool(client.ping())
 
     def apply_stop(candidate: dict[str, Any], access_key: str) -> Any:
-        return get_bohrium_node_lease_manager().stop_unleased_ready_slot(
+        return get_bohrium_node_reconciliation_service().stop_unleased_ready_slot(
             candidate,
             access_key=access_key,
             creator_id=_creator_id_from_user(candidate.get("user_id")),
         )
 
     def apply_stopped(candidate: dict[str, Any], _access_key: str) -> Any:
-        return get_bohrium_node_lease_manager().reconcile_stopped_unleased_ready_slot(
+        return get_bohrium_node_reconciliation_service().reconcile_stopped_unleased_ready_slot(
             candidate
         )
 

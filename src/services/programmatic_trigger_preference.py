@@ -13,6 +13,15 @@ from clients.matmaster_platform.runtime_preference import (
 logger = logging.getLogger(__name__)
 
 
+def resolve_programmatic_trigger_enabled_state(
+    preference: UserLevelRuntimePreference | None,
+) -> bool | None:
+    """Resolve the tri-state flag from an already loaded preference snapshot."""
+    if preference is None or not getattr(preference, "loaded", False):
+        return None
+    return preference.programmatic_trigger_enabled is True
+
+
 def get_programmatic_trigger_enabled_state(
     user_id: str,
     *,
@@ -35,9 +44,7 @@ def get_programmatic_trigger_enabled_state(
             exc_info=True,
         )
         return None
-    if not getattr(preference, "loaded", False):
-        return None
-    return preference.programmatic_trigger_enabled is True
+    return resolve_programmatic_trigger_enabled_state(preference)
 
 
 def is_programmatic_trigger_enabled(user_id: str) -> bool:

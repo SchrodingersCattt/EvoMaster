@@ -46,14 +46,14 @@ class BohriumNodeRecycler:
         redis: Any | None = None,
         leases_table: Any | None = None,
         nodes_table: Any | None = None,
-        lease_manager: Any | None = None,
+        reconciliation_service: Any | None = None,
         access_key_loader: Callable[[str, str], str | None] | None = None,
         config: BohriumNodeRecyclerConfig | None = None,
     ) -> None:
         self._redis = redis
         self._leases = leases_table
         self._nodes = nodes_table
-        self._manager = lease_manager
+        self._reconciler = reconciliation_service
         self._access_key_loader = access_key_loader
         self._config = config or BohriumNodeRecyclerConfig.from_env()
 
@@ -72,12 +72,12 @@ class BohriumNodeRecycler:
             from src.dao.bohrium_nodes_table import get_bohrium_nodes_table
 
             self._nodes = get_bohrium_nodes_table()
-        if self._manager is None:
-            from src.services.bohrium_node_lifecycle import (
-                get_bohrium_node_lease_manager,
+        if self._reconciler is None:
+            from src.services.bohrium_node_reconciliation import (
+                get_bohrium_node_reconciliation_service,
             )
 
-            self._manager = get_bohrium_node_lease_manager()
+            self._reconciler = get_bohrium_node_reconciliation_service()
         if self._access_key_loader is None:
             from src.services.user_service import UserService
 
@@ -139,7 +139,7 @@ class BohriumNodeRecycler:
                     access_key = self._load_access_key(row, summary) or ""
                     if not access_key:
                         continue
-                if self._manager.recycle_expired_creation(
+                if self._reconciler.recycle_expired_creation(
                     row,
                     access_key=access_key,
                     creator_id=_creator_id_from_user(row.get("user_id")),
@@ -174,7 +174,7 @@ class BohriumNodeRecycler:
                 access_key = self._load_access_key(row, summary)
                 if not access_key:
                     continue
-                if self._manager.retry_stopping(
+                if self._reconciler.retry_stopping(
                     row,
                     access_key=access_key,
                     creator_id=_creator_id_from_user(row.get("user_id")),
@@ -205,7 +205,7 @@ class BohriumNodeRecycler:
                 if not access_key:
                     continue
                 row = {**slot, **lease_row}
-                outcome = self._manager.release_expired_row(
+                outcome = self._reconciler.release_expired_row(
                     row,
                     access_key=access_key,
                     creator_id=_creator_id_from_user(slot.get("user_id")),
@@ -228,7 +228,7 @@ class BohriumNodeRecycler:
                 access_key = self._load_access_key(row, summary)
                 if not access_key:
                     continue
-                if self._manager.stop_due_idle(
+                if self._reconciler.stop_due_idle(
                     row,
                     access_key=access_key,
                     creator_id=_creator_id_from_user(row.get("user_id")),

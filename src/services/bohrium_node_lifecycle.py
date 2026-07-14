@@ -2,132 +2,39 @@
 
 from __future__ import annotations
 
-import hashlib
 import logging
 import os
 import time
 import uuid
-from collections.abc import Iterator
-from contextlib import contextmanager
-from dataclasses import dataclass
-from enum import Enum
 from functools import lru_cache
 from typing import Any
 
 from src.dao.bohrium_node_leases_table import get_bohrium_node_leases_table
 from src.dao.bohrium_nodes_table import get_bohrium_nodes_table
 from src.dao.redis_dao import get_redis_dao
+from src.services.bohrium_node_contract import (
+    HistoricalNodeStopOutcome,
+    NodeIdentity,
+    NodeLease,
+    NodeLeaseConfig,
+    NodeLifecyclePolicy,
+    resolve_node_lifecycle,
+)
+from src.services.bohrium_node_coordination import (
+    has_leases_after_expired_cleanup,
+    node_slot_lock,
+)
 from src.services.bohrium_node_progress import (
     NodeProgressReporter,
     report_node_progress,
 )
 from src.services.bohrium_node_service import (
-    NODE_STATUS_STOPPED,
     BohriumNodeNotFoundError,
     get_bohrium_node_service,
 )
-from src.utils.constant import (
-    BOHRIUM_DEFAULT_IMAGE_ID,
-    BOHRIUM_DEFAULT_IMAGE_NAME,
-    env_int,
-)
+from src.utils.constant import BOHRIUM_DEFAULT_IMAGE_ID, BOHRIUM_DEFAULT_IMAGE_NAME
 
 logger = logging.getLogger(__name__)
-
-_SLOT_LOCK_PREFIX = "matmaster:bohrium:node-slot:"
-
-
-class NodeLifecyclePolicy(str, Enum):
-    RUN_END = "run_end"
-    IDLE_TIMEOUT = "idle_timeout"
-    KEEP_RUNNING = "keep_running"
-
-
-NODE_IDLE_TIMEOUT_OPTIONS_SECONDS = frozenset({900, 1800, 7200})
-
-
-def resolve_node_lifecycle(
-    policy: str | NodeLifecyclePolicy | None,
-    idle_timeout_seconds: int | None,
-) -> tuple[NodeLifecyclePolicy, int | None]:
-    """Validate and normalize one per-invocation lifecycle snapshot."""
-    try:
-        resolved = NodeLifecyclePolicy(policy or NodeLifecyclePolicy.RUN_END)
-    except ValueError as exc:
-        raise ValueError(
-            f"unsupported Bohrium Node lifecycle policy: {policy}"
-        ) from exc
-    if resolved is NodeLifecyclePolicy.IDLE_TIMEOUT:
-        if idle_timeout_seconds not in NODE_IDLE_TIMEOUT_OPTIONS_SECONDS:
-            raise ValueError("unsupported Bohrium Node idle timeout")
-        return resolved, idle_timeout_seconds
-    if idle_timeout_seconds is not None:
-        raise ValueError("idle timeout is only valid for idle_timeout policy")
-    return resolved, None
-
-
-class HistoricalNodeStopOutcome(str, Enum):
-    """Terminal outcomes for one explicitly audited historical slot."""
-
-    STOPPED_TO_PAUSED = "STOPPED_TO_PAUSED"
-    ALREADY_STOPPED_TO_PAUSED = "ALREADY_STOPPED_TO_PAUSED"
-    SKIPPED_SLOT_CHANGED = "SKIPPED_SLOT_CHANGED"
-    SKIPPED_CONCURRENT_LEASE = "SKIPPED_CONCURRENT_LEASE"
-    PROVIDER_MISSING_SLOT_REMOVED = "PROVIDER_MISSING_SLOT_REMOVED"
-    PROVIDER_MISSING_SLOT_ALREADY_ABSENT = "PROVIDER_MISSING_SLOT_ALREADY_ABSENT"
-
-
-@dataclass(frozen=True)
-class NodeIdentity:
-    user_id: str
-    org_id: str
-    project_id: int
-    sku_id: int
-
-    @property
-    def lock_key(self) -> str:
-        raw = "\0".join(
-            (
-                self.user_id,
-                self.org_id,
-                str(self.project_id),
-                str(self.sku_id),
-            )
-        )
-        return f"{_SLOT_LOCK_PREFIX}{hashlib.sha256(raw.encode()).hexdigest()}"
-
-
-@dataclass(frozen=True)
-class NodeLease:
-    identity: NodeIdentity
-    node_slot_id: int
-    node_id: int
-    session_id: str
-    invocation_id: str
-    lease_token: str
-    ip: str
-    password: str | None
-
-
-@dataclass(frozen=True)
-class NodeLeaseConfig:
-    lease_ttl_seconds: int = 120
-    creation_ttl_seconds: int = 900
-    slot_lock_ttl_seconds: int = 30
-    acquire_timeout_seconds: int = 960
-    retry_interval_seconds: float = 1.0
-
-    @classmethod
-    def from_env(cls) -> NodeLeaseConfig:
-        return cls(
-            lease_ttl_seconds=env_int("BOHRIUM_NODE_LEASE_TTL_SEC", 120),
-            creation_ttl_seconds=env_int("BOHRIUM_NODE_CREATION_TTL_SEC", 900),
-            slot_lock_ttl_seconds=env_int("BOHRIUM_NODE_SLOT_LOCK_TTL_SEC", 30),
-            acquire_timeout_seconds=env_int("BOHRIUM_NODE_ACQUIRE_TIMEOUT_SEC", 960),
-            retry_interval_seconds=float(
-                env_int("BOHRIUM_NODE_ACQUIRE_RETRY_INTERVAL_SEC", 1)
-            ),
-        )
 
 
 class BohriumNodeLeaseManager:
@@ -148,29 +55,8 @@ class BohriumNodeLeaseManager:
         self._node_service = node_service or get_bohrium_node_service()
         self._config = config or NodeLeaseConfig.from_env()
 
-    @contextmanager
-    def _slot_lock(self, identity: NodeIdentity) -> Iterator[None]:
-        token = str(uuid.uuid4())
-        deadline = time.monotonic() + self._config.acquire_timeout_seconds
-        while True:
-            reserved = self._redis.try_reserve_nx(
-                identity.lock_key,
-                token,
-                self._config.slot_lock_ttl_seconds,
-            )
-            if reserved is None:
-                raise RuntimeError(
-                    "Redis unavailable while acquiring Bohrium node slot"
-                )
-            if reserved:
-                break
-            if time.monotonic() >= deadline:
-                raise TimeoutError("Timed out acquiring Bohrium node slot lock")
-            time.sleep(self._config.retry_interval_seconds)
-        try:
-            yield
-        finally:
-            self._redis.release_reservation(identity.lock_key, token)
+    def _slot_lock(self, identity: NodeIdentity):
+        return node_slot_lock(self._redis, identity, self._config)
 
     def acquire(
         self,
@@ -542,9 +428,7 @@ class BohriumNodeLeaseManager:
         )
 
     def _has_leases_after_expired_cleanup(self, slot_id: int) -> bool:
-        """Fence a heartbeat racing an expired-lease cleanup before stop claims."""
-        self._leases.delete_expired_for_slot(slot_id)
-        return self._leases.count_for_slot(slot_id) > 0
+        return has_leases_after_expired_cleanup(self._leases, slot_id)
 
     def release(
         self,
@@ -656,65 +540,12 @@ class BohriumNodeLeaseManager:
         access_key: str,
         creator_id: int = 0,
     ) -> bool:
-        """Stop a due idle_timeout candidate after a locked CAS recheck."""
-        identity = NodeIdentity(
-            str(row["user_id"]),
-            str(row["org_id"]),
-            int(row["project_id"]),
-            int(row["sku_id"]),
-        )
-        slot_id = int(row["id"])
-        node_id = int(row["node_id"])
-        with self._slot_lock(identity):
-            current = self._nodes.find_by_id(slot_id)
-            if (
-                not current
-                or current.get("state") != "idle"
-                or current.get("node_id") is None
-                or int(current["node_id"]) != node_id
-                or self._has_leases_after_expired_cleanup(slot_id)
-                or not self._nodes.mark_stopping_due_idle(slot_id, node_id)
-            ):
-                return False
-        return self._stop_claimed_slot(
-            identity,
-            slot_id,
-            node_id,
+        """Compatibility facade; monitor code uses the reconciler directly."""
+        return self._reconciliation_service().stop_due_idle(
+            row,
             access_key=access_key,
             creator_id=creator_id,
         )
-
-    def _stop_claimed_slot(
-        self,
-        identity: NodeIdentity,
-        slot_id: int,
-        node_id: int,
-        *,
-        access_key: str,
-        creator_id: int,
-    ) -> bool:
-        try:
-            self._node_service.stop_node(
-                access_key,
-                node_id,
-                identity.project_id,
-                creator_id=creator_id,
-            )
-        except BohriumNodeNotFoundError:
-            return self._nodes.delete_by_node(
-                identity.user_id,
-                identity.org_id,
-                identity.project_id,
-                identity.sku_id,
-                node_id,
-            )
-        except Exception as exc:
-            self._nodes.record_stop_error(slot_id, node_id, str(exc))
-            raise
-        with self._slot_lock(identity):
-            if not self._nodes.mark_paused(slot_id, node_id):
-                raise RuntimeError("Bohrium node stop state was fenced")
-        return True
 
     def release_expired_row(
         self,
@@ -723,23 +554,12 @@ class BohriumNodeLeaseManager:
         access_key: str,
         creator_id: int = 0,
     ) -> bool | None:
-        """Adapt a joined slot/lease recycler row into a fenced release."""
-        lease = NodeLease(
-            identity=NodeIdentity(
-                str(row["user_id"]),
-                str(row["org_id"]),
-                int(row["project_id"]),
-                int(row["sku_id"]),
-            ),
-            node_slot_id=int(row["node_slot_id"]),
-            node_id=int(row["node_id"]),
-            session_id=str(row["session_id"]),
-            invocation_id=str(row["invocation_id"]),
-            lease_token=str(row["lease_token"]),
-            ip="",
-            password=None,
+        """Compatibility facade; monitor code uses the reconciler directly."""
+        return self._reconciliation_service().release_expired_row(
+            row,
+            access_key=access_key,
+            creator_id=creator_id,
         )
-        return self.release_expired(lease, access_key=access_key, creator_id=creator_id)
 
     def stop_unleased_ready_slot(
         self,
@@ -748,87 +568,18 @@ class BohriumNodeLeaseManager:
         access_key: str,
         creator_id: int = 0,
     ) -> HistoricalNodeStopOutcome:
-        """Stop one audited ready slot after a fenced lease/state recheck."""
-        identity = NodeIdentity(
-            str(row["user_id"]),
-            str(row["org_id"]),
-            int(row["project_id"]),
-            int(row["sku_id"]),
+        """Compatibility facade; audit code uses the reconciler directly."""
+        return self._reconciliation_service().stop_unleased_ready_slot(
+            row,
+            access_key=access_key,
+            creator_id=creator_id,
         )
-        slot_id = int(row["id"])
-        node_id = int(row["node_id"])
-        with self._slot_lock(identity):
-            current = self._nodes.find_by_id(slot_id)
-            if (
-                not current
-                or current.get("state") != "ready"
-                or current.get("node_id") is None
-                or int(current["node_id"]) != node_id
-            ):
-                return HistoricalNodeStopOutcome.SKIPPED_SLOT_CHANGED
-            self._leases.delete_expired_for_slot(slot_id)
-            if self._leases.count_for_slot(slot_id) > 0:
-                return HistoricalNodeStopOutcome.SKIPPED_CONCURRENT_LEASE
-            if not self._nodes.mark_stopping(slot_id, node_id):
-                return HistoricalNodeStopOutcome.SKIPPED_SLOT_CHANGED
-        try:
-            self._node_service.stop_node(
-                access_key,
-                node_id,
-                identity.project_id,
-                creator_id=creator_id,
-            )
-        except BohriumNodeNotFoundError:
-            with self._slot_lock(identity):
-                current = self._nodes.find_by_id(slot_id)
-                if current is None:
-                    return (
-                        HistoricalNodeStopOutcome.PROVIDER_MISSING_SLOT_ALREADY_ABSENT
-                    )
-                if (
-                    current.get("state") != "stopping"
-                    or current.get("node_id") is None
-                    or int(current["node_id"]) != node_id
-                ):
-                    return HistoricalNodeStopOutcome.SKIPPED_SLOT_CHANGED
-                if self._nodes.delete_stopping_slot(slot_id, node_id):
-                    return HistoricalNodeStopOutcome.PROVIDER_MISSING_SLOT_REMOVED
-                return HistoricalNodeStopOutcome.SKIPPED_SLOT_CHANGED
-        except Exception as exc:
-            self._nodes.record_stop_error(slot_id, node_id, str(exc))
-            raise
-        with self._slot_lock(identity):
-            if not self._nodes.mark_paused(slot_id, node_id):
-                raise RuntimeError("Bohrium historical node stop state was fenced")
-        return HistoricalNodeStopOutcome.STOPPED_TO_PAUSED
 
     def reconcile_stopped_unleased_ready_slot(
         self, row: dict[str, Any]
     ) -> HistoricalNodeStopOutcome:
-        """Reconcile one provider-stopped historical ready slot to paused."""
-        identity = NodeIdentity(
-            str(row["user_id"]),
-            str(row["org_id"]),
-            int(row["project_id"]),
-            int(row["sku_id"]),
-        )
-        slot_id = int(row["id"])
-        node_id = int(row["node_id"])
-        with self._slot_lock(identity):
-            current = self._nodes.find_by_id(slot_id)
-            if (
-                not current
-                or current.get("state") != "ready"
-                or current.get("node_id") is None
-                or int(current["node_id"]) != node_id
-            ):
-                return HistoricalNodeStopOutcome.SKIPPED_SLOT_CHANGED
-            self._leases.delete_expired_for_slot(slot_id)
-            if self._leases.count_for_slot(slot_id) > 0:
-                return HistoricalNodeStopOutcome.SKIPPED_CONCURRENT_LEASE
-            if not self._nodes.mark_ready_paused(slot_id, node_id):
-                return HistoricalNodeStopOutcome.SKIPPED_SLOT_CHANGED
-        return HistoricalNodeStopOutcome.ALREADY_STOPPED_TO_PAUSED
+        """Compatibility facade; audit code uses the reconciler directly."""
+        return self._reconciliation_service().reconcile_stopped_unleased_ready_slot(row)
 
     def retry_stopping(
         self,
@@ -837,74 +588,12 @@ class BohriumNodeLeaseManager:
         access_key: str,
         creator_id: int = 0,
     ) -> bool:
-        """Retry a previously failed provider stop without touching leases."""
-        identity = NodeIdentity(
-            str(row["user_id"]),
-            str(row["org_id"]),
-            int(row["project_id"]),
-            int(row["sku_id"]),
+        """Compatibility facade; monitor code uses the reconciler directly."""
+        return self._reconciliation_service().retry_stopping(
+            row,
+            access_key=access_key,
+            creator_id=creator_id,
         )
-        slot_id = int(row["id"])
-        node_id = int(row["node_id"])
-        with self._slot_lock(identity):
-            current = self._nodes.find_by_id(slot_id)
-            if (
-                not current
-                or current.get("state") != "stopping"
-                or current.get("node_id") is None
-                or int(current["node_id"]) != node_id
-            ):
-                return False
-            if self._has_leases_after_expired_cleanup(slot_id):
-                return False
-        detail = self._node_service.get_node_detail(access_key, node_id)
-        if detail is None or detail.get("status") == NODE_STATUS_STOPPED:
-            with self._slot_lock(identity):
-                current = self._nodes.find_by_id(slot_id)
-                if (
-                    not current
-                    or current.get("state") != "stopping"
-                    or current.get("node_id") is None
-                    or int(current["node_id"]) != node_id
-                    or self._has_leases_after_expired_cleanup(slot_id)
-                ):
-                    return False
-                if detail is None:
-                    return self._nodes.delete_stopping_slot(slot_id, node_id)
-                return self._nodes.mark_paused(slot_id, node_id)
-        try:
-            self._node_service.stop_node(
-                access_key,
-                node_id,
-                identity.project_id,
-                creator_id=creator_id,
-            )
-        except BohriumNodeNotFoundError:
-            with self._slot_lock(identity):
-                current = self._nodes.find_by_id(slot_id)
-                if (
-                    not current
-                    or current.get("state") != "stopping"
-                    or current.get("node_id") is None
-                    or int(current["node_id"]) != node_id
-                    or self._has_leases_after_expired_cleanup(slot_id)
-                ):
-                    return False
-                return self._nodes.delete_stopping_slot(slot_id, node_id)
-        except Exception as exc:
-            self._nodes.record_stop_error(slot_id, node_id, str(exc))
-            raise
-        with self._slot_lock(identity):
-            current = self._nodes.find_by_id(slot_id)
-            if (
-                not current
-                or current.get("state") != "stopping"
-                or current.get("node_id") is None
-                or int(current["node_id"]) != node_id
-                or self._has_leases_after_expired_cleanup(slot_id)
-            ):
-                return False
-            return self._nodes.mark_paused(slot_id, node_id)
 
     def recycle_expired_creation(
         self,
@@ -913,50 +602,26 @@ class BohriumNodeLeaseManager:
         access_key: str,
         creator_id: int = 0,
     ) -> bool:
-        """Fence an expired create/restart claim and stop its provider Node."""
-        identity = NodeIdentity(
-            str(row["user_id"]),
-            str(row["org_id"]),
-            int(row["project_id"]),
-            int(row["sku_id"]),
+        """Compatibility facade; monitor code uses the reconciler directly."""
+        return self._reconciliation_service().recycle_expired_creation(
+            row,
+            access_key=access_key,
+            creator_id=creator_id,
         )
-        slot_id = int(row["id"])
-        token = str(row["creating_lease_token"])
-        node_id = row.get("node_id")
-        with self._slot_lock(identity):
-            current = self._nodes.find_by_id(slot_id)
-            if (
-                not current
-                or current.get("state") != "creating"
-                or current.get("creating_lease_token") != token
-                or self._has_leases_after_expired_cleanup(slot_id)
-            ):
-                return False
-            if node_id is None:
-                return self._nodes.delete_expired_empty_creation(slot_id, token)
-            node_id = int(node_id)
-            if not self._nodes.mark_stopping_expired_creation(slot_id, node_id, token):
-                return False
-        try:
-            self._node_service.stop_node(
-                access_key,
-                node_id,
-                identity.project_id,
-                creator_id=creator_id,
-            )
-        except BohriumNodeNotFoundError:
-            return self._nodes.delete_by_node(
-                identity.user_id,
-                identity.org_id,
-                identity.project_id,
-                identity.sku_id,
-                node_id,
-            )
-        except Exception as exc:
-            self._nodes.record_stop_error(slot_id, node_id, str(exc))
-            raise
-        with self._slot_lock(identity):
-            return self._nodes.mark_paused(slot_id, node_id)
+
+    def _reconciliation_service(self):
+        from src.services.bohrium_node_reconciliation import (
+            BohriumNodeReconciliationService,
+        )
+
+        return BohriumNodeReconciliationService(
+            nodes_table=self._nodes,
+            leases_table=self._leases,
+            redis=self._redis,
+            node_service=self._node_service,
+            lease_manager=self,
+            config=self._config,
+        )
 
 
 @lru_cache

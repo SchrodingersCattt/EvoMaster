@@ -20,15 +20,13 @@ from matmaster.bohrium.runtime import (
 from matmaster.bohrium.types import BohriumExecutionContext, BohriumRuntimeSnapshot
 from matmaster.sessions.ssh import SSHSession, SSHSessionConfig
 from src.dao.bohrium_nodes_table import get_bohrium_nodes_table
+from src.services.agent_run_bohrium_node import acquire_compatibility_node
+from src.services.bohrium_node_contract import NodeIdentity
 from src.services.bohrium_node_heartbeat import NodeLeaseHeartbeat
-from src.services.bohrium_node_lifecycle import (
-    NodeIdentity,
-    get_bohrium_node_lease_manager,
-)
+from src.services.bohrium_node_lifecycle import get_bohrium_node_lease_manager
 from src.services.bohrium_node_service import (
     DEFAULT_SKU_ID,
     get_bohrium_node_service,
-    get_default_node_name,
 )
 from src.services.bohrium_run_support import (
     _build_access_key_failure_reason,
@@ -44,7 +42,6 @@ from src.services.bohrium_runtime_config import (
 )
 from src.services.sessions_service import SESSIONS
 from src.services.user_service import BohriumAccessKeyFetchResult, UserService
-from src.utils.constant import BOHRIUM_DEFAULT_IMAGE_ID, BOHRIUM_DEFAULT_IMAGE_NAME
 
 logger = logging.getLogger(__name__)
 
@@ -541,209 +538,22 @@ def _setup_bohrium_for_run(
                 "access_key": access_key,
                 "creator_id": _creator_id_from_user(user_id_for_ak),
             }
-        elif use_reuse_table:
-            nodes_table = get_bohrium_nodes_table()
-            creator_id = _creator_id_from_user(user_id_for_ak)
-            try:
-                tracked_node_ids = nodes_table.list_node_ids_for_user_org(
-                    user_id_for_ak, org_id
-                )
-                cleanup_node_name = get_default_node_name()
-                destroyed_node_ids = node_svc.destroy_untracked_nodes_by_name(
-                    access_key,
-                    tracked_node_ids,
-                    node_name=cleanup_node_name,
-                    creator_id=creator_id,
-                )
-                if destroyed_node_ids:
-                    logger.info(
-                        "run_agent: destroyed untracked nodes user_id=%s org_id=%s "
-                        "name=%s node_ids=%s",
-                        user_id_for_ak,
-                        org_id,
-                        cleanup_node_name,
-                        destroyed_node_ids,
-                    )
-            except Exception as cleanup_err:
-                logger.warning(
-                    "run_agent: cleanup untracked nodes failed user_id=%s org_id=%s: %s",
-                    user_id_for_ak,
-                    org_id,
-                    cleanup_err,
-                )
-            row = nodes_table.find_one_for_reuse(
-                user_id_for_ak, org_id, project_id, effective_sku_id
+        else:
+            nodes_table = get_bohrium_nodes_table() if use_reuse_table else None
+            acquisition = acquire_compatibility_node(
+                node_service=node_svc,
+                nodes_table=nodes_table,
+                access_key=access_key,
+                project_id=project_id,
+                sku_id=effective_sku_id,
+                user_id=user_id_for_ak,
+                org_id=org_id,
+                event_callback=event_callback,
             )
-            expected_image_name = (
-                os.environ.get("BOHRIUM_EXPECTED_IMAGE_NAME")
-                or os.environ.get("BOHRIUM_IMAGE_NAME")
-                or BOHRIUM_DEFAULT_IMAGE_NAME
-            )
-            if isinstance(expected_image_name, str):
-                expected_image_name = expected_image_name.strip() or None
-            else:
-                expected_image_name = None
-            if expected_image_name is None:
-                expected_image_name = node_svc.get_image_name_by_id(
-                    access_key, BOHRIUM_DEFAULT_IMAGE_ID
-                )
-
-            def _node_image_outdated(node_image_name: str | None) -> bool:
-                if not expected_image_name or not node_image_name:
-                    return False
-                return node_image_name != expected_image_name
-
-            def _destroy_outdated_node(nid: int) -> None:
-                """Delete tracking row and destroy a Bohrium node with outdated image."""
-                nodes_table.delete_by_node(
-                    user_id_for_ak, org_id, project_id, effective_sku_id, nid
-                )
-                try:
-                    node_svc.destroy_node(
-                        access_key,
-                        nid,
-                        project_id,
-                        creator_id=creator_id,
-                    )
-                except Exception as destroy_err:
-                    logger.warning(
-                        "run_agent: destroy outdated node_id=%s failed: %s",
-                        nid,
-                        destroy_err,
-                    )
-
-            if row:
-                node_id = int(row["node_id"])
-                node_reuse_tracked = True
-                node_info = node_svc.get_node_info(access_key, node_id)
-                logger.info(
-                    "run_agent: node image check (ready) node_id=%s "
-                    "node_image_name=%s expected_image_name=%s",
-                    node_id,
-                    node_info.get("image_name") if node_info else None,
-                    expected_image_name,
-                )
-                if node_info and node_info.get("ip"):
-                    if _node_image_outdated(node_info.get("image_name")):
-                        logger.info(
-                            "run_agent: reuse skipped, node image outdated "
-                            "node_id=%s node_image_name=%s expected_image_name=%s, destroy and create new",
-                            node_id,
-                            node_info.get("image_name"),
-                            expected_image_name,
-                        )
-                        _destroy_outdated_node(node_id)
-                        node_id = None
-                        node_reuse_tracked = False
-                        node_info = None
-                    else:
-                        node_ip = node_info.get("ip")
-                        node_pwd = node_info.get("password")
-                        logger.info(
-                            "run_agent: reusing Bohrium node node_id=%s ip=%s",
-                            node_id,
-                            node_ip,
-                        )
-                else:
-                    node_detail = node_svc.get_node_detail(access_key, node_id)
-                    logger.info(
-                        "run_agent: node image check (not ready) node_id=%s "
-                        "node_image_name=%s expected_image_name=%s",
-                        node_id,
-                        node_detail.get("image_name") if node_detail else None,
-                        expected_image_name,
-                    )
-                    if node_detail is not None and _node_image_outdated(
-                        node_detail.get("image_name")
-                    ):
-                        logger.info(
-                            "run_agent: node image outdated node_id=%s "
-                            "node_image_name=%s expected_image_name=%s, destroy and create new",
-                            node_id,
-                            node_detail.get("image_name"),
-                            expected_image_name,
-                        )
-                        _destroy_outdated_node(node_id)
-                        node_id = None
-                        node_reuse_tracked = False
-                    else:
-                        try:
-                            node_svc.restart_node(
-                                access_key,
-                                node_id,
-                                project_id,
-                                creator_id=creator_id,
-                                sku_id=effective_sku_id,
-                            )
-                            _emit_node_status(
-                                event_callback,
-                                node_id,
-                                "created",
-                                "节点已重启，正在等待就绪...",
-                            )
-                            node_info = node_svc.wait_until_ready(access_key, node_id)
-                            node_ip = node_info.get("ip")
-                            node_pwd = node_info.get("password")
-                            logger.info(
-                                "run_agent: restarted Bohrium node node_id=%s ip=%s",
-                                node_id,
-                                node_ip,
-                            )
-                        except Exception as restart_err:
-                            logger.warning(
-                                "run_agent: restart node_id=%s failed, will create new: %s",
-                                node_id,
-                                restart_err,
-                            )
-                            nodes_table.delete_by_node(
-                                user_id_for_ak,
-                                org_id,
-                                project_id,
-                                effective_sku_id,
-                                node_id,
-                            )
-                            node_id = None
-                            node_reuse_tracked = False
-        if node_id is None or node_ip is None:
-            node_info = node_svc.create_node(
-                access_key, project_id, sku_id=effective_sku_id
-            )
-            node_id = node_info.get("node_id")
-            if node_id is not None:
-                _emit_node_status(
-                    event_callback,
-                    node_id,
-                    "created",
-                    "节点已创建，正在等待就绪...",
-                )
-                node_info = node_svc.wait_until_ready(access_key, node_id)
-                node_ip = node_info.get("ip")
-                node_pwd = node_info.get("password")
-                if use_reuse_table and user_id_for_ak and org_id:
-                    try:
-                        inserted = get_bohrium_nodes_table().insert_node(
-                            user_id_for_ak,
-                            org_id,
-                            project_id,
-                            effective_sku_id,
-                            node_id,
-                        )
-                        node_reuse_tracked = bool(inserted)
-                        logger.info(
-                            "run_agent: inserted node into evo_bohrium_nodes "
-                            "user_id=%s org_id=%s project_id=%s sku_id=%s node_id=%s",
-                            user_id_for_ak,
-                            org_id,
-                            project_id,
-                            effective_sku_id,
-                            node_id,
-                        )
-                    except Exception as insert_err:
-                        logger.warning(
-                            "run_agent: insert_node failed (table missing?): %s",
-                            insert_err,
-                            exc_info=True,
-                        )
+            node_id = acquisition.node_id
+            node_ip = acquisition.ip
+            node_pwd = acquisition.password
+            node_reuse_tracked = acquisition.reuse_tracked
         if node_id is not None and node_ip:
             if session_id not in SESSIONS:
                 SESSIONS[session_id] = {}

@@ -7,10 +7,8 @@ import threading
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from src.services.bohrium_node_lifecycle import (
-        BohriumNodeLeaseManager,
-        NodeLease,
-    )
+    from src.services.bohrium_node_contract import NodeLease
+    from src.services.bohrium_node_lifecycle import BohriumNodeLeaseManager
 
 logger = logging.getLogger(__name__)
 

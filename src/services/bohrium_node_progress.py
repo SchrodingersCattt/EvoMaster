@@ -4,15 +4,30 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
+from typing import Literal
 
 logger = logging.getLogger(__name__)
 
-NodeProgressReporter = Callable[[str, int | None, str], None]
+BohriumNodeStatus = Literal[
+    "acquiring",
+    "waiting",
+    "creating",
+    "restarting",
+    "starting",
+    "ready",
+    "connecting",
+    "connected",
+    "paused",
+    "destroyed",
+    "failed",
+]
+
+NodeProgressReporter = Callable[[BohriumNodeStatus, int | None, str], None]
 
 
 def report_node_progress(
     reporter: NodeProgressReporter | None,
-    status: str,
+    status: BohriumNodeStatus,
     node_id: int | None,
     message: str,
 ) -> None:

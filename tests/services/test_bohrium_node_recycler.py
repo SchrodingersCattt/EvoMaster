@@ -107,7 +107,7 @@ def test_tick_retries_stopping_slots_and_releases_expired_invocations():
         redis=redis,
         leases_table=_Leases(),
         nodes_table=_Nodes(),
-        lease_manager=manager,
+        reconciliation_service=manager,
         access_key_loader=lambda user_id, org_id: f"ak:{user_id}:{org_id}",
         config=BohriumNodeRecyclerConfig(
             batch_size=10, lock_ttl_seconds=30, stop_retry_min_age_seconds=5
@@ -153,7 +153,7 @@ def test_tick_stops_only_due_idle_timeout_slots():
         redis=redis,
         leases_table=_Leases(),
         nodes_table=nodes,
-        lease_manager=manager,
+        reconciliation_service=manager,
         access_key_loader=lambda user_id, org_id: f"ak:{user_id}:{org_id}",
         config=BohriumNodeRecyclerConfig(
             batch_size=10, lock_ttl_seconds=30, stop_retry_min_age_seconds=5
@@ -171,7 +171,7 @@ def test_tick_fails_closed_when_redis_is_unavailable():
         redis=_Redis(reserve=None),
         leases_table=_Leases(),
         nodes_table=_Nodes(),
-        lease_manager=_Manager(),
+        reconciliation_service=_Manager(),
         access_key_loader=lambda _user_id, _org_id: "ak",
         config=BohriumNodeRecyclerConfig(
             batch_size=10, lock_ttl_seconds=30, stop_retry_min_age_seconds=5

@@ -310,19 +310,16 @@ def _redis_and_trigger_preference_patches(
     with (
         patch("src.services.stream_service.get_redis_dao", return_value=fake_redis),
         patch(
-            "src.services.stream_service.is_programmatic_trigger_enabled",
-            return_value=trigger_enabled is True,
-        ),
-        patch(
             "src.services.stream_service.get_user_level_runtime_preference",
             return_value=UserLevelRuntimePreference(
                 bohrium_node_lifecycle_policy=node_lifecycle_policy,
                 bohrium_node_idle_timeout_seconds=node_idle_timeout_seconds,
-                loaded=True,
+                programmatic_trigger_enabled=trigger_enabled is True,
+                loaded=trigger_enabled is not None,
             ),
-        ),
+        ) as preference_getter,
     ):
-        yield
+        yield preference_getter
 
 
 def _trigger_patches(
@@ -478,13 +475,14 @@ def test_trigger_run_snapshots_persisted_node_lifecycle_preference():
         node_idle_timeout_seconds=1800,
     )
 
-    with p1, p2, p3, p4:
+    with p1 as preference_getter, p2, p3, p4:
         result = service.trigger_run("s1", "作业完成", origin="hpc_job")
 
     assert result.status == "enqueued"
     job = fake_redis.lpush_agent_run_job.call_args.args[0]
     assert job["bohrium_node_lifecycle_policy"] == "idle_timeout"
     assert job["bohrium_node_idle_timeout_seconds"] == 1800
+    preference_getter.assert_called_once_with("owner-1")
 
 
 def test_trigger_run_accepts_workspace_for_programmatic_wakeup():
