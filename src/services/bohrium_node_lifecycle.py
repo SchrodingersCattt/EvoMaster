@@ -653,41 +653,6 @@ class BohriumNodeLeaseManager:
                 raise RuntimeError("Bohrium node stop state was fenced")
         return True
 
-    def manual_stop(
-        self,
-        identity: NodeIdentity,
-        *,
-        access_key: str,
-        creator_id: int = 0,
-    ) -> bool:
-        """Stop one user-selected idle/ready slot without interrupting live leases."""
-        with self._slot_lock(identity):
-            row = self._nodes.find_one_for_reuse(
-                identity.user_id,
-                identity.org_id,
-                identity.project_id,
-                identity.sku_id,
-            )
-            if not row or row.get("node_id") is None:
-                return False
-            state = str(row.get("state") or "")
-            if state == "paused":
-                return False
-            if self._has_leases_after_expired_cleanup(int(row["id"])):
-                raise RuntimeError("Bohrium Node has a live lease")
-            if state not in {"ready", "idle"}:
-                raise RuntimeError(f"Bohrium Node cannot stop from state {state}")
-            node_id = int(row["node_id"])
-            if not self._nodes.mark_stopping(int(row["id"]), node_id):
-                return False
-        return self._stop_claimed_slot(
-            identity,
-            int(row["id"]),
-            node_id,
-            access_key=access_key,
-            creator_id=creator_id,
-        )
-
     def stop_due_idle(
         self,
         row: dict[str, Any],

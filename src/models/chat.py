@@ -540,13 +540,6 @@ class StructureSelection(BaseModel):
     atoms: list[StructureSelectionAtom] = Field(default_factory=list)
 
 
-class BohriumNodeStopRequest(BaseModel):
-    """手动关闭当前用户在指定项目/SKU 下的共享 Node 槽位。"""
-
-    project_id: int = Field(gt=0)
-    sku_id: int = Field(gt=0)
-
-
 class ChatSendRequest(BaseModel):
     """POST /chat/sessions/{session_id}/stream 请求体：不传或 content 为空则仅拉历史+ping；有 content 则发送消息并返回本次运行的 SSE 流"""
 

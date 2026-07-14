@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Support `run_end`, allowlisted idle shutdown, and keep-running Node policies through persistent settings, per-send confirmation, a queue snapshot, and a safe manual-stop action.
+**Goal:** Support `run_end`, allowlisted idle shutdown, and keep-running Node policies through persistent settings, per-send confirmation, and a queue snapshot.
 
 **Architecture:** tools-server owns user preferences, evo validates and snapshots per-send policy before the independent Worker acquires a shared Node lease, and the Node slot stores the latest desired policy used by last-release/recycler transitions. The frontend has a settings entry and a pre-send prompt; all missing or invalid legacy values fail safe to `run_end`.
 
@@ -46,9 +46,9 @@
 - Modify: `tests/services/test_bohrium_node_recycler.py`
 - Modify: `tests/test_bohrium_nodes_table.py`
 
-- [ ] Add failing tests for policy validation, `ready -> idle`, idle reuse, due-idle stop, keep-running exclusion, latest-policy behavior, and live-lease manual-stop rejection.
+- [ ] Add failing tests for policy validation, `ready -> idle`, idle reuse, due-idle stop, keep-running exclusion, and latest-policy behavior.
 - [ ] Run focused tests and confirm expected red failures.
-- [ ] Implement typed policy resolution, slot-policy CAS helpers, idle transitions/scans, recycler dispatch, and manual stop under the existing Redis slot lock.
+- [ ] Implement typed policy resolution, slot-policy CAS helpers, idle transitions/scans, and recycler dispatch under the existing Redis slot lock.
 - [ ] Run focused tests and lifecycle regression tests.
 
 ### Task 3: evo request and Worker snapshot
@@ -70,19 +70,7 @@
 - [ ] Thread only the two primitive snapshot fields through the existing API/Worker call chain and resolve non-Web preferences safely.
 - [ ] Run focused tests and API/Worker regressions.
 
-### Task 4: evo manual-stop HTTP endpoint
-
-**Files:**
-- Modify the existing chat/node API router and request models selected from repository patterns.
-- Create or modify focused API tests.
-
-- [ ] Add failing authentication, live-lease conflict, already-paused, provider-missing, and success tests.
-- [ ] Run tests and confirm red failures.
-- [ ] Add a user-scoped project/SKU manual-stop endpoint backed by the lifecycle manager.
-- [ ] Run focused API tests and evo pre-commit.
-- [ ] Commit evo changes.
-
-### Task 5: frontend preference contract and settings entry
+### Task 4: frontend preference contract and settings entry
 
 **Files:**
 - Modify: `src/api/account.ts`
@@ -93,10 +81,10 @@
 - Add pure lifecycle option/normalization module and Node-runner tests under `tests/chat/`.
 
 - [ ] Add failing tests for lifecycle normalization and request serialization.
-- [ ] Add typed account GET/POST helpers, lifecycle select, prompt switch, keep-running warning, and manual-stop action.
+- [ ] Add typed account GET/POST helpers, lifecycle select, prompt switch, and keep-running warning.
 - [ ] Run chat tests, typecheck, lint, and build.
 
-### Task 6: frontend per-send prompt and snapshot
+### Task 5: frontend per-send prompt and snapshot
 
 **Files:**
 - Create a focused lifecycle preference/prompt hook and modal component under `src/features/chat/`.
@@ -112,7 +100,7 @@
 - [ ] Ensure cancelled modal sends nothing and save failure does not silently disable future prompts.
 - [ ] Run frontend test/typecheck/lint/build and commit frontend changes.
 
-### Task 7: cross-repository verification
+### Task 6: cross-repository verification
 
 - [ ] Run all focused suites plus full pytest/typecheck/lint/build commands in each changed repository.
 - [ ] Run pre-commit on changed files and confirm no non-doc file exceeds 1000 lines.

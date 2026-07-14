@@ -12,8 +12,7 @@ lease”的基础上，让用户选择最后一个 invocation 结束后的 Node 
 - `idle_timeout`：最后一个 live lease 释放后保持运行，槽位进入 `idle`；只允许 900、1800、
   7200 秒，到期由 Worker monitor stop。
 - `keep_running`：最后一个 live lease 释放后保持运行，槽位进入 `idle`，但
-  `idle_expires_at` 为 NULL；MatMaster 不自动 stop。平台运维、异常、镜像替换和用户手动关机
-  仍可能停止 Node。
+  `idle_expires_at` 为 NULL；MatMaster 不自动 stop。平台运维、异常和镜像替换仍可能停止 Node。
 
 默认策略固定为 `run_end`。旧请求、旧偏好行和缺失字段都解析为该安全默认值。
 
@@ -50,16 +49,6 @@ monitor 扫描已到期的 `idle_timeout` 槽位，在槽位锁内重新检查 s
 CAS 到 `stopping` 后调用 provider。`keep_running` 的 NULL deadline 不进入扫描。Worker 崩溃导致
 lease 过期时沿用同一 last-release 策略分派。
 
-## 手动关机
-
-evo 提供当前用户身份限定的手动 stop 接口，调用方提交 project/SKU，服务端按
-user/org/project/SKU 查槽位。只有无 live lease 的 `ready`/`idle` 槽位可进入 stopping；存在
-live lease、正在 creating/stopping 或槽位已变化时返回冲突，不得中断其他 invocation。
-provider 已不存在时删除陈旧槽位；成功 stop 后保留 node_id 并标为 `paused`，以后可以 restart。
-
-前端在 Node 设置区域提供“立即关机”。`keep_running` 的文案必须提示可能持续计费，并明确该
-按钮不会终止正在运行的任务。
-
 ## 数据库与部署
 
 evo 已有 state/lifecycle/idle 字段和到期索引，无需新增 evo DDL。tools-server 新增三个用户偏好
@@ -78,6 +67,5 @@ evo 已有 state/lifecycle/idle 字段和到期索引，无需新增 evo DDL。t
 - 三种策略的严格组合校验以及 15m/30m/2h allowlist。
 - 同槽位并发只创建一台 Node，非最后 lease 释放不改变状态。
 - idle timeout 到期回收、新 acquire 取消 deadline、keep-running 不被 recycler 扫描。
-- 手动关机拒绝 live lease，并对重复 stop/provider missing 保持幂等。
 - 请求字段完整贯穿 API、Redis job、Worker、Node acquire。
 - 设置页持久保存、逐轮弹窗的单次/记住分支、请求体序列化和旧 API fallback。
