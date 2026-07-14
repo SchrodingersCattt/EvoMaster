@@ -45,22 +45,25 @@ def _deps(
         "image_name": "matmaster:v1",
     },
     apply_stop=lambda _candidate, _access_key: "STOPPED_TO_PAUSED",
+    apply_stopped=lambda _candidate, _access_key: "ALREADY_STOPPED_TO_PAUSED",
 ):
     return AuditDependencies(
         candidate_loader=lambda _limit: candidates,
         access_key_loader=access_key_loader,
         node_detail_loader=node_detail_loader,
         apply_stop=apply_stop,
+        apply_stopped=apply_stopped,
     )
 
 
 def test_classifies_provider_states_conservatively_and_redacts_secret():
-    candidates = [_candidate(node_id) for node_id in range(1, 5)]
+    candidates = [_candidate(node_id) for node_id in range(1, 6)]
     details = {
         1: {"status": 2, "image_name": "matmaster:v1", "password": "pwd"},
         2: None,
-        3: {"status": 7, "image_name": "matmaster:v2"},
-        4: {"status": None, "image_name": None},
+        3: {"status": -1, "image_name": "matmaster:v2"},
+        4: {"status": 7, "image_name": "matmaster:v3"},
+        5: {"status": None, "image_name": None},
     }
 
     result = audit_candidates(
@@ -73,7 +76,8 @@ def test_classifies_provider_states_conservatively_and_redacts_secret():
     assert result.apply_failed is False
     assert [row.recommendation for row in result.rows] == [
         "VERIFY_IDLE_THEN_STOP",
-        "DB_ROW_STALE_CANDIDATE",
+        "PROVIDER_LIST_MISSING",
+        "ALREADY_STOPPED",
         "MANUAL_REVIEW_STATUS_7",
         "MANUAL_REVIEW_STATUS_UNKNOWN",
     ]
@@ -81,7 +85,7 @@ def test_classifies_provider_states_conservatively_and_redacts_secret():
     output = render_report(result.rows)
     assert "secret-ak" not in output
     assert "pwd" not in output
-    assert "SUMMARY total=4 audit_incomplete=0" in output
+    assert "SUMMARY total=5 audit_incomplete=0" in output
 
 
 def test_incomplete_rows_continue_without_leaking_error_text():
@@ -135,6 +139,7 @@ def test_cli_dry_run_renders_report_and_passes_limit(capsys):
         access_key_loader=deps.access_key_loader,
         node_detail_loader=deps.node_detail_loader,
         apply_stop=deps.apply_stop,
+        apply_stopped=deps.apply_stopped,
     )
 
     assert main(["--limit", "10"], deps=deps) == 0
@@ -165,6 +170,7 @@ def test_cli_exit_codes_for_incomplete_and_database_failure(capsys):
         access_key_loader=broken.access_key_loader,
         node_detail_loader=broken.node_detail_loader,
         apply_stop=broken.apply_stop,
+        apply_stopped=broken.apply_stopped,
     )
     assert main([], deps=broken) == 1
     output = capsys.readouterr().out
@@ -207,18 +213,78 @@ def test_cli_requires_apply_and_confirmation_together(argv):
     assert exc_info.value.code == 2
 
 
-def test_dry_run_never_invokes_apply_stop():
+def test_dry_run_never_invokes_apply_actions():
     stops: list[int] = []
+    reconciliations: list[int] = []
 
     result = audit_candidates(
-        [_candidate(1)],
+        [_candidate(1), _candidate(2)],
         access_key_loader=lambda _user, _org: "secret-ak",
-        node_detail_loader=lambda _ak, _node_id: {"status": 2},
+        node_detail_loader=lambda _ak, node_id: {"status": 2 if node_id == 1 else -1},
         apply_stop=lambda candidate, _ak: stops.append(candidate["node_id"]),
+        apply_stopped=lambda candidate, _ak: reconciliations.append(
+            candidate["node_id"]
+        ),
     )
 
     assert stops == []
-    assert result.rows[0].execution == "DRY_RUN"
+    assert reconciliations == []
+    assert {row.execution for row in result.rows} == {"DRY_RUN"}
+
+
+@pytest.mark.parametrize(
+    ("status", "apply_stop", "apply_stopped", "missing_name"),
+    [
+        (2, None, lambda _candidate, _ak: None, "apply_stop"),
+        (-1, lambda _candidate, _ak: None, None, "apply_stopped"),
+    ],
+)
+def test_apply_requires_the_matching_action(
+    status, apply_stop, apply_stopped, missing_name
+):
+    with pytest.raises(ValueError, match=missing_name):
+        audit_candidates(
+            [_candidate(1)],
+            access_key_loader=lambda _user, _org: "secret-ak",
+            node_detail_loader=lambda _ak, _node_id: {"status": status},
+            apply=True,
+            apply_stop=apply_stop,
+            apply_stopped=apply_stopped,
+        )
+
+
+def test_apply_dispatches_running_and_stopped_candidates_separately():
+    candidates = [_candidate(node_id) for node_id in range(1, 5)]
+    details = {
+        1: {"status": 2},
+        2: {"status": -1},
+        3: None,
+        4: {"status": 7},
+    }
+    stops: list[int] = []
+    reconciliations: list[int] = []
+
+    result = audit_candidates(
+        candidates,
+        access_key_loader=lambda _user, _org: "secret-ak",
+        node_detail_loader=lambda _ak, node_id: details[node_id],
+        apply=True,
+        apply_stop=lambda candidate, _ak: stops.append(candidate["node_id"])
+        or "STOPPED_TO_PAUSED",
+        apply_stopped=lambda candidate, _ak: reconciliations.append(
+            candidate["node_id"]
+        )
+        or "ALREADY_STOPPED_TO_PAUSED",
+    )
+
+    assert stops == [1]
+    assert reconciliations == [2]
+    assert [row.execution for row in result.rows] == [
+        "STOPPED_TO_PAUSED",
+        "ALREADY_STOPPED_TO_PAUSED",
+        "NOT_ELIGIBLE",
+        "NOT_ELIGIBLE",
+    ]
 
 
 def test_apply_stops_only_status_two_candidates_and_renders_outcomes():
@@ -299,6 +365,7 @@ def test_production_dependencies_use_existing_access_key_only(monkeypatch):
     calls: list[str] = []
     manager_calls: list[str] = []
     stop_calls: list[tuple[dict[str, Any], str, int]] = []
+    reconcile_calls: list[dict[str, Any]] = []
 
     class _Table:
         def list_ready_without_live_leases(self, _limit):
@@ -312,6 +379,10 @@ def test_production_dependencies_use_existing_access_key_only(monkeypatch):
         def stop_unleased_ready_slot(self, candidate, *, access_key, creator_id):
             stop_calls.append((candidate, access_key, creator_id))
             return "STOPPED_TO_PAUSED"
+
+        def reconcile_stopped_unleased_ready_slot(self, candidate):
+            reconcile_calls.append(candidate)
+            return "ALREADY_STOPPED_TO_PAUSED"
 
     monkeypatch.setattr(MODULE, "get_bohrium_nodes_table", lambda: _Table())
     monkeypatch.setattr(MODULE, "get_bohrium_node_service", lambda: _NodeService())
@@ -338,5 +409,7 @@ def test_production_dependencies_use_existing_access_key_only(monkeypatch):
     assert calls == ["existing"]
     candidate = _candidate(1, user_id="110680")
     assert deps.apply_stop(candidate, "secret-ak") == "STOPPED_TO_PAUSED"
-    assert manager_calls == ["manager"]
+    assert deps.apply_stopped(candidate, "secret-ak") == "ALREADY_STOPPED_TO_PAUSED"
+    assert manager_calls == ["manager", "manager"]
     assert stop_calls == [(candidate, "secret-ak", 110680)]
+    assert reconcile_calls == [candidate]

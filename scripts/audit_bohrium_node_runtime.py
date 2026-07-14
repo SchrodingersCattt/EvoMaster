@@ -45,6 +45,7 @@ class AuditDependencies:
     access_key_loader: Callable[[str, str], str | None]
     node_detail_loader: Callable[[str, int], dict[str, Any] | None]
     apply_stop: Callable[[dict[str, Any], str], Any]
+    apply_stopped: Callable[[dict[str, Any], str], Any]
 
 
 def _bounded_limit(value: str) -> int:
@@ -59,11 +60,13 @@ def _bounded_limit(value: str) -> int:
 
 def _classify(detail: dict[str, Any] | None) -> tuple[Any, str | None, str]:
     if detail is None:
-        return None, None, "DB_ROW_STALE_CANDIDATE"
+        return None, None, "PROVIDER_LIST_MISSING"
     status = detail.get("status")
     image_name = detail.get("image_name")
     if status == 2:
         recommendation = "VERIFY_IDLE_THEN_STOP"
+    elif status == -1:
+        recommendation = "ALREADY_STOPPED"
     elif status is None:
         recommendation = "MANUAL_REVIEW_STATUS_UNKNOWN"
     else:
@@ -102,8 +105,9 @@ def audit_candidates(
     node_detail_loader: Callable[[str, int], dict[str, Any] | None],
     apply: bool = False,
     apply_stop: Callable[[dict[str, Any], str], Any] | None = None,
+    apply_stopped: Callable[[dict[str, Any], str], Any] | None = None,
 ) -> AuditResult:
-    """Classify candidates and optionally stop all provider-ready Nodes."""
+    """Classify candidates and optionally reconcile eligible Node states."""
     rows: list[AuditRow] = []
     access_keys: dict[tuple[str, str], str | None] = {}
     incomplete = False
@@ -161,11 +165,19 @@ def audit_candidates(
             recommendation=recommendation,
             execution="NOT_ELIGIBLE" if apply else "DRY_RUN",
         )
-        if apply and provider_status == 2:
-            if apply_stop is None:
-                raise ValueError("apply_stop is required when apply is enabled")
+        apply_action = None
+        apply_action_name = None
+        if provider_status == 2:
+            apply_action = apply_stop
+            apply_action_name = "apply_stop"
+        elif provider_status == -1:
+            apply_action = apply_stopped
+            apply_action_name = "apply_stopped"
+        if apply and apply_action_name is not None and apply_action is None:
+            raise ValueError(f"{apply_action_name} is required when apply is enabled")
+        if apply and apply_action is not None:
             try:
-                outcome = apply_stop(candidate, access_key)
+                outcome = apply_action(candidate, access_key)
                 execution = getattr(outcome, "value", outcome)
                 row = replace(row, execution=str(execution))
             except Exception as exc:
@@ -243,11 +255,17 @@ def _build_production_dependencies() -> AuditDependencies:
             creator_id=_creator_id_from_user(candidate.get("user_id")),
         )
 
+    def apply_stopped(candidate: dict[str, Any], _access_key: str) -> Any:
+        return get_bohrium_node_lease_manager().reconcile_stopped_unleased_ready_slot(
+            candidate
+        )
+
     return AuditDependencies(
         candidate_loader=nodes_table.list_ready_without_live_leases,
         access_key_loader=UserService.get_existing_bohrium_access_key,
         node_detail_loader=node_service.get_node_detail,
         apply_stop=apply_stop,
+        apply_stopped=apply_stopped,
     )
 
 
@@ -291,6 +309,7 @@ def main(
         node_detail_loader=dependencies.node_detail_loader,
         apply=args.apply,
         apply_stop=dependencies.apply_stop,
+        apply_stopped=dependencies.apply_stopped,
     )
     print(render_report(result.rows))
     if result.apply_failed:
