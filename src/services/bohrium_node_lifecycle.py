@@ -5,7 +5,6 @@ from __future__ import annotations
 import hashlib
 import logging
 import os
-import threading
 import time
 import uuid
 from collections.abc import Iterator
@@ -18,6 +17,10 @@ from typing import Any
 from src.dao.bohrium_node_leases_table import get_bohrium_node_leases_table
 from src.dao.bohrium_nodes_table import get_bohrium_nodes_table
 from src.dao.redis_dao import get_redis_dao
+from src.services.bohrium_node_progress import (
+    NodeProgressReporter,
+    report_node_progress,
+)
 from src.services.bohrium_node_service import (
     NODE_STATUS_STOPPED,
     BohriumNodeNotFoundError,
@@ -127,55 +130,6 @@ class NodeLeaseConfig:
         )
 
 
-class NodeLeaseHeartbeat:
-    """Run-owned daemon that renews one fenced invocation lease."""
-
-    def __init__(
-        self,
-        manager: BohriumNodeLeaseManager,
-        lease: NodeLease,
-        *,
-        interval_seconds: float = 30.0,
-    ) -> None:
-        self._manager = manager
-        self._lease = lease
-        self._interval_seconds = interval_seconds
-        self._stop_event = threading.Event()
-        self._thread: threading.Thread | None = None
-
-    def start(self) -> None:
-        if self._thread is not None:
-            return
-        self._thread = threading.Thread(
-            target=self._run,
-            name=f"bohrium-node-lease-{self._lease.invocation_id}",
-            daemon=True,
-        )
-        self._thread.start()
-
-    def stop(self) -> None:
-        self._stop_event.set()
-        thread = self._thread
-        if thread is not None and thread is not threading.current_thread():
-            thread.join(timeout=max(1.0, self._interval_seconds + 1.0))
-
-    def _run(self) -> None:
-        while not self._stop_event.wait(self._interval_seconds):
-            try:
-                if not self._manager.heartbeat(self._lease):
-                    logger.warning(
-                        "Bohrium node lease heartbeat fenced invocation_id=%s",
-                        self._lease.invocation_id,
-                    )
-                    return
-            except Exception:
-                logger.warning(
-                    "Bohrium node lease heartbeat failed invocation_id=%s",
-                    self._lease.invocation_id,
-                    exc_info=True,
-                )
-
-
 class BohriumNodeLeaseManager:
     """Coordinates short slot transitions; provider waits happen outside locks."""
 
@@ -229,6 +183,7 @@ class BohriumNodeLeaseManager:
         expected_image_name: str | None = None,
         lifecycle_policy: str | NodeLifecyclePolicy | None = None,
         idle_timeout_seconds: int | None = None,
+        progress_reporter: NodeProgressReporter | None = None,
     ) -> NodeLease:
         """Acquire an invocation lease, creating or restarting the shared Node."""
         policy, idle_timeout_seconds = resolve_node_lifecycle(
@@ -248,6 +203,7 @@ class BohriumNodeLeaseManager:
         lease_token = str(uuid.uuid4())
         creation_token = str(uuid.uuid4())
         deadline = time.monotonic() + self._config.acquire_timeout_seconds
+        reported_waiting = False
         while time.monotonic() < deadline:
             action: str | None = None
             row: dict[str, Any] | None = None
@@ -341,6 +297,21 @@ class BohriumNodeLeaseManager:
                             int(row["id"]), policy.value, idle_timeout_seconds
                         )
                         action = "create" if node_id is None else "restart"
+                    else:
+                        action = "wait"
+
+            if action == "wait" and row is not None:
+                if not reported_waiting:
+                    waiting_node_id = row.get("node_id")
+                    report_node_progress(
+                        progress_reporter,
+                        "waiting",
+                        int(waiting_node_id) if waiting_node_id is not None else None,
+                        "共享节点正在启动，等待就绪...",
+                    )
+                    reported_waiting = True
+                time.sleep(self._config.retry_interval_seconds)
+                continue
 
             if action == "reuse" and row is not None:
                 node_id = int(row["node_id"])
@@ -393,6 +364,18 @@ class BohriumNodeLeaseManager:
                     )
 
             if action in {"create", "restart", "replace"} and row is not None:
+                preparing_node_id = row.get("node_id")
+                progress_status = "restarting" if action == "restart" else "creating"
+                report_node_progress(
+                    progress_reporter,
+                    progress_status,
+                    int(preparing_node_id) if preparing_node_id is not None else None,
+                    (
+                        "正在重启 Bohrium 计算节点..."
+                        if progress_status == "restarting"
+                        else "正在创建 Bohrium 计算节点..."
+                    ),
+                )
                 return self._prepare_and_publish(
                     action,
                     identity,
@@ -404,6 +387,7 @@ class BohriumNodeLeaseManager:
                     access_key=access_key,
                     creator_id=creator_id,
                     expected_image_name=expected_image_name,
+                    progress_reporter=progress_reporter,
                 )
             time.sleep(self._config.retry_interval_seconds)
         raise TimeoutError("Timed out waiting for shared Bohrium node slot")
@@ -421,6 +405,7 @@ class BohriumNodeLeaseManager:
         access_key: str,
         creator_id: int,
         expected_image_name: str | None,
+        progress_reporter: NodeProgressReporter | None,
     ) -> NodeLease:
         created_new = action in {"create", "replace"}
         try:
@@ -484,6 +469,16 @@ class BohriumNodeLeaseManager:
                         creator_id=creator_id,
                     )
                     raise RuntimeError("Bohrium node creation claim was fenced")
+            report_node_progress(
+                progress_reporter,
+                "starting",
+                node_id,
+                (
+                    "节点已创建，正在等待资源就绪..."
+                    if created_new
+                    else "节点已重启，正在等待资源就绪..."
+                ),
+            )
             info = self._node_service.wait_until_ready(access_key, node_id)
             with self._slot_lock(identity):
                 self._leases.acquire(

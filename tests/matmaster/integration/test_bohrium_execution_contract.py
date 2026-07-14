@@ -6,7 +6,7 @@ import asyncio
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -157,7 +157,14 @@ def test_invocation_setup_uses_fenced_lease_and_cleanup_releases_it() -> None:
         password="secret",
     )
     manager = MagicMock()
-    manager.acquire.return_value = lease
+
+    def acquire_with_progress(*_args: Any, **kwargs: Any) -> Any:
+        report = kwargs["progress_reporter"]
+        report("creating", None, "正在创建 Bohrium 计算节点...")
+        report("starting", 42, "节点已创建，正在等待资源就绪...")
+        return lease
+
+    manager.acquire.side_effect = acquire_with_progress
     heartbeat = MagicMock()
     original_session = MagicMock(is_open=True)
     pg = _make_pg(original_session)
@@ -177,6 +184,7 @@ def test_invocation_setup_uses_fenced_lease_and_cleanup_releases_it() -> None:
         patch.object(arb, "NodeLeaseHeartbeat", return_value=heartbeat),
         patch.object(arb.UserService, "get_bohrium_access_key", return_value="ak"),
     ):
+        event_callback = MagicMock()
         svc = _make_bohrium_service(sessions_service)
         result = svc._setup_bohrium_for_run(
             session_id="sess-lease",
@@ -184,7 +192,7 @@ def test_invocation_setup_uses_fenced_lease_and_cleanup_releases_it() -> None:
             run_creds={"access_key": "ak", "project_id": 99},
             user_id_for_ak="u1",
             org_id="o1",
-            event_callback=MagicMock(),
+            event_callback=event_callback,
             run_started_at=0.0,
             bohrium_node_sku_id=12345,
             invocation_id="inv-1",
@@ -201,8 +209,22 @@ def test_invocation_setup_uses_fenced_lease_and_cleanup_releases_it() -> None:
             creator_id=arb._creator_id_from_user("u1"),
             lifecycle_policy="idle_timeout",
             idle_timeout_seconds=1800,
+            progress_reporter=ANY,
         )
         heartbeat.start.assert_called_once_with()
+        statuses = [
+            call.args[2]["status"]
+            for call in event_callback.call_args_list
+            if call.args[1] == "bohrium_node"
+        ]
+        assert statuses == [
+            "acquiring",
+            "creating",
+            "starting",
+            "ready",
+            "connecting",
+            "connected",
+        ]
 
         svc._cleanup_bohrium_after_run(
             session_id="sess-lease",

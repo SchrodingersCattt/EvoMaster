@@ -6,12 +6,12 @@ from dataclasses import replace
 
 import pytest
 
+from src.services.bohrium_node_heartbeat import NodeLeaseHeartbeat
 from src.services.bohrium_node_lifecycle import (
     BohriumNodeLeaseManager,
     HistoricalNodeStopOutcome,
     NodeIdentity,
     NodeLeaseConfig,
-    NodeLeaseHeartbeat,
 )
 from src.services.bohrium_node_service import BohriumNodeNotFoundError
 
@@ -465,8 +465,10 @@ def test_concurrent_invocations_share_one_node_and_last_release_stops_it():
     manager, nodes, leases, provider = _manager()
     identity = NodeIdentity("u1", "o1", 99, 456)
     handles = []
+    progress: dict[str, list[str]] = {}
 
     def acquire(invocation_id):
+        progress[invocation_id] = []
         handles.append(
             manager.acquire(
                 identity,
@@ -474,6 +476,9 @@ def test_concurrent_invocations_share_one_node_and_last_release_stops_it():
                 invocation_id=invocation_id,
                 access_key="ak",
                 creator_id=1,
+                progress_reporter=lambda status, _node_id, _message: progress[
+                    invocation_id
+                ].append(status),
             )
         )
 
@@ -491,6 +496,7 @@ def test_concurrent_invocations_share_one_node_and_last_release_stops_it():
     assert nodes.events.index("lease") < nodes.events.index("ready")
     assert {handle.node_id for handle in handles} == {171}
     assert leases.count_live(1) == 2
+    assert sorted(progress.values()) == [["creating", "starting"], ["waiting"]]
 
     assert manager.release(handles[0], access_key="ak", creator_id=1) is False
     assert provider.stop_count == 0

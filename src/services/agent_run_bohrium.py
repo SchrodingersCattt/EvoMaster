@@ -20,9 +20,9 @@ from matmaster.bohrium.runtime import (
 from matmaster.bohrium.types import BohriumExecutionContext, BohriumRuntimeSnapshot
 from matmaster.sessions.ssh import SSHSession, SSHSessionConfig
 from src.dao.bohrium_nodes_table import get_bohrium_nodes_table
+from src.services.bohrium_node_heartbeat import NodeLeaseHeartbeat
 from src.services.bohrium_node_lifecycle import (
     NodeIdentity,
-    NodeLeaseHeartbeat,
     get_bohrium_node_lease_manager,
 )
 from src.services.bohrium_node_service import (
@@ -491,6 +491,12 @@ def _setup_bohrium_for_run(
     try:
         node_svc = get_bohrium_node_service()
         use_reuse_table = bool(user_id_for_ak and org_id)
+        _emit_node_status(
+            event_callback,
+            None,
+            "acquiring",
+            "正在获取 Bohrium 计算节点...",
+        )
         if not use_reuse_table and (user_id_for_ak or org_id):
             logger.info(
                 "run_agent: skip reuse table (missing user_id or org_id); "
@@ -513,6 +519,9 @@ def _setup_bohrium_for_run(
                 creator_id=_creator_id_from_user(user_id_for_ak),
                 lifecycle_policy=bohrium_node_lifecycle_policy,
                 idle_timeout_seconds=bohrium_node_idle_timeout_seconds,
+                progress_reporter=lambda status, progress_node_id, message: (
+                    _emit_node_status(event_callback, progress_node_id, status, message)
+                ),
             )
             node_id = node_lease.node_id
             node_ip = node_lease.ip
@@ -756,6 +765,13 @@ def _setup_bohrium_for_run(
                 host=node_ip,
                 password=node_pwd,
                 workspace_path=ssh_workspace_path,
+            )
+            _emit_node_status(
+                event_callback,
+                node_id,
+                "connecting",
+                "正在连接并初始化 Bohrium 计算环境...",
+                ip=node_ip,
             )
             ssh_session = SSHSession(ssh_config)
             swapped = False
