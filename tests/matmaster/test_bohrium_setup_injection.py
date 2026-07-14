@@ -178,20 +178,20 @@ class TestBohriumSetupServiceOrchestration:
         mock_setup.assert_not_called()
 
     def test_configure_remote_user_skill_root_on_ssh_session(self):
-        from src.services.agent_run_bohrium import (
-            _BOHRIUM_REMOTE_USER_PLUGINS_ROOT,
-            _BOHRIUM_REMOTE_USER_SKILLS_ROOT,
-            _configure_remote_user_skill_root,
+        from src.services.agent_run_bohrium import _configure_remote_user_skill_root
+        from src.services.bohrium_runtime_config import (
+            BOHRIUM_REMOTE_USER_PLUGINS_ROOT,
+            BOHRIUM_REMOTE_USER_SKILLS_ROOT,
         )
 
         session = SimpleNamespace(remote_skill_roots=['/stale'])
 
         _configure_remote_user_skill_root(session)
 
-        assert session.remote_user_skills_root == _BOHRIUM_REMOTE_USER_SKILLS_ROOT
+        assert session.remote_user_skills_root == BOHRIUM_REMOTE_USER_SKILLS_ROOT
         assert session.remote_skill_roots == [
-            _BOHRIUM_REMOTE_USER_PLUGINS_ROOT,
-            _BOHRIUM_REMOTE_USER_SKILLS_ROOT,
+            BOHRIUM_REMOTE_USER_PLUGINS_ROOT,
+            BOHRIUM_REMOTE_USER_SKILLS_ROOT,
         ]
 
 
