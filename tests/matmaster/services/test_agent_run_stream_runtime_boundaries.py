@@ -58,6 +58,7 @@ async def test_run_agent_runs_bohrium_cleanup_after_success():
         session_id="s1",
         pg_for_run=pg_for_run,
         ssh_attached=False,
+        invocation_id="inv-cleanup",
     )
 
 

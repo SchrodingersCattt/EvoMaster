@@ -20,10 +20,13 @@ from matmaster.bohrium.runtime import (
 from matmaster.bohrium.types import BohriumExecutionContext, BohriumRuntimeSnapshot
 from matmaster.sessions.ssh import SSHSession, SSHSessionConfig
 from src.dao.bohrium_nodes_table import get_bohrium_nodes_table
+from src.services.agent_run_bohrium_node import acquire_compatibility_node
+from src.services.bohrium_node_contract import NodeIdentity
+from src.services.bohrium_node_heartbeat import NodeLeaseHeartbeat
+from src.services.bohrium_node_lifecycle import get_bohrium_node_lease_manager
 from src.services.bohrium_node_service import (
     DEFAULT_SKU_ID,
     get_bohrium_node_service,
-    get_default_node_name,
 )
 from src.services.bohrium_run_support import (
     _build_access_key_failure_reason,
@@ -32,14 +35,15 @@ from src.services.bohrium_run_support import (
     _load_run_credentials,
     _remote_session_workspace_root,
 )
+from src.services.bohrium_runtime_config import (
+    BOHRIUM_REMOTE_USER_PLUGINS_ROOT,
+    BOHRIUM_REMOTE_USER_SKILLS_ROOT,
+    CLEAR_REMOTE_PROXY_SCRIPT,
+)
 from src.services.sessions_service import SESSIONS
 from src.services.user_service import BohriumAccessKeyFetchResult, UserService
-from src.utils.constant import BOHRIUM_DEFAULT_IMAGE_ID, BOHRIUM_DEFAULT_IMAGE_NAME
 
 logger = logging.getLogger(__name__)
-
-_BOHRIUM_REMOTE_USER_SKILLS_ROOT = "/personal/.matmaster/skills"
-_BOHRIUM_REMOTE_USER_PLUGINS_ROOT = "/personal/.matmaster/plugins"
 
 
 def _resolve_bohrium_node_sku_id(sku_id: int | None) -> int:
@@ -49,41 +53,6 @@ def _resolve_bohrium_node_sku_id(sku_id: int | None) -> int:
         if parsed > 0:
             return parsed
     return int(os.environ.get("BOHRIUM_SKU_ID", DEFAULT_SKU_ID))
-
-
-# Bash snippet for root on Bohrium SSH nodes: wget/curl/git/pip + env.
-# GNU wget only accepts ``use_proxy = on|off``; ``use_proxy = no`` is invalid and
-# leaves /etc/wgetrc proxy (e.g. ga.dp.tech:8118) in effect.
-# Pip reads ``~/.pip/pip.conf`` / ``/etc/pip.conf`` ``[global] proxy=`` independently
-# of shell env; strip those lines so ``pip install`` does not force ga.dp.tech.
-_CLEAR_REMOTE_PROXY_SCRIPT: str = (
-    "rm -f /root/speedUp.sh /speedUp.sh; "
-    "printf %s\\n "
-    "'# matmaster-evo: disable platform proxy for OSS/outbound' "
-    "'use_proxy = off' "
-    "'proxy =' "
-    "'http_proxy =' "
-    "'https_proxy =' "
-    "'ftp_proxy =' "
-    "> /root/.wgetrc; "
-    "printf %s\\n "
-    "'# matmaster-evo: disable curl default proxy' "
-    "'proxy = \"\"' "
-    "'noproxy = \"*\"' "
-    "> /root/.curlrc; "
-    "git config --global --unset-all http.proxy 2>/dev/null; true; "
-    "git config --global --unset-all https.proxy 2>/dev/null; true; "
-    "[ -f /root/.pip/pip.conf ] && sed -i "
-    "'/^[[:space:]]*proxy[[:space:]]*=/d' "
-    "/root/.pip/pip.conf 2>/dev/null; true; "
-    "[ -f /etc/pip.conf ] && sed -i "
-    "'/^[[:space:]]*proxy[[:space:]]*=/d' "
-    "/etc/pip.conf 2>/dev/null; true; "
-    "export http_proxy= https_proxy= HTTP_PROXY= HTTPS_PROXY= ALL_PROXY= "
-    "NO_PROXY= no_proxy= ftp_proxy= FTP_PROXY=; "
-    "unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY ALL_PROXY "
-    "NO_PROXY no_proxy ftp_proxy FTP_PROXY WGETRC 2>/dev/null; "
-)
 
 
 def _store_bohrium_runtime(
@@ -141,10 +110,10 @@ def _restore_bohrium_runtime_state(session_id: str, pg: Any | None) -> None:
 
 
 def _configure_remote_user_skill_root(ssh_session: Any) -> None:
-    ssh_session.remote_user_skills_root = _BOHRIUM_REMOTE_USER_SKILLS_ROOT
+    ssh_session.remote_user_skills_root = BOHRIUM_REMOTE_USER_SKILLS_ROOT
     ssh_session.remote_skill_roots = [
-        _BOHRIUM_REMOTE_USER_PLUGINS_ROOT,
-        _BOHRIUM_REMOTE_USER_SKILLS_ROOT,
+        BOHRIUM_REMOTE_USER_PLUGINS_ROOT,
+        BOHRIUM_REMOTE_USER_SKILLS_ROOT,
     ]
 
 
@@ -162,7 +131,7 @@ def _run_clear_remote_proxy(pg: Any, phase: str) -> None:
             "run_agent: clear_remote_proxy (%s) running (wgetrc/curlrc/pip.conf + env)",
             phase,
         )
-        result = session.exec_bash(_CLEAR_REMOTE_PROXY_SCRIPT, timeout=20)
+        result = session.exec_bash(CLEAR_REMOTE_PROXY_SCRIPT, timeout=20)
         exit_code = result.get("exit_code", -1)
         out = (result.get("output") or result.get("stdout") or "").strip()
         if exit_code == 0:
@@ -235,6 +204,9 @@ class BohriumSetupService:
         run_started_at: float,
         workspace: str | None = None,
         bohrium_node_sku_id: int | None = None,
+        bohrium_node_lifecycle_policy: str = "run_end",
+        bohrium_node_idle_timeout_seconds: int | None = None,
+        invocation_id: str | None = None,
     ) -> BohriumSetupResult:
         return _setup_bohrium_for_run(
             session_id=session_id,
@@ -246,6 +218,9 @@ class BohriumSetupService:
             run_started_at=run_started_at,
             workspace=workspace,
             bohrium_node_sku_id=bohrium_node_sku_id,
+            bohrium_node_lifecycle_policy=bohrium_node_lifecycle_policy,
+            bohrium_node_idle_timeout_seconds=bohrium_node_idle_timeout_seconds,
+            invocation_id=invocation_id,
         )
 
     def _cleanup_bohrium_after_run(
@@ -255,6 +230,7 @@ class BohriumSetupService:
         event_callback: Callable[..., None],
         pg_for_run: Any,
         ssh_attached: bool,
+        invocation_id: str | None = None,
     ) -> None:
         _cleanup_bohrium_after_run(
             session_id=session_id,
@@ -262,6 +238,7 @@ class BohriumSetupService:
             event_callback=event_callback,
             pg_for_run=pg_for_run,
             ssh_attached=ssh_attached,
+            invocation_id=invocation_id,
         )
 
     def _make_event_bridge(
@@ -340,6 +317,9 @@ class BohriumSetupService:
         bohrium_required: bool = False,
         workspace: str | None = None,
         bohrium_node_sku_id: int | None = None,
+        bohrium_node_lifecycle_policy: str = "run_end",
+        bohrium_node_idle_timeout_seconds: int | None = None,
+        invocation_id: str | None = None,
     ) -> BohriumSetupResult:
         """Load credentials, bridge events, and run setup in the executor."""
         loop = asyncio.get_running_loop()
@@ -355,6 +335,9 @@ class BohriumSetupService:
                 bohrium_required=bohrium_required,
                 workspace=workspace,
                 bohrium_node_sku_id=bohrium_node_sku_id,
+                bohrium_node_lifecycle_policy=bohrium_node_lifecycle_policy,
+                bohrium_node_idle_timeout_seconds=(bohrium_node_idle_timeout_seconds),
+                invocation_id=invocation_id,
             ),
         )
 
@@ -368,6 +351,9 @@ class BohriumSetupService:
         bohrium_required: bool = False,
         workspace: str | None = None,
         bohrium_node_sku_id: int | None = None,
+        bohrium_node_lifecycle_policy: str = "run_end",
+        bohrium_node_idle_timeout_seconds: int | None = None,
+        invocation_id: str | None = None,
     ) -> BohriumSetupResult:
         run_creds, user_id_for_ak, org_id = self._load_run_credentials(session_id)
         access_key = str(run_creds.get("access_key") or "").strip()
@@ -435,6 +421,9 @@ class BohriumSetupService:
             run_started_at=run_started_at,
             workspace=workspace,
             bohrium_node_sku_id=bohrium_node_sku_id,
+            bohrium_node_lifecycle_policy=bohrium_node_lifecycle_policy,
+            bohrium_node_idle_timeout_seconds=bohrium_node_idle_timeout_seconds,
+            invocation_id=invocation_id,
         )
 
     async def run_cleanup(
@@ -443,6 +432,7 @@ class BohriumSetupService:
         session_id: str,
         pg_for_run: Any,
         ssh_attached: bool,
+        invocation_id: str | None = None,
     ) -> None:
         """Bridge cleanup events and run cleanup in the executor."""
         loop = asyncio.get_running_loop()
@@ -455,6 +445,7 @@ class BohriumSetupService:
                 event_callback=event_cb,
                 pg_for_run=pg_for_run,
                 ssh_attached=ssh_attached,
+                invocation_id=invocation_id,
             ),
         )
 
@@ -470,6 +461,9 @@ def _setup_bohrium_for_run(
     run_started_at: float,
     workspace: str | None = None,
     bohrium_node_sku_id: int | None = None,
+    bohrium_node_lifecycle_policy: str = "run_end",
+    bohrium_node_idle_timeout_seconds: int | None = None,
+    invocation_id: str | None = None,
 ) -> BohriumSetupResult:
     """Prepare Bohrium node and SSH session for the run when credentials exist."""
     if not run_creds:
@@ -494,6 +488,12 @@ def _setup_bohrium_for_run(
     try:
         node_svc = get_bohrium_node_service()
         use_reuse_table = bool(user_id_for_ak and org_id)
+        _emit_node_status(
+            event_callback,
+            None,
+            "acquiring",
+            "正在获取 Bohrium 计算节点...",
+        )
         if not use_reuse_table and (user_id_for_ak or org_id):
             logger.info(
                 "run_agent: skip reuse table (missing user_id or org_id); "
@@ -501,209 +501,59 @@ def _setup_bohrium_for_run(
                 user_id_for_ak,
                 org_id or "(empty)",
             )
-        if use_reuse_table:
-            nodes_table = get_bohrium_nodes_table()
-            creator_id = _creator_id_from_user(user_id_for_ak)
-            try:
-                tracked_node_ids = nodes_table.list_node_ids_for_user_org(
-                    user_id_for_ak, org_id
-                )
-                cleanup_node_name = get_default_node_name()
-                destroyed_node_ids = node_svc.destroy_untracked_nodes_by_name(
-                    access_key,
-                    tracked_node_ids,
-                    node_name=cleanup_node_name,
-                    creator_id=creator_id,
-                )
-                if destroyed_node_ids:
-                    logger.info(
-                        "run_agent: destroyed untracked nodes user_id=%s org_id=%s "
-                        "name=%s node_ids=%s",
-                        user_id_for_ak,
-                        org_id,
-                        cleanup_node_name,
-                        destroyed_node_ids,
-                    )
-            except Exception as cleanup_err:
-                logger.warning(
-                    "run_agent: cleanup untracked nodes failed user_id=%s org_id=%s: %s",
-                    user_id_for_ak,
+        if use_reuse_table and invocation_id:
+            lease_manager = get_bohrium_node_lease_manager()
+            node_lease = lease_manager.acquire(
+                NodeIdentity(
+                    str(user_id_for_ak),
                     org_id,
-                    cleanup_err,
-                )
-            row = nodes_table.find_one_for_reuse(
-                user_id_for_ak, org_id, project_id, effective_sku_id
+                    project_id,
+                    effective_sku_id,
+                ),
+                session_id=session_id,
+                invocation_id=invocation_id,
+                access_key=access_key,
+                creator_id=_creator_id_from_user(user_id_for_ak),
+                lifecycle_policy=bohrium_node_lifecycle_policy,
+                idle_timeout_seconds=bohrium_node_idle_timeout_seconds,
+                progress_reporter=lambda status, progress_node_id, message: (
+                    _emit_node_status(event_callback, progress_node_id, status, message)
+                ),
             )
-            expected_image_name = (
-                os.environ.get("BOHRIUM_EXPECTED_IMAGE_NAME")
-                or os.environ.get("BOHRIUM_IMAGE_NAME")
-                or BOHRIUM_DEFAULT_IMAGE_NAME
+            node_id = node_lease.node_id
+            node_ip = node_lease.ip
+            node_pwd = node_lease.password
+            node_reuse_tracked = True
+            heartbeat = NodeLeaseHeartbeat(lease_manager, node_lease)
+            heartbeat.start()
+            if session_id not in SESSIONS:
+                SESSIONS[session_id] = {}
+            lease_runtimes = SESSIONS[session_id].setdefault(
+                "bohrium_node_lease_runtimes", {}
             )
-            if isinstance(expected_image_name, str):
-                expected_image_name = expected_image_name.strip() or None
-            else:
-                expected_image_name = None
-            if expected_image_name is None:
-                expected_image_name = node_svc.get_image_name_by_id(
-                    access_key, BOHRIUM_DEFAULT_IMAGE_ID
-                )
-
-            def _node_image_outdated(node_image_name: str | None) -> bool:
-                if not expected_image_name or not node_image_name:
-                    return False
-                return node_image_name != expected_image_name
-
-            def _destroy_outdated_node(nid: int) -> None:
-                """Delete tracking row and destroy a Bohrium node with outdated image."""
-                nodes_table.delete_by_node(
-                    user_id_for_ak, org_id, project_id, effective_sku_id, nid
-                )
-                try:
-                    node_svc.destroy_node(
-                        access_key,
-                        nid,
-                        project_id,
-                        creator_id=creator_id,
-                    )
-                except Exception as destroy_err:
-                    logger.warning(
-                        "run_agent: destroy outdated node_id=%s failed: %s",
-                        nid,
-                        destroy_err,
-                    )
-
-            if row:
-                node_id = int(row["node_id"])
-                node_reuse_tracked = True
-                node_info = node_svc.get_node_info(access_key, node_id)
-                logger.info(
-                    "run_agent: node image check (ready) node_id=%s "
-                    "node_image_name=%s expected_image_name=%s",
-                    node_id,
-                    node_info.get("image_name") if node_info else None,
-                    expected_image_name,
-                )
-                if node_info and node_info.get("ip"):
-                    if _node_image_outdated(node_info.get("image_name")):
-                        logger.info(
-                            "run_agent: reuse skipped, node image outdated "
-                            "node_id=%s node_image_name=%s expected_image_name=%s, destroy and create new",
-                            node_id,
-                            node_info.get("image_name"),
-                            expected_image_name,
-                        )
-                        _destroy_outdated_node(node_id)
-                        node_id = None
-                        node_reuse_tracked = False
-                        node_info = None
-                    else:
-                        node_ip = node_info.get("ip")
-                        node_pwd = node_info.get("password")
-                        logger.info(
-                            "run_agent: reusing Bohrium node node_id=%s ip=%s",
-                            node_id,
-                            node_ip,
-                        )
-                else:
-                    node_detail = node_svc.get_node_detail(access_key, node_id)
-                    logger.info(
-                        "run_agent: node image check (not ready) node_id=%s "
-                        "node_image_name=%s expected_image_name=%s",
-                        node_id,
-                        node_detail.get("image_name") if node_detail else None,
-                        expected_image_name,
-                    )
-                    if node_detail is not None and _node_image_outdated(
-                        node_detail.get("image_name")
-                    ):
-                        logger.info(
-                            "run_agent: node image outdated node_id=%s "
-                            "node_image_name=%s expected_image_name=%s, destroy and create new",
-                            node_id,
-                            node_detail.get("image_name"),
-                            expected_image_name,
-                        )
-                        _destroy_outdated_node(node_id)
-                        node_id = None
-                        node_reuse_tracked = False
-                    else:
-                        try:
-                            node_svc.restart_node(
-                                access_key,
-                                node_id,
-                                project_id,
-                                creator_id=creator_id,
-                                sku_id=effective_sku_id,
-                            )
-                            _emit_node_status(
-                                event_callback,
-                                node_id,
-                                "created",
-                                "节点已重启，正在等待就绪...",
-                            )
-                            node_info = node_svc.wait_until_ready(access_key, node_id)
-                            node_ip = node_info.get("ip")
-                            node_pwd = node_info.get("password")
-                            logger.info(
-                                "run_agent: restarted Bohrium node node_id=%s ip=%s",
-                                node_id,
-                                node_ip,
-                            )
-                        except Exception as restart_err:
-                            logger.warning(
-                                "run_agent: restart node_id=%s failed, will create new: %s",
-                                node_id,
-                                restart_err,
-                            )
-                            nodes_table.delete_by_node(
-                                user_id_for_ak,
-                                org_id,
-                                project_id,
-                                effective_sku_id,
-                                node_id,
-                            )
-                            node_id = None
-                            node_reuse_tracked = False
-        if node_id is None or node_ip is None:
-            node_info = node_svc.create_node(
-                access_key, project_id, sku_id=effective_sku_id
+            lease_runtimes[invocation_id] = {
+                "manager": lease_manager,
+                "lease": node_lease,
+                "heartbeat": heartbeat,
+                "access_key": access_key,
+                "creator_id": _creator_id_from_user(user_id_for_ak),
+            }
+        else:
+            nodes_table = get_bohrium_nodes_table() if use_reuse_table else None
+            acquisition = acquire_compatibility_node(
+                node_service=node_svc,
+                nodes_table=nodes_table,
+                access_key=access_key,
+                project_id=project_id,
+                sku_id=effective_sku_id,
+                user_id=user_id_for_ak,
+                org_id=org_id,
+                event_callback=event_callback,
             )
-            node_id = node_info.get("node_id")
-            if node_id is not None:
-                _emit_node_status(
-                    event_callback,
-                    node_id,
-                    "created",
-                    "节点已创建，正在等待就绪...",
-                )
-                node_info = node_svc.wait_until_ready(access_key, node_id)
-                node_ip = node_info.get("ip")
-                node_pwd = node_info.get("password")
-                if use_reuse_table and user_id_for_ak and org_id:
-                    try:
-                        get_bohrium_nodes_table().insert_node(
-                            user_id_for_ak,
-                            org_id,
-                            project_id,
-                            effective_sku_id,
-                            node_id,
-                        )
-                        node_reuse_tracked = True
-                        logger.info(
-                            "run_agent: inserted node into evo_bohrium_nodes "
-                            "user_id=%s org_id=%s project_id=%s sku_id=%s node_id=%s",
-                            user_id_for_ak,
-                            org_id,
-                            project_id,
-                            effective_sku_id,
-                            node_id,
-                        )
-                    except Exception as insert_err:
-                        logger.warning(
-                            "run_agent: insert_node failed (table missing?): %s",
-                            insert_err,
-                            exc_info=True,
-                        )
+            node_id = acquisition.node_id
+            node_ip = acquisition.ip
+            node_pwd = acquisition.password
+            node_reuse_tracked = acquisition.reuse_tracked
         if node_id is not None and node_ip:
             if session_id not in SESSIONS:
                 SESSIONS[session_id] = {}
@@ -725,6 +575,13 @@ def _setup_bohrium_for_run(
                 host=node_ip,
                 password=node_pwd,
                 workspace_path=ssh_workspace_path,
+            )
+            _emit_node_status(
+                event_callback,
+                node_id,
+                "connecting",
+                "正在连接并初始化 Bohrium 计算环境...",
+                ip=node_ip,
             )
             ssh_session = SSHSession(ssh_config)
             swapped = False
@@ -825,6 +682,7 @@ def _cleanup_bohrium_after_run(
     event_callback: Callable[..., None],
     pg_for_run: Any,
     ssh_attached: bool,
+    invocation_id: str | None = None,
 ) -> None:
     """Restore session state and cleanup or release Bohrium node."""
     logger.debug(
@@ -841,6 +699,49 @@ def _cleanup_bohrium_after_run(
     node_id = session_data.pop("bohrium_node_id", None)
     node_sku_id = session_data.pop("bohrium_node_sku_id", None)
     node_reuse_tracked = bool(session_data.pop("bohrium_node_reuse_tracked", False))
+    lease_runtimes = session_data.get("bohrium_node_lease_runtimes", {})
+    lease_runtime = lease_runtimes.pop(invocation_id, None) if invocation_id else None
+    if not lease_runtimes:
+        session_data.pop("bohrium_node_lease_runtimes", None)
+    if lease_runtime:
+        heartbeat = lease_runtime.get("heartbeat")
+        if heartbeat is not None:
+            heartbeat.stop()
+        lease = lease_runtime.get("lease")
+        manager = lease_runtime.get("manager")
+        access_key = str(lease_runtime.get("access_key") or "").strip()
+        creator_id = int(lease_runtime.get("creator_id") or 0)
+        lease_invocation_id = getattr(lease, "invocation_id", None)
+        if not access_key or manager is None or lease is None:
+            logger.warning(
+                "run_agent: Bohrium lease stopped heartbeating but cannot release "
+                "invocation_id=%s access_key_available=%s",
+                lease_invocation_id,
+                bool(access_key),
+            )
+            return
+        try:
+            stopped = manager.release(
+                lease, access_key=access_key, creator_id=creator_id
+            )
+            if stopped:
+                _emit_node_status(
+                    event_callback,
+                    int(lease.node_id),
+                    "paused",
+                    "节点已停止，可在下一轮重启复用",
+                )
+        except Exception as e:
+            logger.warning(
+                "run_agent: release Bohrium node lease failed "
+                "invocation_id=%s node_id=%s: %s",
+                lease_invocation_id,
+                getattr(lease, "node_id", None),
+                e,
+                exc_info=True,
+            )
+        return
+
     row = sessions_service.get_session(session_id)
     org_id = ""
     project_id = None

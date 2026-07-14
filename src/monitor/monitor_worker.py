@@ -16,6 +16,7 @@ import signal
 import threading
 
 from src.services.bohrium_completion_scheduler import BohriumCompletionScheduler
+from src.services.bohrium_node_recycler import BohriumNodeRecycler
 from src.services.bohrium_poller import BohriumMonitor
 from src.services.stale_session_reconciler import StaleSessionReconciler
 from src.utils.build_info import get_build_version
@@ -47,6 +48,7 @@ def _run_monitor_loop() -> None:
 
     runner = BohriumMonitor()  # 循环外构造一次（惰性、无 DB、tick 不抛异常）
     scheduler = BohriumCompletionScheduler()  # 同上；判定纯 ledger 聚合，零持久态
+    node_recycler = BohriumNodeRecycler()
     stale_reconciler = StaleSessionReconciler()
     while not _stop_event.is_set():
         summary = runner.tick()  # 单轮 claim + poll + 写回 ledger
@@ -55,6 +57,12 @@ def _run_monitor_loop() -> None:
         logger.info(
             "matmaster-monitor: delivery %s worker_id=%s",
             delivery_summary,
+            worker_id,
+        )
+        node_summary = node_recycler.tick()
+        logger.info(
+            "matmaster-monitor: node_recycler %s worker_id=%s",
+            node_summary,
             worker_id,
         )
         stale_summary = stale_reconciler.tick()  # DB/Redis 运行态残留修复

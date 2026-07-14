@@ -55,6 +55,44 @@ def test_fetch_bohrium_access_key_retries_on_timeout_then_succeeds(monkeypatch):
     assert result.retryable is False
 
 
+def test_existing_access_key_request_failure_log_omits_exception_message(
+    monkeypatch, caplog
+):
+    scripted = [RuntimeError('request failed with secret-ak')]
+    monkeypatch.setattr(
+        'src.services.user_service.httpx.Client',
+        lambda *args, **kwargs: _FakeClient(scripted),
+    )
+    caplog.set_level('WARNING', logger='src.services.user_service')
+
+    result = UserService.fetch_bohrium_access_key_result(
+        'u1', 'o1', retry_delays=(), create_if_missing=False
+    )
+
+    assert result.status == 'request_error'
+    assert 'error_type=RuntimeError' in caplog.text
+    assert 'request failed with secret-ak' not in caplog.text
+    assert 'secret-ak' not in caplog.text
+
+
+def test_existing_access_key_timeout_log_omits_exception_message(monkeypatch, caplog):
+    scripted = [httpx.ReadTimeout('timeout with secret-ak')]
+    monkeypatch.setattr(
+        'src.services.user_service.httpx.Client',
+        lambda *args, **kwargs: _FakeClient(scripted),
+    )
+    caplog.set_level('WARNING', logger='src.services.user_service')
+
+    result = UserService.fetch_bohrium_access_key_result(
+        'u1', 'o1', retry_delays=(), create_if_missing=False
+    )
+
+    assert result.status == 'timeout'
+    assert 'error_type=ReadTimeout' in caplog.text
+    assert 'timeout with secret-ak' not in caplog.text
+    assert 'secret-ak' not in caplog.text
+
+
 def test_fetch_bohrium_access_key_creates_when_list_empty(monkeypatch):
     scripted = [
         _FakeResponse(200, {'code': 0, 'data': []}),

@@ -355,6 +355,25 @@ def _run_worker_loop() -> None:
                     session_id,
                     task_id,
                 )
+        from matmaster.bohrium.node_lifecycle import resolve_node_lifecycle
+
+        try:
+            node_lifecycle_policy, bohrium_node_idle_timeout_seconds = (
+                resolve_node_lifecycle(
+                    payload.get("bohrium_node_lifecycle_policy"),
+                    payload.get("bohrium_node_idle_timeout_seconds"),
+                )
+            )
+        except ValueError:
+            logger.warning(
+                "Agent worker: invalid Bohrium Node lifecycle snapshot; "
+                "fallback run_end session_id=%s task_id=%s",
+                session_id,
+                task_id,
+            )
+            node_lifecycle_policy, bohrium_node_idle_timeout_seconds = (
+                resolve_node_lifecycle("run_end", None)
+            )
         delivery = payload.get("delivery")
         origin = (payload.get("origin") or "").strip() or None
         job_context_mode = (
@@ -472,6 +491,10 @@ def _run_worker_loop() -> None:
                         bohrium_job_max_runtime_seconds
                     ),
                     "bohrium_node_sku_id": bohrium_node_sku_id,
+                    "bohrium_node_lifecycle_policy": node_lifecycle_policy.value,
+                    "bohrium_node_idle_timeout_seconds": (
+                        bohrium_node_idle_timeout_seconds
+                    ),
                     "submit_confirmation_enabled": submit_confirmation_enabled,
                     "delivery_snapshot": delivery_snapshot,
                     "job_context_mode": job_context_mode,

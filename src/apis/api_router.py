@@ -1,6 +1,12 @@
 from fastapi import APIRouter
 
-from src.apis import admin_api, chat_api, debug_api, feishu_api, wakeup_api
+from src.apis import (
+    admin_api,
+    chat_api,
+    debug_api,
+    feishu_api,
+    wakeup_api,
+)
 
 api_router = APIRouter()
 api_router.include_router(chat_api.router, prefix="/chat/sessions")

@@ -313,10 +313,11 @@ class UserService:
                 data = r.json()
         except httpx.ReadTimeout as e:
             logger.warning(
-                'get_bohrium_access_key: request timeout user_id=%s org_id=%s err=%s',
+                'get_bohrium_access_key: request timeout user_id=%s org_id=%s '
+                'error_type=%s',
                 user_id,
                 org_id,
-                e,
+                type(e).__name__,
             )
             return BohriumAccessKeyFetchResult(
                 status='timeout',
@@ -325,10 +326,11 @@ class UserService:
             )
         except Exception as e:
             logger.warning(
-                'get_bohrium_access_key: request failed user_id=%s org_id=%s err=%s',
+                'get_bohrium_access_key: request failed user_id=%s org_id=%s '
+                'error_type=%s',
                 user_id,
                 org_id,
-                e,
+                type(e).__name__,
             )
             return BohriumAccessKeyFetchResult(
                 status='request_error',

@@ -23,6 +23,8 @@ def _run_one_round(
     submit_confirmation_required=False,
     max_runtime_seconds=None,
     node_sku_id=None,
+    node_lifecycle_policy=None,
+    node_idle_timeout_seconds=None,
 ):
     """注入全部外部依赖，跑一轮循环，返回 (有序调用名列表, run_agent 收到的 kwargs)。"""
     calls: list[str] = []
@@ -38,6 +40,8 @@ def _run_one_round(
         "bohrium_submit_confirmation_required": submit_confirmation_required,
         "bohrium_job_max_runtime_seconds": max_runtime_seconds,
         "bohrium_node_sku_id": node_sku_id,
+        "bohrium_node_lifecycle_policy": node_lifecycle_policy,
+        "bohrium_node_idle_timeout_seconds": node_idle_timeout_seconds,
     }
 
     fake_redis = MagicMock()
@@ -181,3 +185,29 @@ def test_bohrium_node_sku_id_passed_to_run_agent(monkeypatch):
     )
 
     assert received["bohrium_node_sku_id"] == 12345
+
+
+def test_bohrium_node_lifecycle_snapshot_passed_to_run_agent(monkeypatch):
+    _, received = _run_one_round(
+        monkeypatch,
+        snapshot_obj=object(),
+        run_result=True,
+        node_lifecycle_policy="idle_timeout",
+        node_idle_timeout_seconds=1800,
+    )
+
+    assert received["bohrium_node_lifecycle_policy"] == "idle_timeout"
+    assert received["bohrium_node_idle_timeout_seconds"] == 1800
+
+
+def test_invalid_worker_lifecycle_snapshot_falls_back_to_run_end(monkeypatch):
+    _, received = _run_one_round(
+        monkeypatch,
+        snapshot_obj=object(),
+        run_result=True,
+        node_lifecycle_policy="forever",
+        node_idle_timeout_seconds=60,
+    )
+
+    assert received["bohrium_node_lifecycle_policy"] == "run_end"
+    assert received["bohrium_node_idle_timeout_seconds"] is None

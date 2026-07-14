@@ -300,22 +300,41 @@ def _redis_and_trigger_preference_patches(
     fake_redis,
     *,
     trigger_enabled=True,
+    node_lifecycle_policy="run_end",
+    node_idle_timeout_seconds=None,
 ):
+    from clients.matmaster_platform.runtime_preference import (
+        UserLevelRuntimePreference,
+    )
+
     with (
         patch("src.services.stream_service.get_redis_dao", return_value=fake_redis),
         patch(
-            "src.services.stream_service.is_programmatic_trigger_enabled",
-            return_value=trigger_enabled is True,
-        ),
+            "src.services.stream_service.get_user_level_runtime_preference",
+            return_value=UserLevelRuntimePreference(
+                bohrium_node_lifecycle_policy=node_lifecycle_policy,
+                bohrium_node_idle_timeout_seconds=node_idle_timeout_seconds,
+                programmatic_trigger_enabled=trigger_enabled is True,
+                loaded=trigger_enabled is not None,
+            ),
+        ) as preference_getter,
     ):
-        yield
+        yield preference_getter
 
 
-def _trigger_patches(fake_redis, *, trigger_enabled=True):
+def _trigger_patches(
+    fake_redis,
+    *,
+    trigger_enabled=True,
+    node_lifecycle_policy="run_end",
+    node_idle_timeout_seconds=None,
+):
     return (
         _redis_and_trigger_preference_patches(
             fake_redis,
             trigger_enabled=trigger_enabled,
+            node_lifecycle_policy=node_lifecycle_policy,
+            node_idle_timeout_seconds=node_idle_timeout_seconds,
         ),
         patch("src.services.stream_service.notify_post_async"),
         patch(
@@ -443,6 +462,27 @@ def test_trigger_run_enqueues_and_writes_system_event():
     assert pushed["turn_input"]["instruction_tag"] == "system-reminder"
     fake_redis.mark_dedup_key_nx.assert_called_once()
     assert fake_redis.mark_dedup_key_nx.call_args.args[0] == "job:123:done"
+
+
+def test_trigger_run_snapshots_persisted_node_lifecycle_preference():
+    service, _sessions_service, _events_service = _make_trigger_service()
+    fake_redis = MagicMock()
+    fake_redis.dedup_key_exists.return_value = False
+    fake_redis.lpush_agent_run_job.return_value = True
+    p1, p2, p3, p4 = _trigger_patches(
+        fake_redis,
+        node_lifecycle_policy="idle_timeout",
+        node_idle_timeout_seconds=1800,
+    )
+
+    with p1 as preference_getter, p2, p3, p4:
+        result = service.trigger_run("s1", "作业完成", origin="hpc_job")
+
+    assert result.status == "enqueued"
+    job = fake_redis.lpush_agent_run_job.call_args.args[0]
+    assert job["bohrium_node_lifecycle_policy"] == "idle_timeout"
+    assert job["bohrium_node_idle_timeout_seconds"] == 1800
+    preference_getter.assert_called_once_with("owner-1")
 
 
 def test_trigger_run_accepts_workspace_for_programmatic_wakeup():

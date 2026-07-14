@@ -43,6 +43,9 @@ def test_get_user_runtime_preference_combines_tools_preference_and_latest_org(
                     "bohrium_submit_confirmation_required": False,
                     "bohrium_job_max_runtime_seconds": "7200",
                     "bohrium_node_sku_id": "12345",
+                    "bohrium_node_lifecycle_policy": "idle_timeout",
+                    "bohrium_node_idle_timeout_seconds": 1800,
+                    "bohrium_node_lifecycle_prompt_enabled": False,
                     "programmatic_trigger_enabled": True,
                 },
             }
@@ -61,6 +64,9 @@ def test_get_user_runtime_preference_combines_tools_preference_and_latest_org(
     assert pref.user_bohrium_submit_confirmation_required is False
     assert pref.bohrium_job_max_runtime_seconds == 7200
     assert pref.bohrium_node_sku_id == 12345
+    assert pref.bohrium_node_lifecycle_policy == "idle_timeout"
+    assert pref.bohrium_node_idle_timeout_seconds == 1800
+    assert pref.bohrium_node_lifecycle_prompt_enabled is False
     assert pref.programmatic_trigger_enabled is True
     assert pref.loaded is True
     assert fake_client.requests == [
@@ -94,5 +100,8 @@ def test_get_user_runtime_preference_fail_soft_when_tools_server_fails(
     assert pref.user_bohrium_submit_confirmation_required is None
     assert pref.bohrium_job_max_runtime_seconds is None
     assert pref.bohrium_node_sku_id is None
+    assert pref.bohrium_node_lifecycle_policy == "run_end"
+    assert pref.bohrium_node_idle_timeout_seconds is None
+    assert pref.bohrium_node_lifecycle_prompt_enabled is True
     assert pref.programmatic_trigger_enabled is None
     assert pref.loaded is False
