@@ -16,7 +16,7 @@ ALTER TABLE `evo_bohrium_nodes`
     ADD INDEX `idx_state_creating_expiry` (`state`, `creating_lease_expires_at`),
     ADD INDEX `idx_state_idle_expiry` (`state`, `idle_expires_at`);
 
-CREATE TABLE `evo_bohrium_node_leases` (
+CREATE TABLE `bohrium_node_leases` (
     `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
     `node_slot_id` BIGINT UNSIGNED NOT NULL,
     `session_id` VARCHAR(255) NOT NULL,

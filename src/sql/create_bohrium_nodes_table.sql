@@ -24,7 +24,7 @@ CREATE TABLE IF NOT EXISTS `evo_bohrium_nodes` (
     INDEX `idx_state_idle_expiry` (`state`, `idle_expires_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Bohrium 可复用节点缓存，多 session 可共享同一 node';
 
-CREATE TABLE IF NOT EXISTS `evo_bohrium_node_leases` (
+CREATE TABLE IF NOT EXISTS `bohrium_node_leases` (
     `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
     `node_slot_id` BIGINT UNSIGNED NOT NULL,
     `session_id` VARCHAR(255) NOT NULL,

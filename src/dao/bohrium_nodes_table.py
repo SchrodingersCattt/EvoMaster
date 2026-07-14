@@ -331,7 +331,7 @@ class BohriumNodesTable(BaseTable):
                            n.node_id, n.state, n.lifecycle_policy,
                            n.idle_timeout_seconds, n.last_error, n.updated_at
                     FROM {self.table_name} AS n
-                    LEFT JOIN evo_bohrium_node_leases AS l
+                    LEFT JOIN bohrium_node_leases AS l
                       ON l.node_slot_id = n.id
                      AND l.lease_expires_at > NOW()
                     WHERE n.state = 'stopping' AND l.id IS NULL

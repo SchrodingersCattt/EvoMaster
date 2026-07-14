@@ -134,6 +134,7 @@ def test_acquire_lease_fences_retried_invocation_with_new_token(monkeypatch):
     conn = _FakeConnection()
     table = _make_table(monkeypatch, conn, BohriumNodeLeasesTable)
 
+    assert table.table_name == "bohrium_node_leases"
     acquired = table.acquire(7, "session-1", "inv-1", "lease-token", 120)
 
     assert acquired is True
@@ -207,7 +208,8 @@ def test_node_lifecycle_migration_preserves_slots_and_adds_fenced_leases():
     assert "`lifecycle_policy` VARCHAR(32)" in sql
     assert "`idle_timeout_seconds` INT" in sql
     assert "`idle_expires_at` DATETIME" in sql
-    assert "CREATE TABLE `evo_bohrium_node_leases`" in sql
+    assert "CREATE TABLE `bohrium_node_leases`" in sql
+    assert "evo_bohrium_node_leases" not in sql
     assert "UNIQUE KEY `uk_invocation_id` (`invocation_id`)" in sql
     assert "INDEX `idx_slot_expiry` (`node_slot_id`, `lease_expires_at`)" in sql
     assert "worker_id" not in sql

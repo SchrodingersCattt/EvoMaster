@@ -7,9 +7,9 @@ from src.base.base_table import BaseTable
 
 
 class BohriumNodeLeasesTable(BaseTable):
-    """evo_bohrium_node_leases：带 fencing token 的共享租约。"""
+    """bohrium_node_leases：带 fencing token 的共享租约。"""
 
-    table_name = "evo_bohrium_node_leases"
+    table_name = "bohrium_node_leases"
 
     def acquire(
         self,

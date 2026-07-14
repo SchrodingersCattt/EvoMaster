@@ -19,14 +19,14 @@ ORDER BY sku_id, state;
 SELECT n.id, n.user_id, n.org_id, n.project_id, n.sku_id, n.node_id,
        n.state, n.last_used_at, n.updated_at
 FROM evo_bohrium_nodes AS n
-LEFT JOIN evo_bohrium_node_leases AS l
+LEFT JOIN bohrium_node_leases AS l
   ON l.node_slot_id = n.id AND l.lease_expires_at > NOW()
 WHERE n.state = 'ready' AND n.node_id IS NOT NULL AND l.id IS NULL
 ORDER BY n.last_used_at ASC;
 
 -- 4. 过期 invocation lease；应用 recycler 会用 invocation_id + token + deadline 再做 CAS。
 SELECT id, node_slot_id, session_id, invocation_id, lease_expires_at
-FROM evo_bohrium_node_leases
+FROM bohrium_node_leases
 WHERE lease_expires_at <= NOW()
 ORDER BY lease_expires_at ASC;
 

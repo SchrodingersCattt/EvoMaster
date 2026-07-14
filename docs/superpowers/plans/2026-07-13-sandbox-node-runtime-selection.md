@@ -439,7 +439,7 @@ AccessKey 在 Worker 内按现有凭证边界解析，不能塞入该 snapshot �
    `creating_lease_token`、`creating_lease_expires_at`，以及 `lifecycle_policy`、`idle_timeout_seconds`、
    `idle_expires_at` 等 lifecycle 字段和到期扫描索引。第一版 `run_end` 会使用 `paused` 状态，
    `idle_expires_at` 仍为空；另建
-   `evo_bohrium_node_leases`，按 invocation 记录 `node_slot_id/session_id/invocation_id/lease_token/
+   `bohrium_node_leases`，按 invocation 记录 `node_slot_id/session_id/invocation_id/lease_token/
    lease_expires_at`，允许同一槽位存在多个 live lease。所有 create/replace/last-release/stop/delete
    在槽位 Redis 分布式锁下配合数据库 CAS；禁止当前 `ON DUPLICATE KEY UPDATE node_id` 覆盖
    ready 节点。创建前先以 `state=creating,node_id=NULL` 占槽，避免两个 Worker 同时调 provider
@@ -843,7 +843,7 @@ uv run pytest tests/test_user_runtime_preference.py \
 - [ ] 保留 `user/org/project/SKU` 唯一 Node 槽位；仅在 create/replace/last-release 临界区获取
   Redis 槽位锁并配合数据库 CAS。第一个 invocation 写入 `creating + NULL node_id` 后调用
   provider；其他 invocation 等 ready 后共享同一 Node，不创建第二台。
-- [ ] 新增 `evo_bohrium_node_leases`：每次 claim 生成随机 `lease_token`，每个 invocation 插入
+- [ ] 新增 `bohrium_node_leases`：每次 claim 生成随机 `lease_token`，每个 invocation 插入
   独立 lease 并用 token heartbeat；同一 node slot 允许多个 live lease，每个 invocation 建立
   自己的 SSH session 和 workspace。`worker_id` 不作为持久 owner 字段。
 - [ ] node 槽位表记录 creating/ready/stopping/paused/destroying/idle 等状态，不能再只更新
