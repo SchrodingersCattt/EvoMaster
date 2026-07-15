@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
@@ -162,3 +163,49 @@ def test_bwo_monitor_v2_schema_requires_real_lifecycle() -> None:
         validator.validate({**valid, "final_status": "Finished"})
     with pytest.raises(ValidationError):
         validator.validate({**valid, "log_saved": False})
+
+
+def test_bwo_lit_db_v2_requires_complete_design_and_real_search() -> None:
+    questions = flatten_banks(load_question_banks(QUESTION_BANK_DIR))
+    question = next(q for q in questions if q.id == "BWO_lit_db_D5_20260715_v2")
+    assert all(q.id != "BWO_lit_db_D5_20260715" for q in questions)
+
+    schema_ref = next(
+        ref for ref in question.reference_answers if ref.key == "literature_db_schema"
+    )
+    schema = schema_ref.value["schema"]
+    validator = validator_for(schema)(schema)
+    valid = {
+        "schema": {
+            "fields": [
+                {"name": "material", "type": "string", "description": "Name"},
+                {"name": "capacity", "type": "number", "description": "Capacity"},
+                {"name": "voltage", "type": "number", "description": "Voltage"},
+            ]
+        },
+        "papers_found": 20,
+        "batch_strategy": "Parse papers in bounded batches.",
+    }
+    validator.validate(valid)
+    with pytest.raises(ValidationError):
+        validator.validate({**valid, "papers_found": 19})
+    with pytest.raises(ValidationError):
+        validator.validate(
+            {
+                **valid,
+                "schema": {"fields": valid["schema"]["fields"][:2]},
+            }
+        )
+
+    search_ref = next(
+        ref for ref in question.reference_answers if ref.key == "paper_search_via_cli"
+    )
+    pattern = search_ref.value["pattern"]
+    assert re.search(
+        pattern,
+        'bohr paper search "sodium-ion battery cathode" --size 20 -o json',
+    )
+    assert not re.search(
+        pattern,
+        'bohr paper search "sodium-ion battery cathode" --size 10 -o json',
+    )

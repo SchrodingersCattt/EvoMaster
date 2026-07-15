@@ -785,34 +785,65 @@ questions:
     axis: efficiency
     verify: turn_budget
 
-- id: BWO_lit_db_D5_20260715
+- id: BWO_lit_db_D5_20260715_v2
   capability: workflow_orchestration
   domain: agnostic
   scope: platform
   intent: Test agent designs a literature database construction pipeline.
   human_prompt_seed: |
-    利用 bohr-cli，我想搞个文献数据库：某个领域的 20 篇高引文献，解析关键性能参数存到平台数据库里。
-    数据库设计保存到 `d5_literature_db.json`，格式：
-    ```json
-    {"schema": {"fields": [{"name": "...", "type": "...", "description": "..."}]}, "papers_found": ..., "batch_strategy": "..."}
-    ```
+    利用 bohr-cli，我想为钠离子电池正极材料做个文献数据库。帮我检索 20 篇高引文献，再根据检索结果设计用于记录关键性能参数的字段和批处理入库策略。
+    把结果保存到 `d5_literature_db.json`，其中记录 `schema.fields`、实际检索到的文献数 `papers_found` 和 `batch_strategy`；每个字段包含 `name`、`type` 和 `description`。
   tags:
   - bohr-cli
   reference_answers:
   - key: artifact
     value: d5_literature_db.json
-  - key: has_schema
+  - key: literature_db_schema
     value:
       filename: d5_literature_db.json
-      pattern: '"schema"\s*:\s*\{'
-  - key: has_fields
+      schema:
+        type: object
+        required:
+        - schema
+        - papers_found
+        - batch_strategy
+        properties:
+          schema:
+            type: object
+            required:
+            - fields
+            properties:
+              fields:
+                type: array
+                minItems: 3
+                items:
+                  type: object
+                  required:
+                  - name
+                  - type
+                  - description
+                  properties:
+                    name:
+                      type: string
+                      minLength: 1
+                    type:
+                      type: string
+                      minLength: 1
+                    description:
+                      type: string
+                      minLength: 1
+          papers_found:
+            type: integer
+            minimum: 20
+          batch_strategy:
+            type: string
+            minLength: 10
+  - key: paper_search_via_cli
+    tool_name: Bash
+    tool_arg: command
     value:
-      filename: d5_literature_db.json
-      pattern: '"fields"\s*:\s*\['
-  - key: has_strategy
-    value:
-      filename: d5_literature_db.json
-      pattern: '"batch_strategy"\s*:\s*"[^"]{10,}"'
+      pattern: '(?:^|[\n;&|]\s*)(?:(?:env|sudo)(?:\s+[^\s;&|]+)*\s+)?(?:[^\s;&|]+/)?bohr\s+paper\s+search\b(?=[^\n;&|]*--size(?:\s+|=)20(?:\s|$))'
+      min_matches: 1
   - key: turn_budget
     value:
       max: 15
@@ -821,18 +852,14 @@ questions:
     criterion: d5_literature_db.json written to workspace.
     axis: correctness
     verify: artifact_exists
-  - id: has_schema
-    criterion: Database schema designed.
+  - id: literature_db_schema
+    criterion: Database design records at least 20 retrieved papers, at least three documented fields, and a non-empty batch strategy.
     axis: correctness
-    verify: text_file_regex
-  - id: has_fields
-    criterion: Schema has field definitions.
-    axis: correctness
-    verify: text_file_regex
-  - id: has_strategy
-    criterion: Batch processing strategy described.
-    axis: correctness
-    verify: text_file_regex
+    verify: json_file_schema
+  - id: paper_search_via_cli
+    criterion: Twenty papers were requested through bohr-cli paper search.
+    axis: grounding
+    verify: tool_args_regex
   - id: turn_budget
     criterion: Agent completes within turn budget.
     axis: efficiency
