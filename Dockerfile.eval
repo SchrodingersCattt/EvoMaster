@@ -48,9 +48,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && if [ -x /usr/bin/nodejs ] && [ ! -e /usr/bin/node ]; then ln -sf nodejs /usr/bin/node; fi \
     && node --version \
     && npm --version \
-    && npm install -g @anthropic-ai/claude-code \
+    && npm install -g @anthropic-ai/claude-code @dptech-corp/bohr-cli \
     && if [ ! -e /usr/bin/claude ] && command -v claude >/dev/null 2>&1; then \
          ln -sf "$(command -v claude)" /usr/bin/claude; fi \
+    && if [ ! -e /usr/bin/bohr ] && command -v bohr >/dev/null 2>&1; then \
+         ln -sf "$(command -v bohr)" /usr/bin/bohr; fi \
     && test -f /usr/bin/npx \
     && test -e /usr/bin/claude \
     && test -d /usr/lib/node_modules \

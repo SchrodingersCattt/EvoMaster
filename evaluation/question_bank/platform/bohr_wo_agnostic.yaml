@@ -1,0 +1,925 @@
+version: v5
+capability: workflow_orchestration
+domain: agnostic
+questions:
+- id: BWO_image_machine_001_20260715
+  capability: workflow_orchestration
+  domain: agnostic
+  scope: platform
+  intent: Test agent queries images and machine types without creating resources.
+  human_prompt_seed: |
+    我有个 CP2K 输入文件要跑 DFT，有没有现成的镜像？版本都是几？有哪些计算机型？
+    结果保存到 `b1_resources.json`，格式：
+    ```json
+    {"images": [{"name": "...", "version": "..."}], "machine_types": [{"name": "...", "spec": "..."}]}
+    ```
+  tags:
+  - bohr_compute
+  reference_answers:
+  - key: artifact
+    value: b1_resources.json
+  - key: has_images
+    value:
+      filename: b1_resources.json
+      pattern: '"images"\s*:\s*\[\s*\{'
+  - key: cp2k_found
+    value:
+      filename: b1_resources.json
+      pattern: '[Cc][Pp]2[Kk]'
+  - key: has_machines
+    value:
+      filename: b1_resources.json
+      pattern: '"machine_types"\s*:\s*\[\s*\{'
+  - key: turn_budget
+    value:
+      max: 6
+  scoring_checklist:
+  - id: artifact
+    criterion: b1_resources.json written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: has_images
+    criterion: images array populated.
+    axis: correctness
+    verify: text_file_regex
+  - id: cp2k_found
+    criterion: CP2K image found in results.
+    axis: correctness
+    verify: text_file_regex
+  - id: has_machines
+    criterion: machine_types array populated.
+    axis: correctness
+    verify: text_file_regex
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+
+- id: BWO_long_running_002_20260715
+  capability: workflow_orchestration
+  domain: agnostic
+  scope: platform
+  intent: Test agent diagnoses long-running jobs with appropriate recommendations.
+  human_prompt_seed: |
+    看看我有没有跑超过一天还没结束的任务，有的话检查下是不是卡死了。
+    将分析结果保存到 `b2_diagnosis.json`，格式：
+    ```json
+    {"long_running_jobs": [{"job_id": ..., "name": "...", "duration_hours": ..., "status": ..., "recommendation": "terminate|kill|wait"}], "total_checked": ...}
+    ```
+  tags:
+  - bohr_compute
+  reference_answers:
+  - key: artifact
+    value: b2_diagnosis.json
+  - key: has_jobs_field
+    value:
+      filename: b2_diagnosis.json
+      pattern: '"long_running_jobs"'
+  - key: has_recommendation
+    value:
+      filename: b2_diagnosis.json
+      pattern: '"recommendation"\s*:\s*"(terminate|kill|wait)"'
+  - key: turn_budget
+    value:
+      max: 8
+  scoring_checklist:
+  - id: artifact
+    criterion: b2_diagnosis.json written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: has_jobs_field
+    criterion: Contains long_running_jobs field.
+    axis: correctness
+    verify: text_file_regex
+  - id: has_recommendation
+    criterion: Each job has a valid recommendation (terminate/kill/wait).
+    axis: correctness
+    verify: text_file_regex
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+
+- id: BWO_param_sweep_003_20260715
+  capability: workflow_orchestration
+  domain: agnostic
+  scope: platform
+  intent: Test agent can submit batch parameterized jobs with job group.
+  human_prompt_seed: |
+    我要做参数扫描，温度 300K 到 1000K 每 100K 一个，同一个模板跑 8 个任务。
+    用 `registry.dp.tech/dptech/ubuntu:22.04-cuda12.1` 镜像，命令为 `echo "T=$TEMP" > result.txt`（把 $TEMP 替换为实际温度值），机型 `c2_m4_cpu`。
+    把所有提交的任务ID记录到 `b3_jobs.json`，格式：
+    ```json
+    {"job_group_id": ..., "jobs": [{"temperature_K": ..., "job_id": ...}]}
+    ```
+  tags:
+  - bohr_compute
+  reference_answers:
+  - key: artifact
+    value: b3_jobs.json
+  - key: has_300K
+    value:
+      filename: b3_jobs.json
+      pattern: '"temperature_K"\s*:\s*300'
+  - key: has_1000K
+    value:
+      filename: b3_jobs.json
+      pattern: '"temperature_K"\s*:\s*1000'
+  - key: has_job_ids
+    value:
+      filename: b3_jobs.json
+      pattern: '"job_id"\s*:\s*\d+'
+  - key: has_group
+    value:
+      filename: b3_jobs.json
+      pattern: '"job_group_id"\s*:\s*\d+'
+  - key: turn_budget
+    value:
+      max: 18
+  scoring_checklist:
+  - id: artifact
+    criterion: b3_jobs.json written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: has_300K
+    criterion: Contains 300K temperature entry.
+    axis: correctness
+    verify: text_file_regex
+  - id: has_1000K
+    criterion: Contains 1000K temperature entry.
+    axis: correctness
+    verify: text_file_regex
+  - id: has_job_ids
+    criterion: Job IDs are real numeric values from platform.
+    axis: correctness
+    verify: text_file_regex
+  - id: has_group
+    criterion: Job group ID recorded.
+    axis: correctness
+    verify: text_file_regex
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+
+- id: BWO_gpu_compare_004_20260715
+  capability: workflow_orchestration
+  domain: agnostic
+  scope: platform
+  intent: Test agent queries GPU resources and makes recommendation without creating anything.
+  human_prompt_seed: |
+    列出所有 GPU 可用机型，对比显存和价格，推荐用于500原子体系deepmd训练的配置。
+    保存到 `b4_gpu_comparison.md`，要求有markdown表格对比和最终推荐。
+  tags:
+  - bohr_compute
+  reference_answers:
+  - key: artifact
+    value: b4_gpu_comparison.md
+  - key: has_table
+    value:
+      filename: b4_gpu_comparison.md
+      pattern: \|.*\|.*\|
+  - key: has_gpu_names
+    value:
+      filename: b4_gpu_comparison.md
+      pattern: A100|V100|T4|A800|H100
+      flags: i
+  - key: has_recommendation
+    value:
+      filename: b4_gpu_comparison.md
+      pattern: 推荐|recommend
+      flags: i
+  - key: turn_budget
+    value:
+      max: 6
+  scoring_checklist:
+  - id: artifact
+    criterion: b4_gpu_comparison.md written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: has_table
+    criterion: Contains a markdown table.
+    axis: correctness
+    verify: text_file_regex
+  - id: has_gpu_names
+    criterion: Lists GPU model names.
+    axis: correctness
+    verify: text_file_regex
+  - id: has_recommendation
+    criterion: Provides a recommendation.
+    axis: correctness
+    verify: text_file_regex
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+
+- id: BWO_fail_diagnose_005_20260715
+  capability: workflow_orchestration
+  domain: agnostic
+  scope: platform
+  intent: Test agent diagnoses failed jobs from logs and takes corrective action.
+  human_prompt_seed: |
+    看看最近有没有失败的任务，拉日志分析下原因，内存不够的话换大机器重跑。
+    诊断报告保存到 `b5_diagnosis.json`，格式：
+    ```json
+    {"failed_jobs": [{"job_id": ..., "error_type": "OOM|timeout|image_error|other", "root_cause": "..."}], "action_taken": "resubmitted_with_upgrade|no_action_needed|..."}
+    ```
+  tags:
+  - bohr_compute
+  reference_answers:
+  - key: artifact
+    value: b5_diagnosis.json
+  - key: has_failed_jobs
+    value:
+      filename: b5_diagnosis.json
+      pattern: '"failed_jobs"\s*:\s*\['
+  - key: has_error_type
+    value:
+      filename: b5_diagnosis.json
+      pattern: '"error_type"\s*:\s*"[^"]+"'
+  - key: has_action
+    value:
+      filename: b5_diagnosis.json
+      pattern: '"action_taken"\s*:\s*"[^"]+"'
+  - key: turn_budget
+    value:
+      max: 12
+  scoring_checklist:
+  - id: artifact
+    criterion: b5_diagnosis.json written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: has_failed_jobs
+    criterion: Failed jobs analyzed.
+    axis: correctness
+    verify: text_file_regex
+  - id: has_error_type
+    criterion: Error type classified.
+    axis: correctness
+    verify: text_file_regex
+  - id: has_action
+    criterion: Action taken recorded.
+    axis: correctness
+    verify: text_file_regex
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+
+- id: BWO_check_results_006_20260715
+  capability: workflow_orchestration
+  domain: agnostic
+  scope: platform
+  intent: Test agent checks finished jobs for result files availability.
+  human_prompt_seed: |
+    看看最近完成的任务，有没有忘设回传路径的，输出文件能不能捞回来。
+    结果保存到 `b6_results.json`，格式：
+    ```json
+    {"finished_jobs": [{"job_id": ..., "name": "...", "has_result": true/false, "result_path": "..."}]}
+    ```
+  tags:
+  - bohr_compute
+  reference_answers:
+  - key: artifact
+    value: b6_results.json
+  - key: has_finished
+    value:
+      filename: b6_results.json
+      pattern: '"finished_jobs"\s*:\s*\['
+  - key: has_result_field
+    value:
+      filename: b6_results.json
+      pattern: '"has_result"\s*:\s*(true|false)'
+  - key: turn_budget
+    value:
+      max: 8
+  scoring_checklist:
+  - id: artifact
+    criterion: b6_results.json written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: has_finished
+    criterion: finished_jobs array present.
+    axis: correctness
+    verify: text_file_regex
+  - id: has_result_field
+    criterion: Each job has has_result boolean.
+    axis: correctness
+    verify: text_file_regex
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+
+- id: BWO_sandbox_ase_007_20260715
+  capability: workflow_orchestration
+  domain: agnostic
+  scope: platform
+  intent: Test full sandbox lifecycle - create, upload, execute, download, delete.
+  human_prompt_seed: |
+    跑一段 ASE 脚本优化水分子结构，优化完的 xyz 拿出来。最好开个沙箱，别污染本地环境。
+    把优化后的水分子坐标保存到 `b7_water_optimized.xyz`，把运行日志保存到 `b7_log.txt`。
+  tags:
+  - bohr_compute
+  reference_answers:
+  - key: xyz_artifact
+    value: b7_water_optimized.xyz
+  - key: log_artifact
+    value: b7_log.txt
+  - key: xyz_has_atoms
+    value:
+      filename: b7_water_optimized.xyz
+      tokens:
+      - O
+      - H
+  - key: xyz_three_atoms
+    value:
+      filename: b7_water_optimized.xyz
+      pattern: (?m)^\s*3\s*$
+  - key: log_has_energy
+    value:
+      filename: b7_log.txt
+      pattern: '[Ee]nergy|eV|converge|BFGS|FIRE'
+      flags: i
+  - key: turn_budget
+    value:
+      max: 15
+  scoring_checklist:
+  - id: xyz_artifact
+    criterion: b7_water_optimized.xyz written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: log_artifact
+    criterion: b7_log.txt written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: xyz_has_atoms
+    criterion: XYZ file contains O and H atoms.
+    axis: correctness
+    verify: text_file_contains_all
+  - id: xyz_three_atoms
+    criterion: XYZ file header indicates 3 atoms (water molecule).
+    axis: correctness
+    verify: text_file_regex
+  - id: log_has_energy
+    criterion: Log shows energy/convergence information.
+    axis: correctness
+    verify: text_file_regex
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+
+- id: BWO_dp_compare_008_20260715
+  capability: workflow_orchestration
+  domain: agnostic
+  scope: platform
+  intent: Test agent can run comparison tests on two models in sandbox.
+  human_prompt_seed: |
+    我有两个势函数模型想对比精度，用同一组测试集分别跑 dp test，结果对比一下。
+    对比结果保存到 `b8_comparison.json`，格式：
+    ```json
+    {"model_a": {"name": "...", "rmse_e": ..., "rmse_f": ...}, "model_b": {"name": "...", "rmse_e": ..., "rmse_f": ...}, "conclusion": "..."}
+    ```
+    注：如果环境里没有模型文件，可以用 mock 数据演示流程，但要体现完整的 dp test 对比逻辑。
+  tags:
+  - bohr_compute
+  reference_answers:
+  - key: artifact
+    value: b8_comparison.json
+  - key: has_model_a
+    value:
+      filename: b8_comparison.json
+      pattern: '"model_a"'
+  - key: has_model_b
+    value:
+      filename: b8_comparison.json
+      pattern: '"model_b"'
+  - key: has_rmse
+    value:
+      filename: b8_comparison.json
+      pattern: '"rmse_[ef]"\s*:\s*[\d.]'
+  - key: has_conclusion
+    value:
+      filename: b8_comparison.json
+      pattern: '"conclusion"\s*:\s*"[^"]{10,}"'
+  - key: turn_budget
+    value:
+      max: 15
+  scoring_checklist:
+  - id: artifact
+    criterion: b8_comparison.json written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: has_model_a
+    criterion: model_a results present.
+    axis: correctness
+    verify: text_file_regex
+  - id: has_model_b
+    criterion: model_b results present.
+    axis: correctness
+    verify: text_file_regex
+  - id: has_rmse
+    criterion: RMSE metrics reported as numbers.
+    axis: correctness
+    verify: text_file_regex
+  - id: has_conclusion
+    criterion: Comparison conclusion provided.
+    axis: correctness
+    verify: text_file_regex
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+
+- id: BWO_stop_running_009_20260715
+  capability: workflow_orchestration
+  domain: agnostic
+  scope: platform
+  intent: Test agent identifies running jobs and uses terminate (not kill) by default.
+  human_prompt_seed: |
+    我输入文件写错了，把正在跑的任务全停掉。
+    操作记录保存到 `b9_actions.json`，格式：
+    ```json
+    {"running_jobs_found": [{"job_id": ..., "name": "..."}], "action_per_job": [{"job_id": ..., "action": "terminate|kill", "success": true/false}]}
+    ```
+  tags:
+  - bohr_compute
+  reference_answers:
+  - key: artifact
+    value: b9_actions.json
+  - key: has_found_list
+    value:
+      filename: b9_actions.json
+      pattern: '"running_jobs_found"'
+  - key: used_terminate
+    value:
+      filename: b9_actions.json
+      pattern: '"action"\s*:\s*"terminate"'
+  - key: has_success
+    value:
+      filename: b9_actions.json
+      pattern: '"success"\s*:\s*(true|false)'
+  - key: turn_budget
+    value:
+      max: 10
+  scoring_checklist:
+  - id: artifact
+    criterion: b9_actions.json written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: has_found_list
+    criterion: Listed running jobs before acting.
+    axis: correctness
+    verify: text_file_regex
+  - id: used_terminate
+    criterion: Used terminate (graceful) rather than kill by default.
+    axis: correctness
+    verify: text_file_regex
+  - id: has_success
+    criterion: Recorded operation success/failure.
+    axis: correctness
+    verify: text_file_regex
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+
+- id: BWO_node_dataset_010_20260715
+  capability: workflow_orchestration
+  domain: agnostic
+  scope: platform
+  intent: Test agent assesses hot-mount feasibility for running nodes.
+  priority: P1
+  human_prompt_seed: |
+    我有节点在跑，能不能动态再挂一个数据集进去？先看看我有哪些节点和数据集。
+    分析结果保存到 `b10_analysis.json`，格式：
+    ```json
+    {"nodes": [{"id": ..., "status": ...}], "datasets": [{"id": ..., "name": "..."}], "hot_mount_supported": true/false, "explanation": "..."}
+    ```
+  tags:
+  - bohr_compute
+  reference_answers:
+  - key: artifact
+    value: b10_analysis.json
+  - key: has_nodes
+    value:
+      filename: b10_analysis.json
+      pattern: '"nodes"'
+  - key: has_mount_assessment
+    value:
+      filename: b10_analysis.json
+      pattern: '"hot_mount_supported"\s*:\s*(true|false)'
+  - key: turn_budget
+    value:
+      max: 8
+  scoring_checklist:
+  - id: artifact
+    criterion: b10_analysis.json written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: has_nodes
+    criterion: Nodes listed.
+    axis: correctness
+    verify: text_file_regex
+  - id: has_mount_assessment
+    criterion: Hot mount feasibility assessed with boolean.
+    axis: correctness
+    verify: text_file_regex
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+
+# D-series: Composite workflows
+
+- id: BWO_material_screen_D1_20260715
+  capability: workflow_orchestration
+  domain: agnostic
+  scope: platform
+  intent: Test agent designs a multi-step material screening workflow with real cost estimation.
+  human_prompt_seed: |
+    我要做新材料筛选：先从文献里找候选结构，然后平台上跑 DFT 初筛，给我一个可行方案加预算。
+    方案保存到 `d1_plan.json`，格式：
+    ```json
+    {"steps": [{"step": "...", "tool": "bohr xxx", "estimated_cost_cny": ...}], "total_budget_cny": ..., "recommended_machine": "..."}
+    ```
+    要求查询真实的机型和价格信息。
+  tags:
+  - bohr_composite
+  reference_answers:
+  - key: artifact
+    value: d1_plan.json
+  - key: has_steps
+    value:
+      filename: d1_plan.json
+      pattern: '"steps"\s*:\s*\['
+  - key: has_cost
+    value:
+      filename: d1_plan.json
+      pattern: '"estimated_cost_cny"\s*:\s*[\d.]'
+  - key: has_total
+    value:
+      filename: d1_plan.json
+      pattern: '"total_budget_cny"\s*:\s*[\d.]'
+  - key: has_machine
+    value:
+      filename: d1_plan.json
+      pattern: '"recommended_machine"\s*:\s*"[^"]+"'
+  - key: turn_budget
+    value:
+      max: 15
+  scoring_checklist:
+  - id: artifact
+    criterion: d1_plan.json written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: has_steps
+    criterion: Plan has multi-step workflow.
+    axis: correctness
+    verify: text_file_regex
+  - id: has_cost
+    criterion: Individual step costs estimated.
+    axis: correctness
+    verify: text_file_regex
+  - id: has_total
+    criterion: Total budget provided.
+    axis: correctness
+    verify: text_file_regex
+  - id: has_machine
+    criterion: Machine recommendation given.
+    axis: correctness
+    verify: text_file_regex
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+
+- id: BWO_automation_D2_20260715
+  capability: workflow_orchestration
+  domain: agnostic
+  scope: platform
+  intent: Test agent can design a job-completion automation workflow honestly.
+  human_prompt_seed: |
+    能不能搞个自动化：任务跑完自动把结果写到我的数据库表里？
+    方案保存到 `d2_automation.md`，包含"## 轮询机制"和"## 数据流"和"## 可行性评估"三节。
+  tags:
+  - bohr_composite
+  reference_answers:
+  - key: artifact
+    value: d2_automation.md
+  - key: has_polling
+    value:
+      filename: d2_automation.md
+      pattern: (?m)^## .*轮询|^## .*[Pp]oll
+      flags: i
+  - key: has_dataflow
+    value:
+      filename: d2_automation.md
+      pattern: (?m)^## .*数据|^## .*[Dd]ata
+      flags: i
+  - key: has_feasibility
+    value:
+      filename: d2_automation.md
+      pattern: (?m)^## .*可行|^## .*[Ff]easib
+      flags: i
+  - key: turn_budget
+    value:
+      max: 8
+  scoring_checklist:
+  - id: artifact
+    criterion: d2_automation.md written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: has_polling
+    criterion: Has polling mechanism section.
+    axis: correctness
+    verify: text_file_regex
+  - id: has_dataflow
+    criterion: Has data flow section.
+    axis: correctness
+    verify: text_file_regex
+  - id: has_feasibility
+    criterion: Has feasibility assessment section.
+    axis: correctness
+    verify: text_file_regex
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+
+- id: BWO_pdf_params_D3_20260715
+  capability: workflow_orchestration
+  domain: agnostic
+  scope: platform
+  intent: Test agent extracts computation parameters from a paper and matches platform images.
+  human_prompt_seed: |
+    我想复现这篇论文的计算结果，帮我看看它用的什么软件什么参数。
+    提取结果保存到 `d3_params.json`，格式：
+    ```json
+    {"software": "...", "version": "...", "parameters": {"functional": "...", "basis_set": "...", "cutoff_energy_eV": ..., "k_points": "..."}, "matched_image": "..."}
+    ```
+    然后在平台上搜一下有没有对应的镜像。
+  tags:
+  - bohr_composite
+  data_files:
+  - key: pdf_paper
+    path: data/bohr_cli/s41524-025-01739-7.pdf
+    description: npj Computational Materials paper for parameter extraction.
+  reference_answers:
+  - key: artifact
+    value: d3_params.json
+  - key: has_software
+    value:
+      filename: d3_params.json
+      pattern: '"software"\s*:\s*"[^"]+"'
+  - key: has_params
+    value:
+      filename: d3_params.json
+      pattern: '"parameters"\s*:\s*\{'
+  - key: has_functional
+    value:
+      filename: d3_params.json
+      pattern: '"functional"\s*:\s*"[^"]+"'
+  - key: turn_budget
+    value:
+      max: 12
+  scoring_checklist:
+  - id: artifact
+    criterion: d3_params.json written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: has_software
+    criterion: Software identified from paper.
+    axis: correctness
+    verify: text_file_regex
+  - id: has_params
+    criterion: Parameters object present.
+    axis: correctness
+    verify: text_file_regex
+  - id: has_functional
+    criterion: Functional/method extracted.
+    axis: correctness
+    verify: text_file_regex
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+
+- id: BWO_data_organize_D4_20260715
+  capability: workflow_orchestration
+  domain: agnostic
+  scope: platform
+  intent: Test agent can organize job results and identify missing data.
+  human_prompt_seed: |
+    论文要投稿了，帮我把计算数据从任务结果里整理出来，看看还差什么图表。
+    整理报告保存到 `d4_data_report.json`，格式：
+    ```json
+    {"jobs_analyzed": [{"job_id": ..., "data_type": "..."}], "data_collected": ["..."], "missing_items": ["..."]}
+    ```
+  tags:
+  - bohr_composite
+  reference_answers:
+  - key: artifact
+    value: d4_data_report.json
+  - key: has_jobs
+    value:
+      filename: d4_data_report.json
+      pattern: '"jobs_analyzed"'
+  - key: has_missing
+    value:
+      filename: d4_data_report.json
+      pattern: '"missing_items"\s*:\s*\['
+  - key: turn_budget
+    value:
+      max: 12
+  scoring_checklist:
+  - id: artifact
+    criterion: d4_data_report.json written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: has_jobs
+    criterion: Contains jobs_analyzed field.
+    axis: correctness
+    verify: text_file_regex
+  - id: has_missing
+    criterion: Missing items identified.
+    axis: correctness
+    verify: text_file_regex
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+
+- id: BWO_lit_db_D5_20260715
+  capability: workflow_orchestration
+  domain: agnostic
+  scope: platform
+  intent: Test agent designs a literature database construction pipeline.
+  human_prompt_seed: |
+    我想搞个文献数据库：某个领域的 20 篇高引文献，解析关键性能参数存到平台数据库里。
+    数据库设计保存到 `d5_literature_db.json`，格式：
+    ```json
+    {"schema": {"fields": [{"name": "...", "type": "...", "description": "..."}]}, "papers_found": ..., "batch_strategy": "..."}
+    ```
+  tags:
+  - bohr_composite
+  reference_answers:
+  - key: artifact
+    value: d5_literature_db.json
+  - key: has_schema
+    value:
+      filename: d5_literature_db.json
+      pattern: '"schema"\s*:\s*\{'
+  - key: has_fields
+    value:
+      filename: d5_literature_db.json
+      pattern: '"fields"\s*:\s*\['
+  - key: has_strategy
+    value:
+      filename: d5_literature_db.json
+      pattern: '"batch_strategy"\s*:\s*"[^"]{10,}"'
+  - key: turn_budget
+    value:
+      max: 15
+  scoring_checklist:
+  - id: artifact
+    criterion: d5_literature_db.json written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: has_schema
+    criterion: Database schema designed.
+    axis: correctness
+    verify: text_file_regex
+  - id: has_fields
+    criterion: Schema has field definitions.
+    axis: correctness
+    verify: text_file_regex
+  - id: has_strategy
+    criterion: Batch processing strategy described.
+    axis: correctness
+    verify: text_file_regex
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+
+- id: BWO_monitor_D6_20260715
+  capability: workflow_orchestration
+  domain: agnostic
+  scope: platform
+  intent: Test agent can submit a job and poll its status until completion.
+  human_prompt_seed: |
+    先提一个 `echo "hello from bohrium" > result.txt && sleep 60` 的短任务（镜像用 `registry.dp.tech/dptech/ubuntu:22.04-cuda12.1`，机型 `c2_m4_cpu`），然后轮询监控它，完成后把日志存下来。
+    监控记录保存到 `d6_monitor.json`，格式：
+    ```json
+    {"job_id": ..., "polls": [{"time": "...", "status": ...}], "final_status": "...", "log_saved": true/false}
+    ```
+  tags:
+  - bohr_composite
+  reference_answers:
+  - key: artifact
+    value: d6_monitor.json
+  - key: has_job_id
+    value:
+      filename: d6_monitor.json
+      pattern: '"job_id"\s*:\s*\d+'
+  - key: has_polls
+    value:
+      filename: d6_monitor.json
+      pattern: '"polls"\s*:\s*\['
+  - key: has_final
+    value:
+      filename: d6_monitor.json
+      pattern: '"final_status"\s*:\s*"[^"]+"'
+  - key: turn_budget
+    value:
+      max: 20
+  scoring_checklist:
+  - id: artifact
+    criterion: d6_monitor.json written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: has_job_id
+    criterion: Real job ID from platform submission.
+    axis: correctness
+    verify: text_file_regex
+  - id: has_polls
+    criterion: Multiple polling records captured.
+    axis: correctness
+    verify: text_file_regex
+  - id: has_final
+    criterion: Final status recorded.
+    axis: correctness
+    verify: text_file_regex
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+
+- id: BWO_node_ssh_scp_D7_20260715
+  capability: workflow_orchestration
+  domain: agnostic
+  scope: platform
+  intent: Test agent creates a node, gets SSH info, and transfers a file.
+  priority: P1
+  human_prompt_seed: |
+    用我的bohrium鉴权启动一个容器节点，机型选 T4 相关的最便宜的，获取其ssh的链接方式，启动完成后，把工作区的 test 文件传到 /personal 下面。
+    操作记录保存到 `d7_node_ops.json`，格式：
+    ```json
+    {"node_id": ..., "machine_type": "...", "ssh_command": "...", "file_transferred": true/false}
+    ```
+  tags:
+  - bohr_composite
+  data_files:
+  - key: test_file
+    path: data/bohr_cli/test
+    description: Small test file for SCP transfer.
+  reference_answers:
+  - key: artifact
+    value: d7_node_ops.json
+  - key: has_node_id
+    value:
+      filename: d7_node_ops.json
+      pattern: '"node_id"\s*:\s*\d+'
+  - key: has_t4
+    value:
+      filename: d7_node_ops.json
+      pattern: '[Tt]4'
+  - key: has_ssh
+    value:
+      filename: d7_node_ops.json
+      pattern: '"ssh_command"\s*:\s*"[^"]+"'
+  - key: file_transferred
+    value:
+      filename: d7_node_ops.json
+      pattern: '"file_transferred"\s*:\s*true'
+  - key: turn_budget
+    value:
+      max: 18
+  scoring_checklist:
+  - id: artifact
+    criterion: d7_node_ops.json written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: has_node_id
+    criterion: Real node ID from platform.
+    axis: correctness
+    verify: text_file_regex
+  - id: has_t4
+    criterion: Machine type includes T4.
+    axis: correctness
+    verify: text_file_regex
+  - id: has_ssh
+    criterion: SSH connection command obtained.
+    axis: correctness
+    verify: text_file_regex
+  - id: file_transferred
+    criterion: File successfully transferred.
+    axis: correctness
+    verify: text_file_regex
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
