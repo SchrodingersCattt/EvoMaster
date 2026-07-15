@@ -55,7 +55,7 @@ questions:
     axis: efficiency
     verify: turn_budget
 
-- id: BWO_long_running_002_20260715
+- id: BWO_long_running_002_20260715_v2
   capability: workflow_orchestration
   domain: agnostic
   scope: platform
@@ -71,14 +71,51 @@ questions:
   reference_answers:
   - key: artifact
     value: b2_diagnosis.json
-  - key: has_jobs_field
+  - key: diagnosis_schema
     value:
       filename: b2_diagnosis.json
-      pattern: '"long_running_jobs"'
-  - key: has_recommendation
-    value:
-      filename: b2_diagnosis.json
-      pattern: '"recommendation"\s*:\s*"(terminate|kill|wait)"'
+      schema:
+        type: object
+        required:
+        - long_running_jobs
+        - total_checked
+        properties:
+          long_running_jobs:
+            type: array
+            items:
+              type: object
+              required:
+              - job_id
+              - name
+              - duration_hours
+              - status
+              - recommendation
+              properties:
+                job_id:
+                  oneOf:
+                  - type: integer
+                  - type: string
+                    minLength: 1
+                name:
+                  type: string
+                  minLength: 1
+                duration_hours:
+                  type: number
+                  minimum: 0
+                status:
+                  oneOf:
+                  - type: integer
+                  - type: string
+                    minLength: 1
+                recommendation:
+                  type: string
+                  enum:
+                  - terminate
+                  - kill
+                  - wait
+          total_checked:
+            type: integer
+            minimum: 0
   - key: turn_budget
     value:
       max: 8
@@ -87,14 +124,10 @@ questions:
     criterion: b2_diagnosis.json written to workspace.
     axis: correctness
     verify: artifact_exists
-  - id: has_jobs_field
-    criterion: Contains long_running_jobs field.
+  - id: diagnosis_schema
+    criterion: Diagnosis records the checked-job count and gives every long-running job a valid terminate, kill, or wait recommendation.
     axis: correctness
-    verify: text_file_regex
-  - id: has_recommendation
-    criterion: Each job has a valid recommendation (terminate/kill/wait).
-    axis: correctness
-    verify: text_file_regex
+    verify: json_file_schema
   - id: turn_budget
     criterion: Agent completes within turn budget.
     axis: efficiency
