@@ -99,6 +99,17 @@ profiles:
     max_retries: 3
     retry_delay: 1.0
 
+  matmaster/DeepSeek-v4-Flash:
+    provider: litellm-deepseek
+    model: matmaster/DeepSeek-v4-Flash
+    reasoning_effort: high
+    context_limit: 200000
+    timeout: 1200
+    stream_timeout: 480
+    stream_idle_timeout: 60
+    max_retries: 3
+    retry_delay: 1.0
+
   global.anthropic.claude-opus-4-6-v1:
     provider: litellm-anthropic
     model: global.anthropic.claude-opus-4-6-v1

@@ -1,0 +1,684 @@
+version: v5
+capability: workflow_orchestration
+domain: agnostic
+questions:
+- id: WO_cp2k_band_si_001_20260629
+  capability: workflow_orchestration
+  domain: agnostic
+  intent: Compute band structure of Si diamond using CP2K PBE and report indirect band gap.
+  human_prompt_seed: 用 CP2K PBE 计算 Si 金刚石结构的能带，报告间接带隙值。
+  tags:
+  - eng_cp2k
+  data_files: []
+  reference_answers:
+  - key: band_gap_eV
+    value: 0.63
+    tolerance: 0.15
+  - key: required_fields
+    value:
+    - band_gap
+    - indirect
+    - Gamma
+    - X
+  - key: turn_budget
+    value:
+      max: 20
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 12000
+  scoring_checklist:
+  - id: band_gap_eV
+    criterion: Si PBE indirect band gap is within tolerance of ~0.63 eV.
+    axis: correctness
+    verify: numerical_range
+  - id: required_fields
+    criterion: Report identifies the gap as indirect, states VBM/CBM k-points, and gives numeric gap value.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: grounding_source
+    criterion: Band gap value is derived from CP2K calculation output, not literature.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: no_retries
+    criterion: No repeated identical submissions.
+    axis: efficiency
+    verify: no_retries
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Duration within budget.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Token usage within budget.
+    axis: efficiency
+    verify: token_budget
+
+- id: WO_cp2k_dos_si_001_20260629
+  capability: workflow_orchestration
+  domain: agnostic
+  intent: Compute DOS of Si diamond using CP2K PBE and report VBM/CBM positions.
+  human_prompt_seed: 用 CP2K PBE 计算 Si 的态密度（DOS），报告 VBM 和 CBM 的能量位置。
+  tags:
+  - eng_cp2k
+  data_files: []
+  reference_answers:
+  - key: vbm_eV
+    value: 5.22
+    tolerance: 0.3
+  - key: cbm_eV
+    value: 5.85
+    tolerance: 0.3
+  - key: required_fields
+    value:
+    - VBM
+    - CBM
+    - DOS
+  - key: turn_budget
+    value:
+      max: 20
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 12000
+  scoring_checklist:
+  - id: vbm_eV
+    criterion: VBM energy position is within tolerance.
+    axis: correctness
+    verify: numerical_range
+  - id: cbm_eV
+    criterion: CBM energy position is within tolerance.
+    axis: correctness
+    verify: numerical_range
+  - id: required_fields
+    criterion: Report includes VBM, CBM values and mentions DOS calculation.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: grounding_source
+    criterion: Values derived from CP2K output, not literature.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: no_retries
+    criterion: No repeated identical submissions.
+    axis: efficiency
+    verify: no_retries
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Duration within budget.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Token usage within budget.
+    axis: efficiency
+    verify: token_budget
+
+- id: WO_cp2k_surface_energy_al111_001_20260629
+  capability: workflow_orchestration
+  domain: agnostic
+  intent: Compute surface energy of Al(111) slab using CP2K PBE.
+  human_prompt_seed: 用 CP2K PBE 计算 Al(111) 的表面能，输出 γ 值（J/m²）。
+  tags:
+  - eng_cp2k
+  data_files: []
+  reference_answers:
+  - key: surface_energy_J_m2
+    value: 0.896
+    tolerance: 0.15
+  - key: required_fields
+    value:
+    - surface_energy
+    - Al
+    - "111"
+    - slab
+  - key: turn_budget
+    value:
+      max: 25
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 15000
+  scoring_checklist:
+  - id: surface_energy_J_m2
+    criterion: Al(111) surface energy γ is within tolerance of ~0.896 J/m².
+    axis: correctness
+    verify: numerical_range
+  - id: required_fields
+    criterion: Report clearly states surface energy with units, slab model description.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: grounding_source
+    criterion: Surface energy derived from slab vs bulk energy difference, not literature.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: no_retries
+    criterion: No repeated identical submissions.
+    axis: efficiency
+    verify: no_retries
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Duration within budget.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Token usage within budget.
+    axis: efficiency
+    verify: token_budget
+
+- id: WO_cp2k_adsorption_co_al111_001_20260629
+  capability: workflow_orchestration
+  domain: agnostic
+  intent: Compute adsorption energy of CO on Al(111) using CP2K PBE.
+  human_prompt_seed: 用 CP2K PBE 计算 CO 在 Al(111) 上的吸附能。
+  tags:
+  - eng_cp2k
+  data_files: []
+  reference_answers:
+  - key: adsorption_energy_eV
+    value: -0.633
+    tolerance: 0.2
+  - key: required_fields
+    value:
+    - adsorption_energy
+    - CO
+    - Al
+  - key: turn_budget
+    value:
+      max: 25
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 15000
+  scoring_checklist:
+  - id: adsorption_energy_eV
+    criterion: CO/Al(111) adsorption energy is within tolerance of ~−0.633 eV.
+    axis: correctness
+    verify: numerical_range
+  - id: required_fields
+    criterion: Report states adsorption energy with sign convention and adsorption site.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: grounding_source
+    criterion: Value derived from E_ads = E_slab+CO − E_slab − E_CO calculation.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: no_retries
+    criterion: No repeated identical submissions.
+    axis: efficiency
+    verify: no_retries
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Duration within budget.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Token usage within budget.
+    axis: efficiency
+    verify: token_budget
+
+- id: WO_cp2k_charge_diff_co_al111_001_20260629
+  capability: workflow_orchestration
+  domain: agnostic
+  intent: Compute charge density difference for CO adsorbed on Al(111) using CP2K.
+  human_prompt_seed: 用 CP2K 计算 CO/Al(111) 吸附体系的差分电荷密度 Δρ。
+  tags:
+  - eng_cp2k
+  data_files: []
+  reference_answers:
+  - key: delta_rho_range
+    value:
+    - -0.033
+    - 0.023
+  - key: required_fields
+    value:
+    - charge_density_difference
+    - CO
+    - Al
+  - key: turn_budget
+    value:
+      max: 25
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 15000
+  scoring_checklist:
+  - id: delta_rho_computed
+    criterion: Agent computes Δρ = ρ(slab+CO) − ρ(slab) − ρ(CO) and reports value range or visualization.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: required_fields
+    criterion: Report explains charge redistribution upon CO adsorption.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: grounding_source
+    criterion: Charge density difference derived from three separate calculations, not fabricated.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: no_retries
+    criterion: No repeated identical submissions.
+    axis: efficiency
+    verify: no_retries
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Duration within budget.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Token usage within budget.
+    axis: efficiency
+    verify: token_budget
+
+- id: WO_cp2k_bader_co_al111_001_20260629
+  capability: workflow_orchestration
+  domain: agnostic
+  intent: Compute Hirshfeld/Bader charges for CO adsorbed on Al(111) using CP2K.
+  human_prompt_seed: 用 CP2K 计算 CO/Al(111) 体系的 Hirshfeld 电荷分析，报告 CO 分子的净电荷转移。
+  tags:
+  - eng_cp2k
+  data_files: []
+  reference_answers:
+  - key: co_charge_e
+    value: 0.105
+    tolerance: 0.05
+  - key: required_fields
+    value:
+    - Hirshfeld
+    - charge
+    - CO
+    - transfer
+  - key: turn_budget
+    value:
+      max: 25
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 15000
+  scoring_checklist:
+  - id: co_charge_e
+    criterion: CO net charge transfer is within tolerance of ~+0.105 e.
+    axis: correctness
+    verify: numerical_range
+  - id: required_fields
+    criterion: Report includes per-atom or per-molecule Hirshfeld charges and discusses charge transfer direction.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: grounding_source
+    criterion: Charges derived from Hirshfeld population analysis output, not assumed.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: no_retries
+    criterion: No repeated identical submissions.
+    axis: efficiency
+    verify: no_retries
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Duration within budget.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Token usage within budget.
+    axis: efficiency
+    verify: token_budget
+
+- id: WO_cp2k_cohp_mgo_001_20260629
+  capability: workflow_orchestration
+  domain: agnostic
+  intent: Compute COHP/Mulliken bond population for MgO using CP2K to determine ionic character.
+  human_prompt_seed: 用 CP2K 对 MgO 做 Mulliken 键布居分析，判断 Mg-O 键的离子性比例。
+  tags:
+  - eng_cp2k
+  data_files: []
+  reference_answers:
+  - key: ionic_percent
+    value: 54
+    tolerance: 10
+  - key: required_fields
+    value:
+    - Mulliken
+    - ionic
+    - MgO
+    - bond
+  - key: turn_budget
+    value:
+      max: 20
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 12000
+  scoring_checklist:
+  - id: ionic_percent
+    criterion: Ionic character percentage is within tolerance of ~54%.
+    axis: correctness
+    verify: numerical_range
+  - id: required_fields
+    criterion: Report discusses Mulliken bond populations and ionic vs covalent character.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: grounding_source
+    criterion: Ionic character derived from Mulliken analysis, not literature values.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: no_retries
+    criterion: No repeated identical submissions.
+    axis: efficiency
+    verify: no_retries
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Duration within budget.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Token usage within budget.
+    axis: efficiency
+    verify: token_budget
+
+- id: WO_cp2k_interface_energy_si_ge_001_20260629
+  capability: workflow_orchestration
+  domain: agnostic
+  intent: Compute Si/Ge interface energy using CP2K PBE.
+  human_prompt_seed: 用 CP2K PBE 计算 Si/Ge 界面能。
+  tags:
+  - eng_cp2k
+  data_files: []
+  reference_answers:
+  - key: interface_energy_J_m2
+    value: -1.485
+    tolerance: 0.3
+  - key: required_fields
+    value:
+    - interface_energy
+    - Si
+    - Ge
+  - key: turn_budget
+    value:
+      max: 25
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 15000
+  scoring_checklist:
+  - id: interface_energy_J_m2
+    criterion: Si/Ge interface energy is within tolerance.
+    axis: correctness
+    verify: numerical_range
+  - id: required_fields
+    criterion: Report explains interface model construction and energy decomposition.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: grounding_source
+    criterion: Interface energy derived from calculation, not assumed.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: no_retries
+    criterion: No repeated identical submissions.
+    axis: efficiency
+    verify: no_retries
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Duration within budget.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Token usage within budget.
+    axis: efficiency
+    verify: token_budget
+
+- id: WO_cp2k_workfunction_al111_001_20260629
+  capability: workflow_orchestration
+  domain: agnostic
+  intent: Compute work function of Al(111) using CP2K PBE.
+  human_prompt_seed: 用 CP2K PBE 计算 Al(111) 的功函数 φ。
+  tags:
+  - eng_cp2k
+  data_files: []
+  reference_answers:
+  - key: work_function_eV
+    value: 3.93
+    tolerance: 0.3
+  - key: required_fields
+    value:
+    - work_function
+    - Al
+    - vacuum
+    - Fermi
+  - key: turn_budget
+    value:
+      max: 25
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 15000
+  scoring_checklist:
+  - id: work_function_eV
+    criterion: Al(111) work function is within tolerance of ~3.93 eV.
+    axis: correctness
+    verify: numerical_range
+  - id: required_fields
+    criterion: Report states φ = E_vacuum − E_Fermi and gives numeric value.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: grounding_source
+    criterion: Work function derived from electrostatic potential vs Fermi level.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: no_retries
+    criterion: No repeated identical submissions.
+    axis: efficiency
+    verify: no_retries
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Duration within budget.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Token usage within budget.
+    axis: efficiency
+    verify: token_budget
+
+- id: WO_cp2k_elf_al111_001_20260629
+  capability: workflow_orchestration
+  domain: agnostic
+  intent: Compute electron localization function (ELF) for Al(111) using CP2K.
+  human_prompt_seed: 用 CP2K 计算 Al(111) 的电子定域化函数（ELF），分析其自由电子气特征。
+  tags:
+  - eng_cp2k
+  data_files: []
+  reference_answers:
+  - key: required_fields
+    value:
+    - ELF
+    - Al
+    - free_electron
+  - key: turn_budget
+    value:
+      max: 25
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 15000
+  scoring_checklist:
+  - id: elf_computed
+    criterion: Agent successfully computes ELF and outputs cube file or visualization.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: free_electron_character
+    criterion: Report correctly identifies Al as having ELF~0.5 in interstitial region (free electron gas character).
+    axis: correctness
+    verify: llm_binary_judge
+  - id: grounding_source
+    criterion: ELF interpretation grounded in computed data, not generic textbook statements.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: no_retries
+    criterion: No repeated identical submissions.
+    axis: efficiency
+    verify: no_retries
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Duration within budget.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Token usage within budget.
+    axis: efficiency
+    verify: token_budget
+
+- id: WO_cp2k_esp_al111_001_20260629
+  capability: workflow_orchestration
+  domain: agnostic
+  intent: Compute electrostatic potential (ESP) for Al(111) slab using CP2K.
+  human_prompt_seed: 用 CP2K 计算 Al(111) slab 的静电势分布，输出平面平均静电势曲线。
+  tags:
+  - eng_cp2k
+  data_files: []
+  reference_answers:
+  - key: required_fields
+    value:
+    - electrostatic_potential
+    - Al
+    - planar_average
+    - vacuum
+  - key: turn_budget
+    value:
+      max: 25
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 15000
+  scoring_checklist:
+  - id: esp_computed
+    criterion: Agent computes planar-averaged electrostatic potential along z-direction showing slab and vacuum regions.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: required_fields
+    criterion: Report shows vacuum level, bulk potential, and potential profile.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: grounding_source
+    criterion: ESP profile derived from Hartree potential output, not fabricated.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: no_retries
+    criterion: No repeated identical submissions.
+    axis: efficiency
+    verify: no_retries
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Duration within budget.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Token usage within budget.
+    axis: efficiency
+    verify: token_budget
+
+- id: WO_cp2k_dband_pt111_001_20260629
+  capability: workflow_orchestration
+  domain: agnostic
+  intent: Compute d-band center of Pt(111) using CP2K projected DOS.
+  human_prompt_seed: 用 CP2K 计算 Pt(111) 的 d 带中心 ε_d。
+  tags:
+  - eng_cp2k
+  data_files: []
+  reference_answers:
+  - key: dband_center_eV
+    value: -2.25
+    tolerance: 0.5
+  - key: required_fields
+    value:
+    - d-band
+    - center
+    - Pt
+    - PDOS
+  - key: turn_budget
+    value:
+      max: 25
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 15000
+  scoring_checklist:
+  - id: dband_center_eV
+    criterion: Pt(111) d-band center is within tolerance of ~−2.25 eV.
+    axis: correctness
+    verify: numerical_range
+  - id: required_fields
+    criterion: Report explains d-band center as first moment of projected d-DOS relative to Fermi level.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: grounding_source
+    criterion: d-band center derived from PDOS integration, not literature value.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: no_retries
+    criterion: No repeated identical submissions.
+    axis: efficiency
+    verify: no_retries
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Duration within budget.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Token usage within budget.
+    axis: efficiency
+    verify: token_budget

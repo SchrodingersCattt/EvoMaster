@@ -27,14 +27,21 @@ E_sub = E_gas - E_crystal/Z    (positive = crystal more stable)
 
 ## Molecule Extraction from Crystal
 
-Molecules in molecular crystals often **span periodic boundaries**. Naive slicing by atom index produces fragments with wrong composition.
+Molecules in molecular crystals often **span periodic boundaries**. Naive slicing
+by atom index produces fragments with wrong composition. Use MolCrysKit Python
+API here for exact molecule selection and PBC unwrapping.
 
-Correct approach:
-1. Build connectivity graph (bond cutoffs: C-C < 1.7Å, C-H < 1.3Å, C-O < 1.6Å, etc.)
-2. Use MIC distances for neighbor detection (not direct Cartesian distances)
-3. Pick one connected component
-4. Unwrap atomic positions: once you have the molecule's atom indices, reconstruct contiguous Cartesian coords using MIC vectors from a seed atom
-5. Verify formula matches expected (e.g., C10H8 for naphthalene = 18 atoms)
+```python
+from molcrys_kit.io.cif import read_mol_crystal
+
+crystal = read_mol_crystal("molecular_crystal.cif")
+mol = crystal.molecules[0]   # PBC-unwrapped by MolCrysKit reader
+mol.write_xyz("molecule.xyz")
+```
+
+Verify formula and atom count match expected (e.g., C10H8 for naphthalene = 18
+atoms). `mck io convert` writes the whole crystal; do not use it for gas-phase
+single-molecule references.
 
 ## Gas-Phase Reference — CRITICAL
 

@@ -361,6 +361,16 @@ def build_devshell_eval_arg_parser(
         ),
     )
     parser.add_argument(
+        "--bohrium-env",
+        choices=("test", "uat", "prod"),
+        default=None,
+        metavar="ENV",
+        help=(
+            "Override only BOHRIUM_* credentials for child mm-devshell tasks from "
+            ".env.<ENV>, without changing SERVICE_ENV or eval-ingest routing"
+        ),
+    )
+    parser.add_argument(
         "--fallback-model",
         type=str,
         default=default_fallback_model_route,

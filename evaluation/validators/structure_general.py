@@ -77,11 +77,29 @@ def _resolve_files(workspace: Path, pattern: str) -> list[Path]:
 
 
 def _load_structure(path: Path) -> Structure | Molecule:
-    """Read a CIF / POSCAR / XYZ / … file via pymatgen auto-detection."""
+    """Read a CIF / POSCAR / XYZ / ExtXYZ file via pymatgen auto-detection.
+
+    For ``.extxyz`` files (not natively supported by pymatgen), ASE is used
+    to read the first frame and the result is converted to a pymatgen object.
+    """
     suffix = path.suffix.lower()
+    # Two-part suffix check for .extxyz
+    if path.name.endswith('.extxyz'):
+        return _load_extxyz_first_frame(path)
     if suffix in {".xyz"}:
         return Molecule.from_file(str(path))
     return Structure.from_file(str(path))
+
+
+def _load_extxyz_first_frame(path: Path) -> Structure | Molecule:
+    """Read the first frame of an ExtXYZ file via ASE → pymatgen."""
+    import ase.io
+    from pymatgen.io.ase import AseAtomsAdaptor
+
+    atoms = ase.io.read(str(path), index=0)
+    if any(atoms.pbc):
+        return AseAtomsAdaptor.get_structure(atoms)
+    return AseAtomsAdaptor.get_molecule(atoms)
 
 
 # 1. Atom count

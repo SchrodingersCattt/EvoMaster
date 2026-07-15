@@ -1,0 +1,375 @@
+version: v5
+capability: workflow_orchestration
+domain: agnostic
+questions:
+- id: WO_mlip_elastic_si_001_20260629
+  capability: workflow_orchestration
+  domain: agnostic
+  intent: Compute elastic constants of Si diamond using DPA-3.1 MLIP.
+  human_prompt_seed: 用 DPA 机器学习势计算 Si 金刚石结构的弹性常数，报告体模量 K 和剪切模量 G。
+  tags:
+  - code_mlip
+  data_files: []
+  reference_answers:
+  - key: bulk_modulus_GPa
+    value: 70.7
+    tolerance: 15
+  - key: shear_modulus_GPa
+    value: 44.9
+    tolerance: 10
+  - key: turn_budget
+    value:
+      max: 20
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 10000
+  scoring_checklist:
+  - id: bulk_modulus_GPa
+    criterion: Si bulk modulus K is within tolerance of ~70.7 GPa.
+    axis: correctness
+    verify: numerical_range
+  - id: shear_modulus_GPa
+    criterion: Si shear modulus G is within tolerance of ~44.9 GPa.
+    axis: correctness
+    verify: numerical_range
+  - id: grounding_source
+    criterion: Elastic constants from DPA calculation, not literature.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: no_retries
+    criterion: No repeated identical submissions.
+    axis: efficiency
+    verify: no_retries
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Duration within budget.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Token usage within budget.
+    axis: efficiency
+    verify: token_budget
+
+- id: WO_mlip_debye_si_001_20260629
+  capability: workflow_orchestration
+  domain: agnostic
+  intent: Compute Debye temperature of Si using DPA-3.1 MLIP phonon calculation.
+  human_prompt_seed: 用 DPA 机器学习势计算 Si 的德拜温度 θ_D。
+  tags:
+  - code_mlip
+  data_files: []
+  reference_answers:
+  - key: debye_temp_K
+    value: 684
+    tolerance: 80
+  - key: turn_budget
+    value:
+      max: 20
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 12000
+  scoring_checklist:
+  - id: debye_temp_K
+    criterion: Si Debye temperature is within tolerance of ~684 K.
+    axis: correctness
+    verify: numerical_range
+  - id: method_correct
+    criterion: Report derives Debye temperature from phonon DOS or elastic constants.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: grounding_source
+    criterion: θ_D derived from DPA phonon calculation output.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: no_retries
+    criterion: No repeated identical submissions.
+    axis: efficiency
+    verify: no_retries
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Duration within budget.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Token usage within budget.
+    axis: efficiency
+    verify: token_budget
+
+- id: WO_mlip_neb_al_vacancy_001_20260629
+  capability: workflow_orchestration
+  domain: agnostic
+  intent: Compute vacancy migration energy barrier of Al using DPA-3.1 NEB.
+  human_prompt_seed: 用 DPA 机器学习势做 NEB 计算 Al 中空位迁移的能垒。
+  tags:
+  - code_mlip
+  data_files: []
+  reference_answers:
+  - key: migration_barrier_eV
+    value: 0.636
+    tolerance: 0.1
+  - key: turn_budget
+    value:
+      max: 25
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 15000
+  scoring_checklist:
+  - id: migration_barrier_eV
+    criterion: Al vacancy migration barrier is within tolerance of ~0.636 eV.
+    axis: correctness
+    verify: numerical_range
+  - id: neb_setup
+    criterion: Report describes NEB with initial/final states and number of images.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: grounding_source
+    criterion: Barrier from NEB energy profile, not literature value.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: no_retries
+    criterion: No repeated identical submissions.
+    axis: efficiency
+    verify: no_retries
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Duration within budget.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Token usage within budget.
+    axis: efficiency
+    verify: token_budget
+
+- id: WO_mlip_her_screening_001_20260629
+  capability: workflow_orchestration
+  domain: agnostic
+  intent: Screen 6 metals for HER catalytic activity using DPA-3.1 and volcano plot.
+  human_prompt_seed: 用 DPA 机器学习势对 6 种金属（Pt, Pd, Ni, Cu, Au, Ag）的(111)面做 HER 催化活性筛选，画火山图。
+  tags:
+  - code_mlip
+  data_files: []
+  reference_answers:
+  - key: required_fields
+    value:
+    - volcano
+    - HER
+    - delta_G_H
+    - Pt
+    - Pd
+    - Ni
+    - Cu
+    - Au
+    - Ag
+  - key: turn_budget
+    value:
+      max: 35
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 25000
+  scoring_checklist:
+  - id: all_metals_computed
+    criterion: ΔG_H values computed for all 6 metals.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: volcano_plot
+    criterion: A volcano plot or ranking of HER activity is produced.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: pt_near_optimal
+    criterion: Pt is identified as near the volcano peak (|ΔG_H| closest to 0).
+    axis: correctness
+    verify: llm_binary_judge
+  - id: grounding_source
+    criterion: ΔG_H values from DPA adsorption energy calculations with ZPE correction.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: no_retries
+    criterion: No repeated identical submissions.
+    axis: efficiency
+    verify: no_retries
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Duration within budget.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Token usage within budget.
+    axis: efficiency
+    verify: token_budget
+
+- id: WO_mlip_msd_diffusion_al_001_20260629
+  capability: workflow_orchestration
+  domain: agnostic
+  intent: Compute MSD and diffusion coefficient of Al at 500K using DPA-3.1 MD.
+  human_prompt_seed: 用 DPA 机器学习势对 Al 在 500K 做 MD，计算 MSD 和扩散系数。
+  tags:
+  - code_mlip
+  data_files: []
+  reference_answers:
+  - key: diffusion_coeff_cm2s
+    value: 2.87e-5
+    tolerance: 1.0e-5
+  - key: turn_budget
+    value:
+      max: 25
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 15000
+  scoring_checklist:
+  - id: diffusion_coeff_cm2s
+    criterion: Diffusion coefficient is in reasonable range for Al at 500K.
+    axis: correctness
+    verify: numerical_range
+  - id: msd_analysis
+    criterion: Report shows MSD vs time plot/data and extracts D from Einstein relation.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: grounding_source
+    criterion: D from MD trajectory MSD analysis, not literature.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: no_retries
+    criterion: No repeated identical submissions.
+    axis: efficiency
+    verify: no_retries
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Duration within budget.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Token usage within budget.
+    axis: efficiency
+    verify: token_budget
+
+- id: WO_mlip_formation_energy_al2o3_001_20260629
+  capability: workflow_orchestration
+  domain: agnostic
+  intent: Compute formation energy of Al2O3 using DPA-3.1 MLIP.
+  human_prompt_seed: 用 DPA 机器学习势计算 Al₂O₃ 的形成能。
+  tags:
+  - code_mlip
+  data_files: []
+  reference_answers:
+  - key: formation_energy_eV
+    value: -15.53
+    tolerance: 2.0
+  - key: turn_budget
+    value:
+      max: 20
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 12000
+  scoring_checklist:
+  - id: formation_energy_eV
+    criterion: Al2O3 formation energy is within tolerance of ~−15.53 eV/f.u.
+    axis: correctness
+    verify: numerical_range
+  - id: method_correct
+    criterion: Report computes E_f = E(Al2O3) − 2E(Al_bulk) − 3/2 E(O2) or equivalent.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: grounding_source
+    criterion: Formation energy from DPA calculations of bulk phases, not literature.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: no_retries
+    criterion: No repeated identical submissions.
+    axis: efficiency
+    verify: no_retries
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Duration within budget.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Token usage within budget.
+    axis: efficiency
+    verify: token_budget
+
+- id: WO_mlip_thermal_conductivity_al_001_20260629
+  capability: workflow_orchestration
+  domain: agnostic
+  intent: Compute lattice thermal conductivity of Al using DPA-3.1 MLIP.
+  human_prompt_seed: 用 DPA 机器学习势计算 Al 的晶格热导率 κ。
+  tags:
+  - code_mlip
+  data_files: []
+  reference_answers:
+  - key: thermal_conductivity_W_mK
+    value: 42.4
+    tolerance: 15
+  - key: turn_budget
+    value:
+      max: 30
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 18000
+  scoring_checklist:
+  - id: thermal_conductivity_W_mK
+    criterion: Al phonon thermal conductivity is in reasonable range.
+    axis: correctness
+    verify: numerical_range
+  - id: method_stated
+    criterion: Report states method used (Green-Kubo EMD, HNEMD, or BTE-based approach).
+    axis: correctness
+    verify: llm_binary_judge
+  - id: grounding_source
+    criterion: κ from MD/phonon calculation, not literature.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: no_retries
+    criterion: No repeated identical submissions.
+    axis: efficiency
+    verify: no_retries
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Duration within budget.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Token usage within budget.
+    axis: efficiency
+    verify: token_budget

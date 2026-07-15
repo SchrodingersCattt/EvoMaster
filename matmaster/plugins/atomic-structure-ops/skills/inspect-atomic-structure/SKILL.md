@@ -53,7 +53,13 @@ formula = atoms.get_chemical_formula()
 natoms = len(atoms)
 ```
 
-For molecular-crystal routing, prefer `molcrys_kit` when available:
+For molecular-crystal routing, prefer `mck` first:
+
+```bash
+mck io info structure.cif
+```
+
+If structured molecule counts / graph connectivity are needed, use the Python API:
 
 ```python
 from molcrys_kit.io.cif import read_mol_crystal
@@ -62,8 +68,8 @@ mol_crystal = read_mol_crystal("structure.cif")
 is_molecular_crystal = True
 ```
 
-If `molcrys_kit` import fails on a task that needs molecular connectivity, stop
-and report the dependency problem instead of falling back to bond-cutting logic.
+If neither `mck` nor `molcrys_kit` is available for connectivity-critical work,
+stop and report the dependency problem instead of falling back to bond cutting.
 
 ## Hard Guards
 
