@@ -86,7 +86,6 @@ def test_cleanup_destroys_created_node_when_reuse_table_insert_fails() -> None:
 
         svc._cleanup_bohrium_after_run(
             session_id="sess-untracked",
-            event_callback=MagicMock(),
             pg_for_run=pg,
             ssh_attached=True,
         )
@@ -264,7 +263,6 @@ def test_cleanup_restores_when_ssh_attached_false(
     svc = _make_bohrium_service(sessions_service)
     svc._cleanup_bohrium_after_run(
         session_id="sess-x",
-        event_callback=MagicMock(),
         pg_for_run=pg,
         ssh_attached=False,
     )
@@ -296,7 +294,6 @@ def test_lease_cleanup_does_not_depend_on_session_lookup() -> None:
 
     svc._cleanup_bohrium_after_run(
         session_id="sess-lease-error",
-        event_callback=MagicMock(),
         pg_for_run=None,
         ssh_attached=False,
         invocation_id="inv-1",
@@ -337,7 +334,6 @@ def test_lease_cleanup_only_releases_current_invocation() -> None:
 
     svc._cleanup_bohrium_after_run(
         session_id="sess-concurrent-leases",
-        event_callback=MagicMock(),
         pg_for_run=None,
         ssh_attached=False,
         invocation_id="inv-1",

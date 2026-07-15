@@ -29,6 +29,8 @@ REPLAY_DISCARDED_EVENT_TYPES: frozenset[str] = frozenset(
     }
 )
 
+_HIDDEN_BOHRIUM_CLEANUP_STATUSES = frozenset({'paused', 'destroyed'})
+
 
 def _should_emit_event_to_sse(event: dict) -> bool:
     """Filter persisted events for history replay SSE.
@@ -48,7 +50,22 @@ def _should_emit_event_to_sse(event: dict) -> bool:
     If exact parity is required in the future, the missing replay inputs
     (for example mode) must be persisted explicitly.
     """
-    return event.get('type') not in REPLAY_DISCARDED_EVENT_TYPES
+    event_type = event.get('type')
+    if event_type in REPLAY_DISCARDED_EVENT_TYPES:
+        return False
+
+    # Historical runs may contain normal node teardown after stream_closed.
+    # Teardown is infrastructure state, not conversation content; hiding these
+    # legacy rows also preserves stream_closed as the visible terminal event.
+    if event_type == 'bohrium_node':
+        content = event.get('content')
+        if (
+            isinstance(content, dict)
+            and content.get('status') in _HIDDEN_BOHRIUM_CLEANUP_STATUSES
+        ):
+            return False
+
+    return True
 
 
 def _normalize_replayed_event(event: dict) -> dict:

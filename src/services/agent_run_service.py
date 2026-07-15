@@ -774,7 +774,8 @@ class AgentRunService:
                 elapsed,
             )
             # Cleanup order matters:
-            # 1. Bohrium cleanup -- can still emit events via event bridge
+            # 1. Bohrium cleanup is infrastructure-only. Normal node teardown must
+            #    not append user-visible events after StreamClosedEvent.
             if bohrium_svc:
                 try:
                     await bohrium_svc.run_cleanup(

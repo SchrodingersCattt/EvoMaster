@@ -3,11 +3,32 @@ import json
 import threading
 from unittest.mock import MagicMock, patch
 
-from src.services.stream_sse_filter import REPLAY_DISCARDED_EVENT_TYPES
+from src.services.stream_sse_filter import (
+    REPLAY_DISCARDED_EVENT_TYPES,
+    _should_emit_event_to_sse,
+)
 
 
 def _decode_sse_payload(frame: str) -> dict:
     return json.loads(frame.split('data: ', 1)[1].strip())
+
+
+def test_replay_hides_normal_bohrium_cleanup_statuses() -> None:
+    for status in ('paused', 'destroyed'):
+        assert not _should_emit_event_to_sse(
+            {
+                'type': 'bohrium_node',
+                'content': {'status': status, 'node_id': 42},
+            }
+        )
+
+    for status in ('ready', 'connected', 'failed'):
+        assert _should_emit_event_to_sse(
+            {
+                'type': 'bohrium_node',
+                'content': {'status': status, 'node_id': 42},
+            }
+        )
 
 
 def test_generate_subscribe_stream_normalizes_replayed_history_source():

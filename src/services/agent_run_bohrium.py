@@ -227,7 +227,6 @@ class BohriumSetupService:
         self,
         *,
         session_id: str,
-        event_callback: Callable[..., None],
         pg_for_run: Any,
         ssh_attached: bool,
         invocation_id: str | None = None,
@@ -235,7 +234,6 @@ class BohriumSetupService:
         _cleanup_bohrium_after_run(
             session_id=session_id,
             sessions_service=self._sessions_service,
-            event_callback=event_callback,
             pg_for_run=pg_for_run,
             ssh_attached=ssh_attached,
             invocation_id=invocation_id,
@@ -434,15 +432,13 @@ class BohriumSetupService:
         ssh_attached: bool,
         invocation_id: str | None = None,
     ) -> None:
-        """Bridge cleanup events and run cleanup in the executor."""
+        """Run infrastructure-only cleanup in the executor."""
         loop = asyncio.get_running_loop()
-        event_cb = self._make_event_bridge(loop)
 
         await loop.run_in_executor(
             None,
             lambda: self._cleanup_bohrium_after_run(
                 session_id=session_id,
-                event_callback=event_cb,
                 pg_for_run=pg_for_run,
                 ssh_attached=ssh_attached,
                 invocation_id=invocation_id,
@@ -679,7 +675,6 @@ def _cleanup_bohrium_after_run(
     *,
     session_id: str,
     sessions_service: Any,
-    event_callback: Callable[..., None],
     pg_for_run: Any,
     ssh_attached: bool,
     invocation_id: str | None = None,
@@ -725,11 +720,11 @@ def _cleanup_bohrium_after_run(
                 lease, access_key=access_key, creator_id=creator_id
             )
             if stopped:
-                _emit_node_status(
-                    event_callback,
-                    int(lease.node_id),
-                    "paused",
-                    "节点已停止，可在下一轮重启复用",
+                logger.info(
+                    "run_agent: Bohrium node stopped for reuse "
+                    "invocation_id=%s node_id=%s",
+                    lease_invocation_id,
+                    lease.node_id,
                 )
         except Exception as e:
             logger.warning(
@@ -781,10 +776,6 @@ def _cleanup_bohrium_after_run(
                 e,
             )
     elif node_id is not None:
-        try:
-            _emit_node_status(event_callback, int(node_id), "destroyed", "节点已销毁")
-        except Exception:
-            pass
         if access_key and project_id is not None:
             try:
                 get_bohrium_node_service().destroy_node(
@@ -792,6 +783,10 @@ def _cleanup_bohrium_after_run(
                     int(node_id),
                     int(project_id),
                     creator_id=_creator_id_from_user(user_id),
+                )
+                logger.info(
+                    "run_agent: destroyed untracked Bohrium node node_id=%s",
+                    node_id,
                 )
             except Exception as e:
                 logger.warning(

@@ -242,7 +242,6 @@ def test_invocation_setup_uses_fenced_lease_and_cleanup_releases_it() -> None:
 
         svc._cleanup_bohrium_after_run(
             session_id="sess-lease",
-            event_callback=MagicMock(),
             pg_for_run=pg,
             ssh_attached=True,
             invocation_id="inv-1",
