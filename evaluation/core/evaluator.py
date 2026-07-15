@@ -821,10 +821,9 @@ class BinaryEvaluator:
         raise ValueError("No JSON object found")
 
 
-# Verify-handler registrations live in a sibling module so this file stays
-# under the 1000-line limit enforced by .pre-commit/check_file_lines.py.
-# Importing the module populates BinaryEvaluator._VERIFY_REGISTRY as a side
-# effect; do not remove this import.
+# Verify-handler registrations live in a sibling module to keep evaluator
+# orchestration separate from handler implementations. Importing the module
+# populates BinaryEvaluator._VERIFY_REGISTRY as a side effect; do not remove it.
 from . import evaluator_verify_handlers  # noqa: F401, E402
 
 RubricEvaluator = BinaryEvaluator

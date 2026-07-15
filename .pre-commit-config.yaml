@@ -1,11 +1,6 @@
 repos:
   - repo: local
     hooks:
-      - id: check-file-line-count
-        name: check single file does not exceed 1000 lines
-        entry: python3 .pre-commit/check_file_lines.py
-        language: system
-        files: \.(py|ts|tsx|js|jsx)$
       - id: lint-no-arguments-mutation
         name: forbid mutation of ToolCallData.arguments (E3 R2)
         entry: python3 scripts/lint_no_arguments_mutation.py

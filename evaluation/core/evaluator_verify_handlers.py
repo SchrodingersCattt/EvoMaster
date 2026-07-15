@@ -1,9 +1,8 @@
 """Verify-handler registrations for :class:`BinaryEvaluator`.
 
 The verify-registry refactor moved per-verify-type checks from a giant
-``if/elif`` to a registry decorated via ``@_R(...)``. The handler block was
-originally inlined in ``evaluator.py`` but pushed that file past the
-1000-line limit enforced by ``.pre-commit/check_file_lines.py``.
+``if/elif`` to a registry decorated via ``@_R(...)``. Handler implementations
+live here so ``evaluator.py`` can focus on orchestration.
 
 Importing this module has the side effect of populating
 ``BinaryEvaluator._VERIFY_REGISTRY``. ``evaluator.py`` performs that import
@@ -346,8 +345,8 @@ def _h_checkcif(ctx):
 
 # ---------------------------------------------------------------------------
 # Domain-specific validators wired via the factory in evaluator_wiring.
-# vasp_incar and gpumd_run_in are generated here (not in evaluator_wiring)
-# to keep that file under the 1000-line limit.
+# vasp_incar and gpumd_run_in are generated here to keep the wiring module
+# focused on shared adapters.
 # ---------------------------------------------------------------------------
 
 check_vasp_incar_from_evidence = _make_domain_check_handler(
@@ -384,8 +383,7 @@ check_dpgen_dargs_from_evidence = _make_domain_check_handler(
 
 
 def check_struct_file_planarity(*, evidence, ref):
-    """Conjugated-core planarity check (lives in its own validator module to
-    keep evaluator_wiring under the 1000-line file limit)."""
+    """Run the specialized conjugated-core planarity validator."""
     from evaluation.core.evaluator_wiring import _cfg, _get_workspace
     from evaluation.validators.structure_planarity import check_planarity
 

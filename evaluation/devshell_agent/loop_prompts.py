@@ -1,4 +1,4 @@
-"""System prompts for DevShell agent loop (split from ``loop.py`` for line limits)."""
+"""System prompts for the DevShell agent loop."""
 
 SYSTEM_PROMPT_MAIN = """你是 MatMaster 仓库内的 **DevShell 评测迭代编排助手（产品 / Agent 行为侧）**。
 

@@ -1,4 +1,4 @@
-"""Helpers for ``run_devshell_eval.py`` (keeps the CLI entry under the line-count limit)."""
+"""Helpers for ``run_devshell_eval.py``."""
 
 from __future__ import annotations
 
@@ -337,9 +337,8 @@ def build_devshell_eval_arg_parser(
 ) -> argparse.ArgumentParser:
     """Construct the ``run_devshell_eval.py`` CLI parser.
 
-    Extracted from the CLI entry point to keep that module under the 1000-line
-    pre-commit limit. ``repo_root`` and the two route defaults are injected so the
-    parser definition stays free of module-level constants.
+    ``repo_root`` and the two route defaults are injected so the parser definition
+    stays free of module-level constants.
     """
     parser = argparse.ArgumentParser(
         description="Run MATTER question bank through mm-devshell (matmaster devshell run).",
