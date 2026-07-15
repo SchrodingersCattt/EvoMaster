@@ -8,8 +8,9 @@ stages data files per task workspace, then invokes (inherit terminal; ``--json-o
 
 Aggregate output: ``raw_runs.jsonl`` + ``manifest.json`` + by default ``claude_review.md`` (for Cursor @-review).
 ``manifest.json`` carries ``eval_tooling`` (default: same as interactive ``mm-devshell`` without ``--exp`` —
-``direct`` from ``matmaster/exps/direct.toml``).
-The same snapshot is attached to each ingest item as ``extra.eval_tooling`` for downstream analysis.
+``direct`` from ``matmaster/exps/direct.toml``). Questions tagged ``bohr-cli`` automatically exclude the
+builtin ``Bohrium`` tool so the skill must use the CLI through ``Bash``. The effective per-task snapshot is
+attached to each raw row and ingest item as ``eval_tooling`` / ``extra.eval_tooling`` for downstream analysis.
 When ``logs/<task_id>/events_*.jsonl`` exists, ingest ``extra`` also includes ``events_timeline`` (ordered
 labels: tool names from ``tool_call``, ``response``, ``run_result``; ``tool_result`` lines are omitted).
 
@@ -191,6 +192,7 @@ def main() -> int:
         _normalize_mm_devshell_exp_cli,
         build_mm_devshell_run_cmd,
         devshell_console_indicates_provider_fallback,
+        excluded_builtin_tools_for_question,
     )
 
     slices_override = None
@@ -298,9 +300,21 @@ def main() -> int:
     git_commit = git_head_commit(REPO_ROOT)
 
     exp_cli = _normalize_mm_devshell_exp_cli(args.exp)
-    eval_tooling_snapshot = _eval_tooling_snapshot_for_exp_cli(
-        repo_root=REPO_ROOT, exp_cli=exp_cli
+    tooling_exclusions = sorted(
+        {excluded_builtin_tools_for_question(item["question"]) for item in run_plan}
     )
+    eval_tooling_by_exclusions = {
+        excluded: _eval_tooling_snapshot_for_exp_cli(
+            repo_root=REPO_ROOT,
+            exp_cli=exp_cli,
+            excluded_builtin_tools=excluded,
+        )
+        for excluded in tooling_exclusions
+    }
+    if len(eval_tooling_by_exclusions) == 1:
+        eval_tooling_snapshot = next(iter(eval_tooling_by_exclusions.values()))
+    else:
+        eval_tooling_snapshot = eval_tooling_by_exclusions[()]
 
     manifest: dict[str, Any] = {
         "run_label": args.run_label,
@@ -314,6 +328,8 @@ def main() -> int:
         "dry_run": False,
         "eval_tooling": eval_tooling_snapshot,
     }
+    if len(eval_tooling_by_exclusions) > 1:
+        manifest["eval_tooling_variants"] = list(eval_tooling_by_exclusions.values())
     fb = (args.fallback_model or "").strip()
     if fb:
         manifest["fallback_model"] = fb
@@ -393,6 +409,8 @@ def main() -> int:
             if getattr(question, 'inject_bohrium_failure', False)
             else None
         )
+        excluded_builtin_tools = excluded_builtin_tools_for_question(question)
+        task_eval_tooling = eval_tooling_by_exclusions[excluded_builtin_tools]
         cmd = build_mm_devshell_run_cmd(
             py=py,
             workspace_path=workspace_path,
@@ -403,6 +421,7 @@ def main() -> int:
             exp_cli=exp_cli,
             verbose=bool(args.verbose),
             exclude_subagents=args.exclude_subagents,
+            exclude_builtin_tools=excluded_builtin_tools,
             inject_bohrium_failure=inject_failure,
             billing_mode="eval",
             invocation_id=task_id,
@@ -426,6 +445,8 @@ def main() -> int:
                 "mm_py": py,
                 "exp_cli": exp_cli,
                 "verbose": bool(args.verbose),
+                "excluded_builtin_tools": excluded_builtin_tools,
+                "eval_tooling": task_eval_tooling,
                 "inject_bohrium_failure": inject_failure,
             }
         )
@@ -522,6 +543,7 @@ def main() -> int:
                 exp_cli=prepared["exp_cli"],
                 verbose=bool(prepared["verbose"]),
                 exclude_subagents=args.exclude_subagents,
+                exclude_builtin_tools=prepared["excluded_builtin_tools"],
                 inject_bohrium_failure=prepared.get("inject_bohrium_failure"),
                 billing_mode="eval",
                 invocation_id=task_id,
@@ -563,6 +585,7 @@ def main() -> int:
             "llm_route_attempts": attempts,
             "llm_model_route_used": attempts[-1]["model_route"],
             "llm_provider_fallback_used": used_fallback,
+            "eval_tooling": prepared["eval_tooling"],
         }
 
         ingest_status: dict[str, Any] | None = None
@@ -579,7 +602,7 @@ def main() -> int:
                 summary=summary if isinstance(summary, dict) else {},
                 duration_ms=duration_ms,
                 artifact=artifact,
-                eval_tooling=eval_tooling_snapshot,
+                eval_tooling=prepared["eval_tooling"],
                 events_timeline=events_tl,
             )
             if pending_only:

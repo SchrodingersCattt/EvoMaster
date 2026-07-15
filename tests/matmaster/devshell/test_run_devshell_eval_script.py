@@ -184,6 +184,7 @@ def test_devshell_eval_verbose_is_on_by_default(tmp_path, monkeypatch) -> None:
     cmd0 = [str(x) for x in captured[0]]
     assert "--verbose" in cmd0
     assert "--exp" not in cmd0
+    assert "--exclude-builtin-tool" not in cmd0
     assert "--model" in cmd0
     assert cmd0[cmd0.index("--model") + 1] == "bedrock-claude-opus"
     man = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
@@ -191,6 +192,64 @@ def test_devshell_eval_verbose_is_on_by_default(tmp_path, monkeypatch) -> None:
     assert "matmaster_exp" not in man
     assert man.get("model") == "bedrock-claude-opus"
     assert man.get("fallback_model") == "global.anthropic.claude-opus-4-6-v1"
+
+
+def test_devshell_eval_bohr_cli_excludes_bohrium(tmp_path, monkeypatch) -> None:
+    mod = importlib.import_module("evaluation.scripts.devshell.run_devshell_eval")
+    out = (tmp_path / "bohr_cli_tools").resolve()
+    captured: list[list[str | Path]] = []
+
+    def fake_run_devshell_task(
+        *,
+        cmd,
+        summary_file,
+        **kwargs: Any,
+    ):
+        captured.append(list(cmd))
+        summary = {
+            "status": "completed",
+            "reason": "natural",
+            "final_content": "ok",
+            "num_turns": 1,
+            "usage": {"total_tokens": 1},
+        }
+        summary_file.write_text(
+            json.dumps(summary, ensure_ascii=False) + "\n",
+            encoding="utf-8",
+        )
+        return 0, 123, summary
+
+    monkeypatch.setattr(mod, "_run_devshell_task", fake_run_devshell_task)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            str(SCRIPT),
+            "--slices",
+            "@bohr-cli",
+            "--k",
+            "1",
+            "--limit",
+            "1",
+            "--output-dir",
+            str(out),
+            "--no-clean-results",
+            "--no-eval-ingest",
+            "--no-export-review",
+        ],
+    )
+
+    rc = mod.main()
+
+    assert rc == 0
+    cmd0 = [str(x) for x in captured[0]]
+    index = cmd0.index("--exclude-builtin-tool")
+    assert cmd0[index + 1] == "Bohrium"
+    manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["eval_tooling"]["tools_builtin_excluded"] == ["Bohrium"]
+    assert "Bohrium" not in manifest["eval_tooling"]["builtin_tool_names"]
+    row = json.loads((out / "raw_runs.jsonl").read_text(encoding="utf-8"))
+    assert row["eval_tooling"] == manifest["eval_tooling"]
 
 
 def test_devshell_eval_no_verbose_disables_forwarding(tmp_path, monkeypatch) -> None:

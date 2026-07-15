@@ -248,12 +248,14 @@ class Exp:
 
         registry = ToolRegistry()
         builtin_cfg = self._config.tools.builtin
+        excluded_builtin = set(self._config.tools.excluded_builtin)
         path_access_roots = derive_path_access_roots(env)
         if builtin_cfg:
             self._init_builtin_tools(
                 ctx,
                 registry,
                 builtin_cfg,
+                excluded_builtin=excluded_builtin,
                 spawn_id=spawn_id,
                 path_access_roots=path_access_roots,
             )
@@ -309,7 +311,7 @@ class Exp:
         # When allow_spawn is False (child Exp), spawn_fn is None, which causes
         # AgentTool to set exposed_to_model=False (hidden from LLM but still
         # in catalog).
-        if "Agent" in builtin_cfg or "*" in builtin_cfg:
+        if self._config.tools.allows_builtin("Agent"):
             from matmaster.config.loader import list_model_visible_exps
             from matmaster.tools.builtin import AgentTool
 
@@ -660,6 +662,7 @@ class Exp:
         registry: ToolRegistry,
         builtin_cfg: list[str],
         *,
+        excluded_builtin: set[str] | frozenset[str] = frozenset(),
         spawn_id: str | None = None,
         path_access_roots: tuple[Any, ...] = (),
     ) -> None:
@@ -684,7 +687,7 @@ class Exp:
         allowed: set[str] | None = None if allow_all else set(builtin_cfg)
 
         def _want(name: str) -> bool:
-            return allowed is None or name in allowed
+            return (allowed is None or name in allowed) and name not in excluded_builtin
 
         from matmaster.tools.builtin import (
             AskQuestionTool,
@@ -890,13 +893,10 @@ class Exp:
             if isinstance(cfg, dict) and cfg.get("sync_tools")
         }
 
-        builtin_cfg = self._config.tools.builtin or []
-        allow_builtin_all = "*" in builtin_cfg
-        allowed_builtin = set(builtin_cfg) if not allow_builtin_all else None
         if (
-            allow_builtin_all
-            or (allowed_builtin is not None and "PaperSearch" in allowed_builtin)
-        ) and "PaperSearch" not in registry:
+            self._config.tools.allows_builtin("PaperSearch")
+            and "PaperSearch" not in registry
+        ):
             from matmaster.tools.builtin.paper_search_tool import PaperSearchTool
 
             paper_tool = PaperSearchTool(

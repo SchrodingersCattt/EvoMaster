@@ -92,6 +92,7 @@ def build_mm_devshell_run_cmd(
     exp_cli: str | None,
     verbose: bool,
     exclude_subagents: list[str] | None = None,
+    exclude_builtin_tools: list[str] | tuple[str, ...] | None = None,
     inject_bohrium_failure: str | None = None,
     billing_mode: str | None = None,
     invocation_id: str | None = None,
@@ -117,6 +118,8 @@ def build_mm_devshell_run_cmd(
     cmd.extend(_mm_devshell_exp_cmd_suffix(exp_cli))
     if exclude_subagents:
         cmd.extend(["--exclude-subagents", *exclude_subagents])
+    for tool_name in exclude_builtin_tools or ():
+        cmd.extend(["--exclude-builtin-tool", tool_name])
     if inject_bohrium_failure:
         cmd.extend(["--inject-bohrium-failure", inject_bohrium_failure])
     if billing_mode:
@@ -174,13 +177,28 @@ def devshell_console_indicates_provider_fallback(
 
 
 def _eval_tooling_snapshot_for_exp_cli(
-    *, repo_root: Path, exp_cli: str | None
+    *,
+    repo_root: Path,
+    exp_cli: str | None,
+    excluded_builtin_tools: list[str] | tuple[str, ...] = (),
 ) -> dict[str, Any]:
     """Resolve ``--exp`` to the ``matmaster/exps/{name}.toml`` snapshot (default: ``direct``)."""
     from evaluation.eval_tooling_snapshot import snapshot_eval_tooling
 
     name = (exp_cli or "").strip() or "direct"
-    return snapshot_eval_tooling(repo_root=repo_root, exp_name=name)
+    return snapshot_eval_tooling(
+        repo_root=repo_root,
+        exp_name=name,
+        excluded_builtin_tools=excluded_builtin_tools,
+    )
+
+
+def excluded_builtin_tools_for_question(question: Any) -> tuple[str, ...]:
+    """Return eval-only builtin exclusions implied by a question's tags."""
+    tags = {str(tag) for tag in getattr(question, "tags", ())}
+    if "bohr-cli" in tags:
+        return ("Bohrium",)
+    return ()
 
 
 class _TeeTextIO:

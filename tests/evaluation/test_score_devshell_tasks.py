@@ -66,7 +66,10 @@ def _write_raw_runs(run_dir: Path, rows: list[dict[str, Any]]) -> None:
 
 
 def _write_events(
-    log_dir: Path, filename: str = "events_20260404_000001.jsonl"
+    log_dir: Path,
+    filename: str = "events_20260404_000001.jsonl",
+    *,
+    bash_command: str = "python optimize_structure.py --foo",
 ) -> Path:
     path = log_dir / filename
     path.write_text(
@@ -77,7 +80,7 @@ def _write_events(
                         "type": "tool_call",
                         "tool": "bash",
                         "call_id": "tc-1",
-                        "args": {"command": "python optimize_structure.py --foo"},
+                        "args": {"command": bash_command},
                     },
                     ensure_ascii=False,
                 ),
@@ -435,3 +438,53 @@ class TestScoreTask:
         assert result["score"] == 0
         assert result["all_criteria_passed"] is False
         assert "✗ fail" in result["score_reason"]
+
+    def test_bohr_cli_question_requires_bohr_through_bash(
+        self, tmp_run_dir: Path
+    ) -> None:
+        from evaluation.core.evaluator import BinaryEvaluator
+
+        ws = _workspace(tmp_run_dir)
+        _write_summary(ws, final_content="Done")
+        row = {
+            "task_id": "SC_struct_001_direct_r0",
+            "question_id": "SC_test_001",
+            "mode": "direct",
+            "repeat_idx": 0,
+            "duration_ms": 1234,
+            "devshell_summary": {"status": "completed"},
+        }
+        question = self._make_question().model_copy(update={"tags": ["bohr-cli"]})
+        evaluator = BinaryEvaluator(llm_cfg=None)
+
+        _write_events(
+            _log_dir(tmp_run_dir),
+            bash_command="curl https://openapi.dp.tech/jobs",
+        )
+        missing = score_task(
+            row=row,
+            run_dir=tmp_run_dir,
+            question=question,
+            evaluator=evaluator,
+        )
+
+        assert missing["score"] == 0
+        assert missing["all_criteria_passed"] is False
+        assert "bohr_cli_via_bash" in missing["score_reason"]
+        assert "✗ fail" in missing["score_reason"]
+
+        _write_events(
+            _log_dir(tmp_run_dir),
+            bash_command="bohr job list --json",
+        )
+        present = score_task(
+            row=row,
+            run_dir=tmp_run_dir,
+            question=question,
+            evaluator=evaluator,
+        )
+
+        assert present["score"] == 100
+        assert present["all_criteria_passed"] is True
+        assert "bohr_cli_via_bash" in present["score_reason"]
+        assert "✓ pass" in present["score_reason"]

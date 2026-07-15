@@ -298,6 +298,8 @@ class TestCliRunMode:
                 str(tmp_path / "ws"),
                 "--log-dir",
                 str(tmp_path / "logs"),
+                "--exclude-builtin-tool",
+                "Bohrium",
                 "-p",
                 "hello",
             ]
@@ -343,6 +345,7 @@ class TestCliRunMode:
         stream_hook = captured["stream_hook"]
         assert stream_hook._out is not sys.stdout
         assert captured["llm_bundle"] is fake_bundle
+        assert captured["exclude_builtin_tools"] == ["Bohrium"]
 
 
 class TestDevRunnerRequest:

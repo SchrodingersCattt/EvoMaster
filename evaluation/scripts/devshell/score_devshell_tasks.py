@@ -16,12 +16,15 @@ item passes; otherwise 0. The DevShell agent loop calls
 and ``turn_budget`` as non-blocking for the binary score (they still appear in ``score_reason``). The CLI
 invocation uses strict ``ingest_optional_checklist_ids=()`` (empty). Per-axis weighted ratios
 are still recorded in ``score_reason`` for debugging; they do not affect the numeric ingest score.
+Questions tagged ``bohr-cli`` additionally require event evidence that ``Bash`` executed a
+``bohr`` command; direct API/SDK or builtin ``Bohrium`` use cannot satisfy this contract.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
@@ -163,6 +166,46 @@ def _tool_calls_payload(evidence: EvidenceBundle) -> list[dict[str, Any]]:
         }
         for tc in evidence.tool_calls
     ]
+
+
+_BOHR_COMMAND_RE = re.compile(
+    r"(?:^|[\n;&|]\s*)(?:(?:env|sudo)(?:\s+[^\s;&|]+)*\s+)?"
+    r"(?:[^\s;&|]+/)?bohr(?:\s|$)"
+)
+
+
+def _required_execution_checks(
+    *,
+    question: QuestionItem,
+    evidence: EvidenceBundle,
+) -> dict[str, tuple[bool, str]]:
+    """Return tag-driven execution checks that are mandatory for binary pass."""
+    tags = {str(tag) for tag in question.tags}
+    if "bohr-cli" not in tags:
+        return {}
+
+    bash_commands: list[str] = []
+    for call in evidence.tool_calls:
+        if call.tool_name not in {"Bash", "bash", "execute_bash"}:
+            continue
+        command = call.args.get("command") or call.args.get("cmd")
+        if isinstance(command, str):
+            bash_commands.append(command)
+            if _BOHR_COMMAND_RE.search(command):
+                return {
+                    "bohr_cli_via_bash": (
+                        True,
+                        "Bash executed a bohr CLI command.",
+                    )
+                }
+
+    return {
+        "bohr_cli_via_bash": (
+            False,
+            "No Bash tool call executed a bohr CLI command "
+            f"({len(bash_commands)} Bash command(s) inspected).",
+        )
+    }
 
 
 def _load_summary_from_file(workspace: Path) -> dict[str, Any]:
@@ -311,7 +354,12 @@ def _build_evidence(
 _AXIS_SECTION_ORDER = ("correctness", "grounding", "efficiency")
 
 
-def _format_score_reason(record: Any, *, ingest_optional_ids: frozenset[str]) -> str:
+def _format_score_reason(
+    record: Any,
+    *,
+    ingest_optional_ids: frozenset[str],
+    required_execution_checks: dict[str, tuple[bool, str]] | None = None,
+) -> str:
     by_axis: dict[str, list[tuple[str, Any]]] = {}
     for cid, result in record.criteria_results.items():
         by_axis.setdefault(result.axis, []).append((cid, result))
@@ -339,13 +387,22 @@ def _format_score_reason(record: Any, *, ingest_optional_ids: frozenset[str]) ->
 
     while lines and lines[-1] == "":
         lines.pop()
+    execution_checks = required_execution_checks or {}
+    if execution_checks:
+        lines.extend(["", "### Execution Contract", ""])
+        for check_id, (passed, reason) in execution_checks.items():
+            status = "✓ pass" if passed else "✗ fail"
+            lines.append(f"- **`{check_id}`** (`tool_evidence`): {status} — {reason}")
     lines.append("")
     lines.append(
         f"**Overall weighted score:** {record.overall_weighted_score:.3f} "
         f"({record.passed_count}/{record.total_count} criteria passed)"
     )
     lines.append("")
-    ap = _all_criteria_passed(record, ingest_optional_ids=ingest_optional_ids)
+    ap = _all_criteria_passed(
+        record,
+        ingest_optional_ids=ingest_optional_ids,
+    ) and all(passed for passed, _ in execution_checks.values())
     lines.append(
         f"**Task pass (required checklist items for ingest):** "
         f"{'yes' if ap else 'no'} (ingest score {'100' if ap else '0'})"
@@ -505,13 +562,24 @@ def score_task(
         }
 
     opt = ingest_optional_checklist_ids or frozenset()
-    all_pass = _all_criteria_passed(record, ingest_optional_ids=opt)
+    execution_checks = _required_execution_checks(
+        question=question,
+        evidence=evidence,
+    )
+    all_pass = _all_criteria_passed(
+        record,
+        ingest_optional_ids=opt,
+    ) and all(passed for passed, _ in execution_checks.values())
     return {
         "task_id": task_id,
         "question_id": question.id,
-        "score": _ingest_score_from_record(record, ingest_optional_ids=opt),
+        "score": 100 if all_pass else 0,
         "all_criteria_passed": all_pass,
-        "score_reason": _format_score_reason(record, ingest_optional_ids=opt),
+        "score_reason": _format_score_reason(
+            record,
+            ingest_optional_ids=opt,
+            required_execution_checks=execution_checks,
+        ),
         "record": record,
         "error": None,
     }
