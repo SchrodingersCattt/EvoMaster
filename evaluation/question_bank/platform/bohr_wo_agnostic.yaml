@@ -272,53 +272,114 @@ questions:
     axis: efficiency
     verify: turn_budget
 
-- id: BWO_gpu_compare_004_20260715
+- id: BWO_gpu_compare_004_20260715_v2
   capability: workflow_orchestration
   domain: agnostic
   scope: platform
-  intent: Test agent queries GPU resources and makes recommendation without creating anything.
+  intent: Test agent queries available GPU machines and makes a grounded recommendation without creating resources.
   human_prompt_seed: |
-    利用 bohr-cli，列出所有 GPU 可用机型，对比显存和价格，推荐用于500原子体系deepmd训练的配置。
-    保存到 `b4_gpu_comparison.md`，要求有markdown表格对比和最终推荐。
+    利用 bohr-cli，帮我看看现在可用的 GPU 机型。我准备训练一个 500 原子体系的 DeepMD 模型，请比较一下显存和价格，推荐一个性价比合适的配置。只查询，不要创建资源。
+    把对比结果和推荐理由保存到工作区根目录的 `b4_gpu_comparison.json`，候选机型记录 SKU、机型名、GPU 型号与数量、显存、每小时价格和库存状态。
   tags:
   - bohr-cli
   reference_answers:
   - key: artifact
-    value: b4_gpu_comparison.md
-  - key: has_table
+    value: b4_gpu_comparison.json
+    workspace_resolve: root
+  - key: comparison_schema
     value:
-      filename: b4_gpu_comparison.md
-      pattern: \|.*\|.*\|
-  - key: has_gpu_names
+      filename: b4_gpu_comparison.json
+      schema:
+        type: object
+        required:
+        - workload
+        - available_machines
+        - recommendation
+        properties:
+          workload:
+            type: object
+            required:
+            - framework
+            - atom_count
+            properties:
+              framework:
+                const: DeepMD
+              atom_count:
+                const: 500
+            additionalProperties: false
+          available_machines:
+            type: array
+            minItems: 3
+            uniqueItems: true
+            items:
+              type: object
+              required:
+              - sku_id
+              - machine_type
+              - gpu_model
+              - gpu_count
+              - gpu_memory_gb
+              - price_cny_per_hour
+              - has_stock
+              properties:
+                sku_id:
+                  type: integer
+                  minimum: 1
+                machine_type:
+                  type: string
+                  minLength: 1
+                gpu_model:
+                  type: string
+                  minLength: 1
+                gpu_count:
+                  type: integer
+                  minimum: 1
+                gpu_memory_gb:
+                  type: number
+                  exclusiveMinimum: 0
+                price_cny_per_hour:
+                  type: number
+                  exclusiveMinimum: 0
+                has_stock:
+                  const: true
+              additionalProperties: false
+          recommendation:
+            type: object
+            required:
+            - machine_type
+            - reason
+            properties:
+              machine_type:
+                type: string
+                minLength: 1
+              reason:
+                type: string
+                minLength: 20
+            additionalProperties: false
+        additionalProperties: false
+    workspace_resolve: root
+  - key: machines_queried_via_cli
+    tool_name: Bash
+    tool_arg: command
     value:
-      filename: b4_gpu_comparison.md
-      pattern: A100|V100|T4|A800|H100
-      flags: i
-  - key: has_recommendation
-    value:
-      filename: b4_gpu_comparison.md
-      pattern: 推荐|recommend
-      flags: i
+      pattern: '(?:^|[\n;&|]\s*)(?:(?:env|sudo)(?:\s+[^\s;&|]+)*\s+)?(?:[^\s;&|]+/)?bohr\s+machine\s+list\b(?=[^\n]*(?:-c|--chooseType)(?:\s+|=)gpu(?:\s|$))(?=[^\n]*(?:-s|--scene)(?:\s+|=)job(?:\s|$))'
+      min_matches: 1
   - key: turn_budget
     value:
-      max: 6
+      max: 12
   scoring_checklist:
   - id: artifact
-    criterion: b4_gpu_comparison.md written to workspace.
+    criterion: b4_gpu_comparison.json written to workspace root.
     axis: correctness
     verify: artifact_exists
-  - id: has_table
-    criterion: Contains a markdown table.
+  - id: comparison_schema
+    criterion: The result records the 500-atom DeepMD workload, multiple in-stock GPU machines with memory and price, and a reasoned recommendation.
     axis: correctness
-    verify: text_file_regex
-  - id: has_gpu_names
-    criterion: Lists GPU model names.
-    axis: correctness
-    verify: text_file_regex
-  - id: has_recommendation
-    criterion: Provides a recommendation.
-    axis: correctness
-    verify: text_file_regex
+    verify: json_file_schema
+  - id: machines_queried_via_cli
+    criterion: Job-scene GPU machine inventory was queried through bohr-cli.
+    axis: grounding
+    verify: tool_args_regex
   - id: turn_budget
     criterion: Agent completes within turn budget.
     axis: efficiency

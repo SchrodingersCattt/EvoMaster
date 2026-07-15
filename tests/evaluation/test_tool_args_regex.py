@@ -431,3 +431,94 @@ def test_bwo_stop_running_v2_is_isolated_and_uses_terminate() -> None:
         refs_by_key["terminated_via_cli"].value["pattern"],
         "bohr job kill 20409999",
     )
+
+
+def test_bwo_gpu_compare_v2_uses_live_job_inventory() -> None:
+    questions = flatten_banks(load_question_banks(QUESTION_BANK_DIR))
+    question = next(q for q in questions if q.id == "BWO_gpu_compare_004_20260715_v2")
+    assert all(q.id != "BWO_gpu_compare_004_20260715" for q in questions)
+    assert question.tags == ["bohr-cli"]
+    assert "job 场景" not in question.human_prompt_seed
+    assert "单卡 NVIDIA" not in question.human_prompt_seed
+    assert "machine list" not in question.human_prompt_seed
+
+    schema_ref = next(
+        ref for ref in question.reference_answers if ref.key == "comparison_schema"
+    )
+    schema = schema_ref.value["schema"]
+    validator = validator_for(schema)(schema)
+    valid = {
+        "workload": {"framework": "DeepMD", "atom_count": 500},
+        "available_machines": [
+            {
+                "sku_id": 740,
+                "machine_type": "1 * NVIDIA T4_16g",
+                "gpu_model": "NVIDIA T4",
+                "gpu_count": 1,
+                "gpu_memory_gb": 16,
+                "price_cny_per_hour": 2.5,
+                "has_stock": True,
+            },
+            {
+                "sku_id": 738,
+                "machine_type": "1 * NVIDIA V100_32g",
+                "gpu_model": "NVIDIA V100",
+                "gpu_count": 1,
+                "gpu_memory_gb": 32,
+                "price_cny_per_hour": 4.5,
+                "has_stock": True,
+            },
+            {
+                "sku_id": 4675,
+                "machine_type": "1 * NVIDIA A100_80g",
+                "gpu_model": "NVIDIA A100",
+                "gpu_count": 1,
+                "gpu_memory_gb": 80,
+                "price_cny_per_hour": 10,
+                "has_stock": True,
+            },
+        ],
+        "recommendation": {
+            "machine_type": "1 * NVIDIA V100_32g",
+            "reason": "Balances memory capacity, training throughput, and hourly cost.",
+        },
+    }
+    validator.validate(valid)
+    with pytest.raises(ValidationError):
+        validator.validate(
+            {**valid, "workload": {"framework": "DeepMD", "atom_count": 499}}
+        )
+    with pytest.raises(ValidationError):
+        validator.validate(
+            {
+                **valid,
+                "available_machines": [
+                    *valid["available_machines"][:2],
+                    {**valid["available_machines"][2], "gpu_count": 0},
+                ],
+            }
+        )
+    with pytest.raises(ValidationError):
+        validator.validate(
+            {
+                **valid,
+                "available_machines": [
+                    *valid["available_machines"][:2],
+                    {**valid["available_machines"][2], "has_stock": False},
+                ],
+            }
+        )
+
+    query_ref = next(
+        ref
+        for ref in question.reference_answers
+        if ref.key == "machines_queried_via_cli"
+    )
+    pattern = query_ref.value["pattern"]
+    assert re.search(pattern, "bohr machine list -c gpu -s job -o json")
+    assert re.search(
+        pattern,
+        "bohr machine list --scene=job --chooseType=gpu --output json",
+    )
+    assert not re.search(pattern, "bohr machine list -c cpu -s job -o json")
+    assert not re.search(pattern, "bohr machine list -c gpu -s node -o json")
