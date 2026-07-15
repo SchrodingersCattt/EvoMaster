@@ -636,55 +636,131 @@ questions:
     axis: efficiency
     verify: turn_budget
 
-- id: BSA_tools_docking_012_20260715
+- id: BSA_tools_docking_012_20260715_v2
   capability: scientific_analysis
   domain: agnostic
   scope: platform
-  intent: Test agent uses bohr tools search to find scientific tools.
+  intent: Test agent discovers docking tools and grounds an onboarding guide in one tool's platform details.
   human_prompt_seed: |
-    利用 bohr-cli，有没有能做docking的工具？给个详细教程。
-    保存到 `a12_tools.json`，格式：
+    利用 bohr-cli，我想做小分子和蛋白的 docking，帮我在平台上找几个合适的工具，选一个介绍清楚它能做什么、当前版本以及怎么开始用。只查资料，不要创建资源。
+    把结果保存到工作区根目录的 `a12_tools.json`，格式：
     ```json
-    {"tools": [{"name": "...", "description": "...", "usage_steps": ["step1", "step2", ...]}]}
+    {"query": "...", "candidates": [{"name": "...", "tool_unique_key": "...", "repo_url": "..."}], "selected_tool": {"name": "...", "tool_unique_key": "...", "version": "...", "description": "...", "usage_entry_command": "...", "help_urls": ["..."], "usage_steps": ["..."]}}
     ```
   tags:
   - bohr-cli
   reference_answers:
   - key: artifact
     value: a12_tools.json
-  - key: has_tools
+    workspace_resolve: root
+  - key: tools_schema
     value:
       filename: a12_tools.json
-      pattern: '"tools"\s*:\s*\[\s*\{'
-  - key: docking_relevant
+      schema:
+        type: object
+        required:
+        - query
+        - candidates
+        - selected_tool
+        properties:
+          query:
+            type: string
+            pattern: (?i:dock|对接)
+          candidates:
+            type: array
+            minItems: 3
+            uniqueItems: true
+            items:
+              type: object
+              required:
+              - name
+              - tool_unique_key
+              - repo_url
+              properties:
+                name:
+                  type: string
+                  minLength: 1
+                tool_unique_key:
+                  type: string
+                  minLength: 1
+                repo_url:
+                  type: string
+                  minLength: 1
+              additionalProperties: false
+          selected_tool:
+            type: object
+            required:
+            - name
+            - tool_unique_key
+            - version
+            - description
+            - usage_entry_command
+            - help_urls
+            - usage_steps
+            properties:
+              name:
+                type: string
+                minLength: 1
+              tool_unique_key:
+                type: string
+                minLength: 1
+              version:
+                type: string
+                minLength: 1
+              description:
+                type: string
+                minLength: 20
+              usage_entry_command:
+                type: string
+                minLength: 3
+              help_urls:
+                type: array
+                minItems: 1
+                uniqueItems: true
+                items:
+                  type: string
+                  minLength: 1
+              usage_steps:
+                type: array
+                minItems: 3
+                items:
+                  type: string
+                  minLength: 5
+            additionalProperties: false
+        additionalProperties: false
+    workspace_resolve: root
+  - key: tools_searched_via_cli
+    tool_name: Bash
+    tool_arg: command
     value:
-      filename: a12_tools.json
-      tokens:
-      - docking
-  - key: has_usage
+      pattern: '(?:^|[\n;&|]\s*)(?:(?:env|sudo)(?:\s+[^\s;&|]+)*\s+)?(?:[^\s;&|]+/)?bohr\s+tools\s+search\b(?=[^\n;&|]*(?i:dock|对接))'
+      min_matches: 1
+  - key: tool_details_queried_via_cli
+    tool_name: Bash
+    tool_arg: command
     value:
-      filename: a12_tools.json
-      pattern: '"usage_steps"\s*:\s*\['
+      pattern: '(?:^|[\n;&|]\s*)(?:(?:env|sudo)(?:\s+[^\s;&|]+)*\s+)?(?:[^\s;&|]+/)?bohr\s+tools\s+info\s+(?:''[^''\n]+_[^''\n]+''|"[^"\n]+_[^"\n]+"|[A-Za-z0-9.-]+_[A-Za-z0-9._-]+)'
+      min_matches: 1
   - key: turn_budget
     value:
-      max: 8
+      max: 10
   scoring_checklist:
   - id: artifact
-    criterion: a12_tools.json written to workspace.
+    criterion: a12_tools.json written to workspace root.
     axis: correctness
     verify: artifact_exists
-  - id: has_tools
-    criterion: tools array has entries.
+  - id: tools_schema
+    criterion: The result contains multiple docking candidates and a detailed, actionable introduction grounded in one selected tool.
     axis: correctness
-    verify: text_file_regex
-  - id: docking_relevant
-    criterion: Content mentions docking.
+    verify: json_file_schema
+  - id: tools_searched_via_cli
+    criterion: Docking tools were searched through bohr-cli.
     axis: grounding
-    verify: text_file_contains_all
-  - id: has_usage
-    criterion: Usage steps provided.
-    axis: correctness
-    verify: text_file_regex
+    verify: tool_args_regex
+  - id: tool_details_queried_via_cli
+    criterion: Platform details for a selected search result were queried through bohr-cli.
+    axis: grounding
+    verify: tool_args_regex
   - id: turn_budget
     criterion: Agent completes within turn budget.
     axis: efficiency

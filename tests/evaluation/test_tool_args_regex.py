@@ -522,3 +522,78 @@ def test_bwo_gpu_compare_v2_uses_live_job_inventory() -> None:
     )
     assert not re.search(pattern, "bohr machine list -c cpu -s job -o json")
     assert not re.search(pattern, "bohr machine list -c gpu -s node -o json")
+
+
+def test_bsa_tools_docking_v2_requires_search_and_tool_details() -> None:
+    questions = flatten_banks(load_question_banks(QUESTION_BANK_DIR))
+    question = next(q for q in questions if q.id == "BSA_tools_docking_012_20260715_v2")
+    assert all(q.id != "BSA_tools_docking_012_20260715" for q in questions)
+    assert question.tags == ["bohr-cli"]
+    assert "tools search" not in question.human_prompt_seed
+    assert "tools info" not in question.human_prompt_seed
+    assert "docking_py" not in question.human_prompt_seed
+
+    schema_ref = next(
+        ref for ref in question.reference_answers if ref.key == "tools_schema"
+    )
+    schema = schema_ref.value["schema"]
+    validator = validator_for(schema)(schema)
+    valid = {
+        "query": "protein ligand docking",
+        "candidates": [
+            {
+                "name": "Docking Tool A",
+                "tool_unique_key": "owner_a_docking-tool",
+                "repo_url": "https://example.com/a",
+            },
+            {
+                "name": "Docking Tool B",
+                "tool_unique_key": "owner_b_docking-tool",
+                "repo_url": "https://example.com/b",
+            },
+            {
+                "name": "Docking Tool C",
+                "tool_unique_key": "owner_c_docking-tool",
+                "repo_url": "https://example.com/c",
+            },
+        ],
+        "selected_tool": {
+            "name": "Docking Tool A",
+            "tool_unique_key": "owner_a_docking-tool",
+            "version": "v1.2.3",
+            "description": "Automates protein-ligand docking and result analysis.",
+            "usage_entry_command": "docking-tool --help",
+            "help_urls": ["https://example.com/a/docs"],
+            "usage_steps": [
+                "Prepare the receptor structure.",
+                "Prepare the ligand and search box.",
+                "Run docking and inspect ranked poses.",
+            ],
+        },
+    }
+    validator.validate(valid)
+    with pytest.raises(ValidationError):
+        validator.validate({**valid, "candidates": valid["candidates"][:2]})
+    with pytest.raises(ValidationError):
+        validator.validate(
+            {
+                **valid,
+                "selected_tool": {
+                    **valid["selected_tool"],
+                    "usage_steps": valid["selected_tool"]["usage_steps"][:2],
+                },
+            }
+        )
+
+    refs_by_key = {ref.key: ref for ref in question.reference_answers}
+    search_pattern = refs_by_key["tools_searched_via_cli"].value["pattern"]
+    assert re.search(
+        search_pattern, 'bohr tools search "protein ligand docking" -o json'
+    )
+    assert re.search(search_pattern, "bohr tools search 小分子对接 --lang zh-CN")
+    assert not re.search(search_pattern, "bohr tools search molecular-dynamics -o json")
+
+    info_pattern = refs_by_key["tool_details_queried_via_cli"].value["pattern"]
+    assert re.search(info_pattern, "bohr tools info owner_docking-tool -o json")
+    assert re.search(info_pattern, 'bohr tools info "owner_docking_tool" -o json')
+    assert not re.search(info_pattern, "bohr tools info 28189 -o json")
