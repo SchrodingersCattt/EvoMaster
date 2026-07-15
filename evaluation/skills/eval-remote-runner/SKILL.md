@@ -27,6 +27,7 @@ All commands below use placeholders `$HOST`, `$PORT`, `$USER` — replace with a
 | `claude-sonnet-4-6` | Claude Sonnet 4.6 |
 | `gemini-3.1-pro-preview` | Gemini 3.1 Pro |
 | `cds/GPT-5.4` | GPT-5.4 |
+| `matmaster/DeepSeek-v4-Flash` | DeepSeek V4 Flash |
 | `matmaster/qwen3.7-max` | Qwen 3.7 Max (default) |
 | `matmaster/dsk-v4p` | DeepSeek V4 Pro |
 
@@ -69,6 +70,8 @@ ssh -p $PORT $USER@$HOST "cd /root/matmaster-evo && \
 | `--jobs N` | Parallel workers. Default 16, dial back if 429s — see `references/monitoring_scripts.md` |
 | `--limit N` | Cap total tasks (for testing) |
 | `--no-clean-results` | Keep prior results dir |
+
+Bohr CLI 专项评测使用 `--slices '@bohr-cli' --model 'matmaster/DeepSeek-v4-Flash'`。
 
 > **Per-call LLM usage is always reported** to tools-server (populates `llm_usage`, `billing_mode=eval`: record + price, no credit debit; per-call cost back-filled into ingest `extra.per_call_usage`). No flag needed; requires `MATMASTER_TOOLS_SERVER` reachable (defaults to `matmaster-tools-server.<env>.bohrium.com`).
 
