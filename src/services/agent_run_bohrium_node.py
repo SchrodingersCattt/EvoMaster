@@ -33,8 +33,10 @@ def acquire_compatibility_node(
     user_id: str | None,
     org_id: str,
     event_callback: Callable[..., None],
+    cancel_checker: Callable[[], bool] | None = None,
 ) -> BohriumNodeAcquisition:
     """Reuse or create a Node for old jobs that have no invocation id."""
+    _raise_if_cancelled(cancel_checker)
     node_id: int | None = None
     node_ip: str | None = None
     node_password: str | None = None
@@ -142,10 +144,18 @@ def acquire_compatibility_node(
                             "starting",
                             "节点已重启，正在等待就绪...",
                         )
-                        node_info = node_service.wait_until_ready(access_key, node_id)
+                        wait_kwargs = (
+                            {'cancel_checker': cancel_checker}
+                            if cancel_checker is not None
+                            else {}
+                        )
+                        node_info = node_service.wait_until_ready(
+                            access_key, node_id, **wait_kwargs
+                        )
                         node_ip = node_info.get("ip")
                         node_password = node_info.get("password")
                     except Exception as restart_err:
+                        _raise_if_cancelled(cancel_checker)
                         logger.warning(
                             "run_agent: restart node_id=%s failed, will create new: %s",
                             node_id,
@@ -162,6 +172,7 @@ def acquire_compatibility_node(
                         reuse_tracked = False
 
     if node_id is None or node_ip is None:
+        _raise_if_cancelled(cancel_checker)
         _emit_node_status(
             event_callback,
             None,
@@ -177,7 +188,12 @@ def acquire_compatibility_node(
                 "starting",
                 "节点已创建，正在等待就绪...",
             )
-            node_info = node_service.wait_until_ready(access_key, node_id)
+            wait_kwargs = (
+                {'cancel_checker': cancel_checker} if cancel_checker is not None else {}
+            )
+            node_info = node_service.wait_until_ready(
+                access_key, node_id, **wait_kwargs
+            )
             node_ip = node_info.get("ip")
             node_password = node_info.get("password")
             if nodes_table is not None and user_id and org_id:
@@ -204,6 +220,11 @@ def acquire_compatibility_node(
         password=node_password,
         reuse_tracked=reuse_tracked,
     )
+
+
+def _raise_if_cancelled(cancel_checker: Callable[[], bool] | None) -> None:
+    if cancel_checker is not None and cancel_checker():
+        raise RuntimeError("Bohrium Node acquisition cancelled")
 
 
 def _expected_image_name(node_service: Any, access_key: str) -> str | None:

@@ -46,6 +46,8 @@ from .messages import (
 )
 from .runtime_ports import (
     AgentRunPorts,
+    BohriumNodeAcquirer,
+    BohriumNodeBinding,
     BusEventSink,
     CheckpointSink,
     CheckpointSinkFactory,
@@ -143,6 +145,8 @@ __all__ = [
     "UserMessage",
     # runtime
     "AgentRunPorts",
+    "BohriumNodeAcquirer",
+    "BohriumNodeBinding",
     "AgentKernelSpec",
     "AgentKernelResources",
     "AgentKernelRuntime",

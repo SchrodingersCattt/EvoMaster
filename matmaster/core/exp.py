@@ -410,6 +410,7 @@ class Exp:
             topology=topology,
             hook_executor=hook_executor,
             state=runner_state,
+            bohrium_node_acquirer=request.ports.bohrium_node_acquirer,
         )
 
         checkpoint_sink_factory = request.ports.compaction.checkpoint_sink_factory
@@ -751,6 +752,7 @@ class Exp:
                 session=env.session,
                 workdir=bohrium_workdir,
                 job_ledger=ctx.request.ports.bohrium_job_ledger,
+                node_acquirer=ctx.request.ports.bohrium_node_acquirer,
                 session_id=ctx.environment.session_id,
                 invocation_id=ctx.request.invocation_id,
                 allow_local_paths=bohrium_allow_local_paths,
@@ -879,7 +881,6 @@ class Exp:
         )
         self._register_cleanup(connector.cleanup)
 
-        # Extract sync_tools mapping from calculation_executors config.
         # Sync tools are synchronous operations that should complete quickly,
         # so they get a shorter timeout than the default MCP tool timeout.
         _SYNC_TOOL_TIMEOUT = 30.0
@@ -949,6 +950,7 @@ class Exp:
                     description=tool_schema.get("description", ""),
                     input_schema=tool_schema.get("input_schema", {}),
                     connector=connector,
+                    mcp_config=mcp_config,
                     timeout=tool_timeout,
                 )
                 if catalog is not None:

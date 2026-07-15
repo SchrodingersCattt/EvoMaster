@@ -156,6 +156,7 @@ def _make_runner(
     policy: Any | None = None,
     scheduler: ToolScheduler | None = None,
     state: ToolRunnerState | None = None,
+    bohrium_node_acquirer: Any | None = None,
 ) -> FullToolRunner:
     return FullToolRunner(
         catalog=catalog,
@@ -164,6 +165,7 @@ def _make_runner(
         scheduler=scheduler or ToolScheduler(default_timeout=1.0),
         topology=topology or _make_topology(),
         state=state,
+        bohrium_node_acquirer=bohrium_node_acquirer,
     )
 
 

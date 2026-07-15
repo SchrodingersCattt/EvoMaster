@@ -136,6 +136,109 @@ class TestBohriumSetupServiceOrchestration:
 
         assert mock_setup_sync.call_args.kwargs['bohrium_required'] is True
 
+    @pytest.mark.asyncio
+    async def test_deferred_setup_does_not_acquire_until_requested(self):
+        from matmaster.bohrium.types import BohriumRuntimeSnapshot
+        from matmaster.sessions.deferred_bohrium import DeferredBohriumSession
+        from src.services.agent_run_bohrium import BohriumSetupResult
+
+        svc = _make_service(event_sink=MagicMock())
+        ssh_session = MagicMock()
+        snapshot = BohriumRuntimeSnapshot(
+            session_type="ssh",
+            execution_workdir="/share/case",
+            node_id=42,
+            ssh_attached=True,
+        )
+        acquired = BohriumSetupResult(
+            True,
+            None,
+            ssh_session,
+            "/share/case",
+            "ssh",
+            snapshot,
+        )
+
+        with (
+            patch.object(
+                svc,
+                "_load_run_credentials",
+                return_value=(
+                    {"access_key": "ak", "project_id": 9},
+                    "u1",
+                    "o1",
+                ),
+            ),
+            patch.object(svc, "_make_event_bridge", return_value=MagicMock()),
+            patch.object(
+                svc,
+                "_setup_bohrium_for_run",
+                return_value=acquired,
+            ) as mock_setup,
+        ):
+            result = await svc.run_setup(
+                session_id="sess-lazy",
+                playground=MagicMock(),
+                run_started_at=1.0,
+                bohrium_required=True,
+                workspace="/share/case",
+                invocation_id="inv-lazy",
+                defer_node_start=True,
+            )
+
+            assert result.abort_result is None
+            assert isinstance(result.execution_session, DeferredBohriumSession)
+            assert result.session_type == "bohrium-deferred"
+            assert result.node_acquirer is not None
+            mock_setup.assert_not_called()
+
+            binding = await result.node_acquirer.ensure_ready(reason="tool:Bash")
+
+        assert binding.session is ssh_session
+        assert binding.snapshot is snapshot
+        mock_setup.assert_called_once()
+        assert mock_setup.call_args.kwargs["emit_run_error_on_failure"] is False
+
+    @pytest.mark.asyncio
+    async def test_deferred_missing_credentials_fail_only_when_tool_requests_node(self):
+        from src.services.user_service import BohriumAccessKeyFetchResult
+
+        svc = _make_service(event_sink=MagicMock())
+        failed = BohriumAccessKeyFetchResult(
+            status="timeout",
+            retryable=False,
+            attempts=3,
+            access_key=None,
+        )
+
+        with (
+            patch.object(
+                svc,
+                "_load_run_credentials",
+                return_value=({"project_id": 9}, "u1", "o1"),
+            ),
+            patch.object(svc, "_make_event_bridge", return_value=MagicMock()),
+            patch(
+                "src.services.agent_run_bohrium.UserService.fetch_bohrium_access_key_result",
+                return_value=failed,
+            ),
+            patch.object(svc, "_setup_bohrium_for_run") as mock_setup,
+        ):
+            result = await svc.run_setup(
+                session_id="sess-lazy",
+                playground=MagicMock(),
+                run_started_at=1.0,
+                bohrium_required=True,
+                defer_node_start=True,
+            )
+
+            assert result.abort_result is None
+            assert result.node_acquirer is not None
+            with pytest.raises(RuntimeError):
+                await result.node_acquirer.ensure_ready(reason="tool:Read")
+
+        mock_setup.assert_not_called()
+
     def test_run_setup_sync_required_access_key_failure_aborts_before_node_setup(
         self,
     ):

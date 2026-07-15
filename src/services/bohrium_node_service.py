@@ -9,6 +9,7 @@ import json
 import logging
 import os
 import time
+from collections.abc import Callable
 from functools import lru_cache
 from typing import Any
 
@@ -171,6 +172,7 @@ class BohriumNodeService:
         *,
         poll_interval: float = POLL_INTERVAL,
         timeout: float = POLL_TIMEOUT,
+        cancel_checker: Callable[[], bool] | None = None,
     ) -> dict[str, Any]:
         """
         轮询 node/list 直到该节点 status=2（就绪）。返回包含 ip、nodePwd 的节点信息。
@@ -182,6 +184,8 @@ class BohriumNodeService:
         last_error_code: Any = None
         with httpx.Client(timeout=30.0) as client:
             while time.monotonic() < deadline:
+                if cancel_checker is not None and cancel_checker():
+                    raise RuntimeError("Bohrium Node acquisition cancelled")
                 r = client.get(
                     f"{self._host}/openapi/v1/node/list",
                     params={'queryType': 'private'},
@@ -209,7 +213,16 @@ class BohriumNodeService:
                                 'password': item.get('nodePwd'),
                             }
                         break
-                time.sleep(poll_interval)
+                if poll_interval <= 0:
+                    continue
+                sleep_deadline = min(deadline, time.monotonic() + poll_interval)
+                while time.monotonic() < sleep_deadline:
+                    if cancel_checker is not None and cancel_checker():
+                        raise RuntimeError("Bohrium Node acquisition cancelled")
+                    remaining = sleep_deadline - time.monotonic()
+                    if remaining <= 0:
+                        break
+                    time.sleep(min(0.1, remaining))
         raise TimeoutError(
             f"Bohrium node node_id={node_id} did not become ready within {timeout}s; "
             f"found={found} last_status={last_status!r} "

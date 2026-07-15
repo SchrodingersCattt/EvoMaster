@@ -772,7 +772,7 @@ class TestMatMasterRunAgentE2E:
 
     @patch("matmaster.config.loader.load_llm_config")
     @patch("matmaster.providers.llm_factory.build_provider_bundle")
-    def test_bohrium_access_key_abort_emits_top_level_error_and_stream_closed(
+    def test_bohrium_access_key_failure_is_deferred_until_node_demand(
         self, mock_build_provider_bundle, mock_load_config, tmp_path: Path
     ) -> None:
         AgentRunService = pytest.importorskip(
@@ -804,7 +804,6 @@ class TestMatMasterRunAgentE2E:
         mock_pg.config_path = Path("config/config.yaml")
         mock_pg.session = None
 
-        reason = "Bohrium access_key 获取失败：请求 Bohrium Core 超时"
         failed_result = BohriumAccessKeyFetchResult(
             status="timeout",
             retryable=False,
@@ -853,15 +852,14 @@ class TestMatMasterRunAgentE2E:
                 )
             )
 
-        assert result[0] == (False, reason)
+        assert result[0] is True
         assert isinstance(result[1], int)
         assert result[1] >= 0
         error_payload = next(
             (payload for payload in sse_payloads if payload.get("type") == "error"),
             None,
         )
-        assert error_payload is not None
-        assert error_payload["content"]["message"] == reason
+        assert error_payload is None
         stream_closed_payload = next(
             (
                 payload
@@ -871,7 +869,7 @@ class TestMatMasterRunAgentE2E:
             None,
         )
         assert stream_closed_payload is not None
-        assert stream_closed_payload["treat_as_failure"] is True
+        assert stream_closed_payload.get("treat_as_failure") is not True
 
     @patch("matmaster.config.loader.load_llm_config")
     @patch("matmaster.providers.llm_factory.build_provider_bundle")

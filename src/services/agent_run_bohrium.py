@@ -16,11 +16,15 @@ from matmaster.bohrium.runtime import (
     attach_local_bohrium_runtime_from_run_credentials,
     attach_runtime,
     detach_runtime,
+    get_runtime,
 )
 from matmaster.bohrium.types import BohriumExecutionContext, BohriumRuntimeSnapshot
+from matmaster.sessions.deferred_bohrium import DeferredBohriumSession
 from matmaster.sessions.ssh import SSHSession, SSHSessionConfig
+from matmaster.types.runtime_ports import BohriumNodeAcquirer, BohriumNodeBinding
 from src.dao.bohrium_nodes_table import get_bohrium_nodes_table
 from src.services.agent_run_bohrium_node import acquire_compatibility_node
+from src.services.bohrium_deferred_runtime import BohriumNodeRuntimeCoordinator
 from src.services.bohrium_node_contract import NodeIdentity
 from src.services.bohrium_node_heartbeat import NodeLeaseHeartbeat
 from src.services.bohrium_node_lifecycle import get_bohrium_node_lease_manager
@@ -164,6 +168,7 @@ class BohriumSetupResult(NamedTuple):
     execution_workdir: str | None
     session_type: str | None
     runtime_snapshot: BohriumRuntimeSnapshot | None
+    node_acquirer: BohriumNodeAcquirer | None = None
 
     @classmethod
     def no_op(cls) -> BohriumSetupResult:
@@ -207,6 +212,8 @@ class BohriumSetupService:
         bohrium_node_lifecycle_policy: str = "run_end",
         bohrium_node_idle_timeout_seconds: int | None = None,
         invocation_id: str | None = None,
+        emit_run_error_on_failure: bool = True,
+        cancel_checker: Callable[[], bool] | None = None,
     ) -> BohriumSetupResult:
         return _setup_bohrium_for_run(
             session_id=session_id,
@@ -221,6 +228,8 @@ class BohriumSetupService:
             bohrium_node_lifecycle_policy=bohrium_node_lifecycle_policy,
             bohrium_node_idle_timeout_seconds=bohrium_node_idle_timeout_seconds,
             invocation_id=invocation_id,
+            emit_run_error_on_failure=emit_run_error_on_failure,
+            cancel_checker=cancel_checker,
         )
 
     def _cleanup_bohrium_after_run(
@@ -318,14 +327,18 @@ class BohriumSetupService:
         bohrium_node_lifecycle_policy: str = "run_end",
         bohrium_node_idle_timeout_seconds: int | None = None,
         invocation_id: str | None = None,
+        defer_node_start: bool = False,
     ) -> BohriumSetupResult:
         """Load credentials, bridge events, and run setup in the executor."""
         loop = asyncio.get_running_loop()
         event_cb = self._make_event_bridge(loop)
 
+        setup = (
+            self._run_deferred_setup_sync if defer_node_start else self._run_setup_sync
+        )
         return await loop.run_in_executor(
             None,
-            lambda: self._run_setup_sync(
+            lambda: setup(
                 session_id=session_id,
                 pg=playground,
                 event_callback=event_cb,
@@ -424,6 +437,111 @@ class BohriumSetupService:
             invocation_id=invocation_id,
         )
 
+    def _run_deferred_setup_sync(
+        self,
+        *,
+        session_id: str,
+        pg: Any,
+        event_callback: Callable[..., None],
+        run_started_at: float,
+        bohrium_required: bool = False,
+        workspace: str | None = None,
+        bohrium_node_sku_id: int | None = None,
+        bohrium_node_lifecycle_policy: str = "run_end",
+        bohrium_node_idle_timeout_seconds: int | None = None,
+        invocation_id: str | None = None,
+    ) -> BohriumSetupResult:
+        """Prepare a cold Session proxy; acquire Node on first tool demand."""
+        run_creds, user_id_for_ak, org_id = self._load_run_credentials(session_id)
+        project_id = run_creds.get("project_id")
+        eligible = bool(bohrium_required or workspace or project_id is not None)
+        if not eligible:
+            return BohriumSetupResult.no_op()
+
+        access_key = str(run_creds.get("access_key") or "").strip()
+        ak_result: BohriumAccessKeyFetchResult | None = None
+        if not access_key and (bohrium_required or project_id is not None):
+            ak_result = UserService.fetch_bohrium_access_key_result(
+                user_id_for_ak,
+                org_id,
+            )
+            access_key = str(ak_result.access_key or "").strip()
+            if access_key:
+                run_creds["access_key"] = access_key
+
+        credential_error: str | None = None
+        if project_id is None:
+            credential_error = "Bohrium project_id 缺失，无法按需建立 Bohrium 运行环境"
+        elif not access_key:
+            credential_error = (
+                _build_access_key_failure_reason(ak_result)
+                if ak_result is not None
+                else "Bohrium access_key 缺失，无法按需建立 Bohrium 运行环境"
+            )
+
+        execution_workdir = (workspace or _remote_session_workspace_root()).rstrip(
+            "/"
+        ) or "/"
+
+        def _acquire_binding(
+            cancel_checker: Callable[[], bool],
+        ) -> BohriumNodeBinding:
+            if credential_error is not None:
+                raise RuntimeError(credential_error)
+            result = self._setup_bohrium_for_run(
+                session_id=session_id,
+                pg=pg,
+                run_creds=run_creds,
+                user_id_for_ak=user_id_for_ak,
+                org_id=org_id,
+                event_callback=event_callback,
+                run_started_at=run_started_at,
+                workspace=workspace,
+                bohrium_node_sku_id=bohrium_node_sku_id,
+                bohrium_node_lifecycle_policy=bohrium_node_lifecycle_policy,
+                bohrium_node_idle_timeout_seconds=(bohrium_node_idle_timeout_seconds),
+                invocation_id=invocation_id,
+                emit_run_error_on_failure=False,
+                cancel_checker=cancel_checker,
+            )
+            if result.abort_result is not None:
+                run_result, _elapsed_ms = result.abort_result
+                raise RuntimeError(str(run_result[1]))
+            session = result.execution_session
+            if session is None:
+                raise RuntimeError("Bohrium Node setup returned no SSH session")
+            snapshot = result.runtime_snapshot
+            if snapshot is None:
+                runtime = get_runtime(session)
+                snapshot = runtime.snapshot() if runtime is not None else None
+            if snapshot is None:
+                raise RuntimeError("Bohrium Node setup returned no runtime snapshot")
+            return BohriumNodeBinding(
+                session=session,
+                execution_workdir=result.execution_workdir or execution_workdir,
+                snapshot=snapshot,
+            )
+
+        coordinator = BohriumNodeRuntimeCoordinator(_acquire_binding)
+        deferred_session = DeferredBohriumSession(
+            coordinator,
+            workspace_path=execution_workdir,
+        )
+        if credential_error is None:
+            attach_local_bohrium_runtime_from_run_credentials(
+                deferred_session,
+                run_creds,
+            )
+        return BohriumSetupResult(
+            ssh_attached=False,
+            abort_result=None,
+            execution_session=deferred_session,
+            execution_workdir=execution_workdir,
+            session_type="bohrium-deferred",
+            runtime_snapshot=None,
+            node_acquirer=coordinator,
+        )
+
     async def run_cleanup(
         self,
         *,
@@ -460,6 +578,8 @@ def _setup_bohrium_for_run(
     bohrium_node_lifecycle_policy: str = "run_end",
     bohrium_node_idle_timeout_seconds: int | None = None,
     invocation_id: str | None = None,
+    emit_run_error_on_failure: bool = True,
+    cancel_checker: Callable[[], bool] | None = None,
 ) -> BohriumSetupResult:
     """Prepare Bohrium node and SSH session for the run when credentials exist."""
     if not run_creds:
@@ -482,6 +602,8 @@ def _setup_bohrium_for_run(
     node_pwd = None
     node_reuse_tracked = False
     try:
+        if cancel_checker is not None and cancel_checker():
+            raise RuntimeError("Bohrium Node acquisition cancelled")
         node_svc = get_bohrium_node_service()
         use_reuse_table = bool(user_id_for_ak and org_id)
         _emit_node_status(
@@ -499,6 +621,9 @@ def _setup_bohrium_for_run(
             )
         if use_reuse_table and invocation_id:
             lease_manager = get_bohrium_node_lease_manager()
+            acquire_kwargs = (
+                {'cancel_checker': cancel_checker} if cancel_checker is not None else {}
+            )
             node_lease = lease_manager.acquire(
                 NodeIdentity(
                     str(user_id_for_ak),
@@ -515,6 +640,7 @@ def _setup_bohrium_for_run(
                 progress_reporter=lambda status, progress_node_id, message: (
                     _emit_node_status(event_callback, progress_node_id, status, message)
                 ),
+                **acquire_kwargs,
             )
             node_id = node_lease.node_id
             node_ip = node_lease.ip
@@ -536,6 +662,9 @@ def _setup_bohrium_for_run(
             }
         else:
             nodes_table = get_bohrium_nodes_table() if use_reuse_table else None
+            acquire_kwargs = (
+                {'cancel_checker': cancel_checker} if cancel_checker is not None else {}
+            )
             acquisition = acquire_compatibility_node(
                 node_service=node_svc,
                 nodes_table=nodes_table,
@@ -545,6 +674,7 @@ def _setup_bohrium_for_run(
                 user_id=user_id_for_ak,
                 org_id=org_id,
                 event_callback=event_callback,
+                **acquire_kwargs,
             )
             node_id = acquisition.node_id
             node_ip = acquisition.ip
@@ -556,6 +686,8 @@ def _setup_bohrium_for_run(
             SESSIONS[session_id]["bohrium_node_id"] = node_id
             SESSIONS[session_id]["bohrium_node_sku_id"] = effective_sku_id
             SESSIONS[session_id]["bohrium_node_reuse_tracked"] = node_reuse_tracked
+            if cancel_checker is not None and cancel_checker():
+                raise RuntimeError("Bohrium Node acquisition cancelled")
             remote_workspace_root = _remote_session_workspace_root()
             _emit_node_status(
                 event_callback,
@@ -581,9 +713,13 @@ def _setup_bohrium_for_run(
             )
             ssh_session = SSHSession(ssh_config)
             swapped = False
-            ssh_session.open()
-            _configure_remote_user_skill_root(ssh_session)
             try:
+                ssh_session.open()
+                if cancel_checker is not None and cancel_checker():
+                    raise RuntimeError("Bohrium Node acquisition cancelled")
+                _configure_remote_user_skill_root(ssh_session)
+                if cancel_checker is not None and cancel_checker():
+                    raise RuntimeError("Bohrium Node acquisition cancelled")
                 attach_local_bohrium_runtime_from_run_credentials(
                     ssh_session, run_creds
                 )
@@ -602,6 +738,8 @@ def _setup_bohrium_for_run(
                     ssh_workspace_path,
                 )
                 _run_clear_remote_proxy(pg, "post_ssh")
+                if cancel_checker is not None and cancel_checker():
+                    raise RuntimeError("Bohrium Node acquisition cancelled")
                 _emit_node_status(
                     event_callback,
                     node_id,
@@ -664,9 +802,10 @@ def _setup_bohrium_for_run(
             exc_info=True,
         )
         _emit_node_status(event_callback, node_id, "failed", reason)
-        # The 'error' bridge mapping emits both ErrorEvent and StreamClosedEvent
-        # (treat_as_failure=True); do not follow up with a separate stream_closed.
-        event_callback("System", "error", reason)
+        if emit_run_error_on_failure:
+            # The 'error' bridge mapping emits both ErrorEvent and StreamClosedEvent
+            # (treat_as_failure=True); do not follow up with a separate stream_closed.
+            event_callback("System", "error", reason)
         elapsed_ms = int((time.monotonic() - run_started_at) * 1000)
         return BohriumSetupResult.aborted(reason, elapsed_ms)
 

@@ -17,6 +17,7 @@ from matmaster.core.playground import ExecutionEnvironment, WorkspaceArchivalCon
 from matmaster.integration.fanout import RunEventFanout
 from matmaster.integration.workspace_handler import WorkspaceHandler
 from matmaster.types.figures import FigureUploadConfig
+from matmaster.types.runtime_ports import BohriumNodeAcquirer
 from src.dao.oss_io import upload_bytes_to_oss
 from src.services.agent_run_bohrium import BohriumSetupService
 from src.services.session_directory_service import normalize_remote_workspace_path
@@ -34,6 +35,7 @@ class BohriumStageResult:
     environment: ExecutionEnvironment
     ssh_attached: bool
     user_instructions: UserInstructions
+    node_acquirer: BohriumNodeAcquirer | None = None
     workspace: str | None = None
 
 
@@ -95,6 +97,7 @@ async def run_bohrium_stage(
         sessions_service,
         event_sink=dispatch_from_thread,
     )
+    initial_session = environment.session
     effective_bohrium_required = bool(bohrium_required or workspace)
     bohrium_result = await bohrium_svc.run_setup(
         session_id=session_id,
@@ -106,6 +109,7 @@ async def run_bohrium_stage(
         bohrium_node_lifecycle_policy=bohrium_node_lifecycle_policy,
         bohrium_node_idle_timeout_seconds=bohrium_node_idle_timeout_seconds,
         invocation_id=invocation_id,
+        defer_node_start=True,
     )
     ssh_attached = bohrium_result.ssh_attached
     if bohrium_result.abort_result is not None:
@@ -115,11 +119,13 @@ async def run_bohrium_stage(
             environment=environment,
             ssh_attached=ssh_attached,
             user_instructions=load_user_instructions_from_session(None),
+            node_acquirer=None,
             workspace=None,
         )
     if bohrium_result.runtime_snapshot is not None:
         environment = environment.with_bohrium(bohrium_result.runtime_snapshot)
     stage_workspace: str | None = None
+    node_acquirer: BohriumNodeAcquirer | None = None
     if bohrium_result.execution_session is not None:
         execution_workdir = bohrium_result.execution_workdir or ""
         session_type = bohrium_result.session_type or "ssh"
@@ -130,16 +136,22 @@ async def run_bohrium_stage(
         )
         if ssh_attached:
             stage_workspace = normalize_remote_workspace_path(execution_workdir)
-    _ui_session = (
-        bohrium_result.execution_session if bohrium_result else None
-    ) or environment.session
+        elif session_type == "bohrium-deferred":
+            stage_workspace = normalize_remote_workspace_path(execution_workdir)
+            node_acquirer = bohrium_result.node_acquirer
+    if bohrium_result.session_type == "bohrium-deferred":
+        _ui_session = initial_session
+    else:
+        _ui_session = bohrium_result.execution_session or environment.session
     user_instructions = load_user_instructions_from_session(_ui_session)
 
     fanout.add_handler(
         WorkspaceHandler(
             session_id=session_id,
             task_id=task_id,
-            ssh_attached=ssh_attached,
+            ssh_attached=(
+                ssh_attached or bohrium_result.session_type == "bohrium-deferred"
+            ),
             workspace_path=environment.workdir,
             upload_fn=_build_workspace_upload_fn(environment.archival),
         )
@@ -151,5 +163,6 @@ async def run_bohrium_stage(
         environment=environment,
         ssh_attached=ssh_attached,
         user_instructions=user_instructions,
+        node_acquirer=node_acquirer,
         workspace=stage_workspace,
     )

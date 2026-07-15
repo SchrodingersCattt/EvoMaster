@@ -181,6 +181,25 @@ class CalculationPreflight:
         validate_selector_paths(input_schema or {}, selectors)
         return selectors
 
+    def requires_workspace_access(
+        self,
+        *,
+        server_name: str,
+        remote_tool_name: str,
+        input_schema: dict[str, Any] | None,
+        tool_description: str | None,
+    ) -> bool:
+        """Return whether preflight may materialize paths through the session."""
+        return bool(
+            collect_path_selectors(input_schema or {})
+            | _path_keys_from_description(tool_description)
+            | self._path_selectors_from_tool_config(
+                server_name,
+                remote_tool_name,
+                input_schema,
+            )
+        )
+
     def _resolve_executor_template(
         self,
         server_name: str,
