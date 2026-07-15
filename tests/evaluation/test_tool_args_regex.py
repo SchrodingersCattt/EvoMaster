@@ -265,3 +265,50 @@ def test_bwo_param_sweep_v2_requires_complete_grouped_sweep() -> None:
         submit_ref.value["pattern"],
         'bohr job submit -i job.json -o json',
     )
+
+
+def test_bwo_node_ssh_scp_v2_requires_real_lifecycle_and_cleanup() -> None:
+    questions = flatten_banks(load_question_banks(QUESTION_BANK_DIR))
+    question = next(q for q in questions if q.id == "BWO_node_ssh_scp_D7_20260715_v2")
+    assert all(q.id != "BWO_node_ssh_scp_D7_20260715" for q in questions)
+
+    schema_ref = next(
+        ref for ref in question.reference_answers if ref.key == "node_ops_schema"
+    )
+    schema = schema_ref.value["schema"]
+    validator = validator_for(schema)(schema)
+    valid = {
+        "node_id": 1507959,
+        "image": "registry.dp.tech/dptech/ubuntu:22.04-py3.10-cuda12.1",
+        "machine_type": "c16_m62_1 * NVIDIA T4",
+        "ssh_command": "ssh -p 22022 root@node.example",
+        "remote_path": "/personal/test",
+        "file_transferred": True,
+        "node_deleted": True,
+    }
+    validator.validate(valid)
+    with pytest.raises(ValidationError):
+        validator.validate({**valid, "node_id": 0})
+    with pytest.raises(ValidationError):
+        validator.validate({**valid, "machine_type": "c2_m4_cpu"})
+    with pytest.raises(ValidationError):
+        validator.validate({**valid, "node_deleted": False})
+
+    commands_by_key = {
+        "resources_queried_via_cli": "bohr node resources -o json",
+        "node_created_via_cli": (
+            "bohr node create -n smoke -P 123 -i image -m machine -o json"
+        ),
+        "node_inspected_via_cli": "bohr node get 1507959 -o json",
+        "file_transferred_via_scp": (
+            "scp -P 22022 test root@node.example:/personal/test"
+        ),
+        "node_deleted_via_cli": "bohr node delete 1507959 -y -o json",
+    }
+    refs_by_key = {ref.key: ref for ref in question.reference_answers}
+    for key, command in commands_by_key.items():
+        assert re.search(refs_by_key[key].value["pattern"], command)
+    assert not re.search(
+        refs_by_key["file_transferred_via_scp"].value["pattern"],
+        "scp -P 22022 test root@node.example:/tmp/test",
+    )

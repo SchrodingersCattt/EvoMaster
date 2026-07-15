@@ -1082,18 +1082,15 @@ questions:
     axis: efficiency
     verify: turn_budget
 
-- id: BWO_node_ssh_scp_D7_20260715
+- id: BWO_node_ssh_scp_D7_20260715_v2
   capability: workflow_orchestration
   domain: agnostic
   scope: platform
   intent: Test agent creates a node, gets SSH info, and transfers a file.
   priority: P1
   human_prompt_seed: |
-    利用 bohr-cli，用我的bohrium鉴权启动一个容器节点，机型选 T4 相关的最便宜的，获取其ssh的链接方式，启动完成后，把工作区的 test 文件传到 /personal 下面。
-    操作记录保存到 `d7_node_ops.json`，格式：
-    ```json
-    {"node_id": ..., "machine_type": "...", "ssh_command": "...", "file_transferred": true/false}
-    ```
+    利用 bohr-cli，用我的 Bohrium 鉴权启动一个容器节点，镜像使用 `registry.dp.tech/dptech/ubuntu:22.04-py3.10-cuda12.1`，机型选择 T4 相关的最便宜配置。节点启动后获取 SSH 连接方式，并通过 scp 把工作区的 `test` 文件传到节点的 `/personal/test`。
+    完成后删除节点，避免继续计费。将实际操作结果保存到 `d7_node_ops.json`，记录 `node_id`、`image`、`machine_type`、`ssh_command`、`remote_path`、`file_transferred` 和 `node_deleted`；不要在文件中记录密码、私钥等敏感信息。
   tags:
   - bohr-cli
   data_files:
@@ -1103,46 +1100,101 @@ questions:
   reference_answers:
   - key: artifact
     value: d7_node_ops.json
-  - key: has_node_id
+    workspace_resolve: root
+  - key: node_ops_schema
     value:
       filename: d7_node_ops.json
-      pattern: '"node_id"\s*:\s*\d+'
-  - key: has_t4
+      schema:
+        type: object
+        required:
+        - node_id
+        - image
+        - machine_type
+        - ssh_command
+        - remote_path
+        - file_transferred
+        - node_deleted
+        properties:
+          node_id:
+            type: integer
+            minimum: 1
+          image:
+            const: registry.dp.tech/dptech/ubuntu:22.04-py3.10-cuda12.1
+          machine_type:
+            type: string
+            pattern: '[Tt]4'
+          ssh_command:
+            type: string
+            pattern: ^ssh\b
+          remote_path:
+            const: /personal/test
+          file_transferred:
+            const: true
+          node_deleted:
+            const: true
+        additionalProperties: false
+  - key: resources_queried_via_cli
+    tool_name: Bash
+    tool_arg: command
     value:
-      filename: d7_node_ops.json
-      pattern: '[Tt]4'
-  - key: has_ssh
+      pattern: '(?:^|[\n;&|]\s*)(?:(?:env|sudo)(?:\s+[^\s;&|]+)*\s+)?(?:[^\s;&|]+/)?bohr\s+node\s+resources\b'
+      min_matches: 1
+  - key: node_created_via_cli
+    tool_name: Bash
+    tool_arg: command
     value:
-      filename: d7_node_ops.json
-      pattern: '"ssh_command"\s*:\s*"[^"]+"'
-  - key: file_transferred
+      pattern: '(?:^|[\n;&|]\s*)(?:(?:env|sudo)(?:\s+[^\s;&|]+)*\s+)?(?:[^\s;&|]+/)?bohr\s+node\s+create\b'
+      min_matches: 1
+  - key: node_inspected_via_cli
+    tool_name: Bash
+    tool_arg: command
     value:
-      filename: d7_node_ops.json
-      pattern: '"file_transferred"\s*:\s*true'
+      pattern: '(?:^|[\n;&|]\s*)(?:(?:env|sudo)(?:\s+[^\s;&|]+)*\s+)?(?:[^\s;&|]+/)?bohr\s+node\s+get\b'
+      min_matches: 1
+  - key: file_transferred_via_scp
+    tool_name: Bash
+    tool_arg: command
+    value:
+      pattern: '(?:^|[\n;&|]\s*)(?:[^\s;&|]+/)?scp\b(?=[^\n;&|]*\s(?:[^@\s]+@[^:\s]+:)?/personal/test(?:\s|$))'
+      min_matches: 1
+  - key: node_deleted_via_cli
+    tool_name: Bash
+    tool_arg: command
+    value:
+      pattern: '(?:^|[\n;&|]\s*)(?:(?:env|sudo)(?:\s+[^\s;&|]+)*\s+)?(?:[^\s;&|]+/)?bohr\s+node\s+delete\b'
+      min_matches: 1
   - key: turn_budget
     value:
-      max: 18
+      max: 30
   scoring_checklist:
   - id: artifact
     criterion: d7_node_ops.json written to workspace.
     axis: correctness
     verify: artifact_exists
-  - id: has_node_id
-    criterion: Real node ID from platform.
+  - id: node_ops_schema
+    criterion: Operation record contains a real node ID, requested image and T4 machine, SSH command, successful transfer to /personal/test, and successful node cleanup.
     axis: correctness
-    verify: text_file_regex
-  - id: has_t4
-    criterion: Machine type includes T4.
-    axis: correctness
-    verify: text_file_regex
-  - id: has_ssh
-    criterion: SSH connection command obtained.
-    axis: correctness
-    verify: text_file_regex
-  - id: file_transferred
-    criterion: File successfully transferred.
-    axis: correctness
-    verify: text_file_regex
+    verify: json_file_schema
+  - id: resources_queried_via_cli
+    criterion: Node resources were queried through bohr-cli.
+    axis: grounding
+    verify: tool_args_regex
+  - id: node_created_via_cli
+    criterion: The node was created through bohr-cli.
+    axis: grounding
+    verify: tool_args_regex
+  - id: node_inspected_via_cli
+    criterion: Node status and SSH information were inspected through bohr-cli.
+    axis: grounding
+    verify: tool_args_regex
+  - id: file_transferred_via_scp
+    criterion: The test file was transferred to /personal/test through scp.
+    axis: grounding
+    verify: tool_args_regex
+  - id: node_deleted_via_cli
+    criterion: The node was deleted through bohr-cli after transfer.
+    axis: grounding
+    verify: tool_args_regex
   - id: turn_budget
     criterion: Agent completes within turn budget.
     axis: efficiency
