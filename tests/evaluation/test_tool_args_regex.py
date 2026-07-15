@@ -321,6 +321,11 @@ def test_bwo_sandbox_ase_v2_requires_real_lifecycle_and_cleanup() -> None:
     assert "BWO_sandbox_ase_007_20260715" not in question_ids
     assert "BEC_no_history_009_20260715" not in question_ids
     assert question.tags == ["bohr-cli"]
+    prompt = question.human_prompt_seed.lower()
+    assert "清华" not in prompt
+    assert "pypi" not in prompt
+    assert "tuna" not in prompt
+    assert "ase==" not in prompt
     file_refs = {
         ref.key: ref
         for ref in question.reference_answers

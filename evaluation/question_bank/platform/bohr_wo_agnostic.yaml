@@ -428,7 +428,7 @@ questions:
   scope: platform
   intent: Test the full bohr-cli sandbox lifecycle with a deterministic ASE workload.
   human_prompt_seed: |
-    利用 bohr-cli，在 `sac-cpu-small` 沙箱里运行已经准备好的 `opt_water.py`，完成水分子结构优化，并把结果取回工作区。沙箱里如果缺少 ASE，请通过清华 PyPI 镜像 `https://pypi.tuna.tsinghua.edu.cn/simple` 安装 `ase==3.26.0`。
+    利用 bohr-cli，在 `sac-cpu-small` 沙箱里运行已经准备好的 `opt_water.py`，环境缺什么就在沙箱里补一下，完成水分子结构优化，并把结果取回工作区。
     把优化后的水分子坐标保存到工作区根目录的 `b7_water_optimized.xyz`，运行日志保存到 `b7_log.txt`。结果取回后删除沙箱，避免继续占用资源。
   tags:
   - bohr-cli

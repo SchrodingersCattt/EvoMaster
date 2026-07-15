@@ -102,6 +102,7 @@ bohr sandbox delete <id> [--yes]
 - 用完必须 `delete` 回收资源
 - 结构化输出用 `-o json`，envelope 格式：`{"ok": true, "data": {...}, "meta": {...}}`
 - 提取字段：`bohr sandbox create -o json -q '.data.sandboxID'`
+- 沙箱内下载依赖或资源时，先使用沙箱默认网络配置；若出现超时、TLS、503 或连接重置，加载 `sandbox-proxy` skill 按目标选择国内镜像或海外代理，不要让用户指定镜像或代理
 
 ## 文件系统 (file)
 
