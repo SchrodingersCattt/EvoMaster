@@ -397,3 +397,24 @@ cases:
       - "搜索一篇关于 NMR 技术的文献"                  # → paper search, not NMR tool
       - "帮我用 Gaussian 优化这个分子"                  # → other QC software
       - "分析这个质谱数据"                              # → data-analysis
+
+  - skill: bohr-cli
+    positive:
+      - "帮我在平台上搜一下锂电池相关的论文"
+      - "看看我有没有正在跑的任务"
+      - "帮我查一下余额还剩多少"
+      - "开个沙箱跑段脚本"
+      - "把这个文件传到 personal 盘上"
+      - "帮我创建一个数据集"
+      - "看看平台上有没有 VASP 的镜像"
+      - "帮我用科研导师问一下催化机理"
+      - "我想搜一下做 docking 的工具有哪些"
+      - "查一下上个月花了多少钱"
+      - "帮我提一个计算任务到 Bohrium"
+      - "有没有 GNN 做分子性质预测的文献"
+    negative:
+      - "帮我用 VASP 算一下能带结构"                    # → vasp skill
+      - "构建一个 2x2x2 的 NaCl 超胞"                  # → atomic-structure
+      - "帮我写一个 LAMMPS 输入文件"                    # → lammps skill
+      - "分析一下这个 MD 轨迹的 RDF"                    # → data-analysis
+      - "帮我训练一个 DeePMD 势函数模型"                # → mlips/dpgen skill
