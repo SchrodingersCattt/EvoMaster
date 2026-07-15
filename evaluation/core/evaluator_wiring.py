@@ -13,6 +13,9 @@ from evaluation.validators.json_file import (
     check_bohr_job_stop_record as _check_bohr_job_stop_record,
 )
 from evaluation.validators.json_file import (
+    check_bohr_job_upgrade_record as _check_bohr_job_upgrade_record,
+)
+from evaluation.validators.json_file import (
     check_json_file_artifacts as _check_json_file_artifacts,
 )
 from evaluation.validators.json_file import (
@@ -145,6 +148,23 @@ def check_bohr_job_stop_record(
         machine_type=cfg.get("machine_type", ""),
         command=cfg.get("command", ""),
         job_name_prefix=cfg.get("job_name_prefix", ""),
+    )
+
+
+def check_bohr_job_upgrade_record(
+    *, evidence: EvidenceBundle | None, ref: ReferenceAnswer
+) -> tuple[bool, str]:
+    if evidence is None or not evidence.workspace_dir:
+        return False, "no workspace root"
+    cfg = ref.value if isinstance(ref.value, dict) else {}
+    return _check_bohr_job_upgrade_record(
+        evidence.workspace_dir,
+        filename=cfg.get("filename", ""),
+        seed_id=int(cfg.get("seed_id", 0)),
+        source_machine_pattern=cfg.get("source_machine_pattern", ""),
+        target_machine_pattern=cfg.get("target_machine_pattern", ""),
+        image=cfg.get("image", ""),
+        command=cfg.get("command", ""),
     )
 
 

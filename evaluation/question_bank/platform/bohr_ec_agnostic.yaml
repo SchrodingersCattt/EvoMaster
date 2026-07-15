@@ -262,73 +262,28 @@ questions:
     axis: efficiency
     verify: turn_budget
 
-- id: BEC_upgrade_machine_006_20260715_v2
+- id: BEC_upgrade_machine_006_20260715_v3
   capability: execution_contract
   domain: agnostic
   scope: platform
   intent: Test agent inspects a seed job and resubmits it on A100 while preserving its image and command.
   human_prompt_seed: |
-    利用 bohr-cli，我想把任务 `20400341` 换成 A100 重新提交。请先确认它原来的配置，保持镜像和运行命令不变。
-    提交成功后把操作记录保存到工作区根目录的 `e6_upgrade.json`，格式：
-    ```json
-    {"original_job": {"bohr_id": ..., "job_id": ..., "machine": "...", "image": "...", "command": "..."}, "resubmitted_job": {"job_id": ..., "machine": "...", "image": "...", "command": "..."}}
-    ```
+    利用 Bohr-CLI，我想把任务 `20400341` 换成 A100 重新提交。请先确认它原来的配置，保持镜像和运行命令不变。
+    提交成功后，将原任务和新任务的实际标识、机型，以及沿用的镜像和运行命令记录到工作区根目录的 `e6_upgrade.json`。
   tags:
   - bohr-cli
   reference_answers:
   - key: artifact
     value: e6_upgrade.json
     workspace_resolve: root
-  - key: upgrade_schema
+  - key: upgrade_record
     value:
       filename: e6_upgrade.json
-      schema:
-        type: object
-        required:
-        - original_job
-        - resubmitted_job
-        properties:
-          original_job:
-            type: object
-            required:
-            - bohr_id
-            - job_id
-            - machine
-            - image
-            - command
-            properties:
-              bohr_id:
-                const: 20400341
-              job_id:
-                const: 23052040
-              machine:
-                type: string
-                pattern: (?i:T4)
-              image:
-                const: registry.dp.tech/dptech/dpmd-cu126-outisli:v20260712
-              command:
-                const: "echo 'T4 test for eval E6' > result.txt"
-            additionalProperties: false
-          resubmitted_job:
-            type: object
-            required:
-            - job_id
-            - machine
-            - image
-            - command
-            properties:
-              job_id:
-                type: integer
-                minimum: 1
-              machine:
-                type: string
-                pattern: (?i:A100)
-              image:
-                const: registry.dp.tech/dptech/dpmd-cu126-outisli:v20260712
-              command:
-                const: "echo 'T4 test for eval E6' > result.txt"
-            additionalProperties: false
-        additionalProperties: false
+      seed_id: 20400341
+      source_machine_pattern: (?i:T4)
+      target_machine_pattern: (?i:A100)
+      image: registry.dp.tech/dptech/dpmd-cu126-outisli:v20260712
+      command: "echo 'T4 test for eval E6' > result.txt"
     workspace_resolve: root
   - key: original_job_queried_via_cli
     tool_name: Bash
@@ -356,12 +311,12 @@ questions:
     criterion: e6_upgrade.json written to workspace root.
     axis: correctness
     verify: artifact_exists
-  - id: upgrade_schema
+  - id: upgrade_record
     criterion: The record identifies the seed job and shows that its image and command were preserved in a positive-ID A100 resubmission.
     axis: correctness
-    verify: json_file_schema
+    verify: bohr_job_upgrade_record
   - id: original_job_queried_via_cli
-    criterion: The original job was inspected through bohr-cli using its bohrId.
+    criterion: The original job was inspected through Bohr-CLI using the supplied task identifier.
     axis: grounding
     verify: tool_args_regex
   - id: a100_machines_queried_via_cli

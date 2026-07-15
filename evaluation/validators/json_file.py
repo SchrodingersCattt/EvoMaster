@@ -37,6 +37,55 @@ def _traverse_dotted(obj: object, dotted_key: str) -> object | None:
     return val
 
 
+def _walk_json(value: object):
+    yield value
+    if isinstance(value, dict):
+        for child in value.values():
+            yield from _walk_json(child)
+    elif isinstance(value, list):
+        for child in value:
+            yield from _walk_json(child)
+
+
+def _is_positive_id(value: object) -> bool:
+    if isinstance(value, bool):
+        return False
+    if isinstance(value, int):
+        return value > 0
+    return isinstance(value, str) and value.isdigit() and int(value) > 0
+
+
+def _collect_json_identifiers(value: object) -> set[int]:
+    identifiers: set[int] = set()
+    if isinstance(value, dict):
+        for key, child in value.items():
+            normalised = re.sub(r'[^a-z0-9]', '', str(key).lower())
+            key_is_identifier = normalised in {'id', 'ids'} or normalised.endswith(
+                (
+                    'identifier',
+                    'identifiers',
+                    'bohrid',
+                    'bohrids',
+                    'jobid',
+                    'jobids',
+                    'taskid',
+                    'taskids',
+                )
+            )
+            if key_is_identifier:
+                identifiers.update(
+                    int(candidate)
+                    for candidate in _walk_json(child)
+                    if _is_positive_id(candidate)
+                )
+            else:
+                identifiers.update(_collect_json_identifiers(child))
+    elif isinstance(value, list):
+        for child in value:
+            identifiers.update(_collect_json_identifiers(child))
+    return identifiers
+
+
 def check_json_file_schema(
     workspace_dir: str | Path,
     *,
@@ -107,23 +156,7 @@ def check_bohr_job_stop_record(
     def _normalise_key(value: object) -> str:
         return re.sub(r'[^a-z0-9]', '', str(value).lower())
 
-    def _walk(value: object):
-        yield value
-        if isinstance(value, dict):
-            for child in value.values():
-                yield from _walk(child)
-        elif isinstance(value, list):
-            for child in value:
-                yield from _walk(child)
-
-    def _positive_id(value: object) -> bool:
-        if isinstance(value, bool):
-            return False
-        if isinstance(value, int):
-            return value > 0
-        return isinstance(value, str) and value.isdigit() and int(value) > 0
-
-    strings = [value.strip() for value in _walk(data) if isinstance(value, str)]
+    strings = [value.strip() for value in _walk_json(data) if isinstance(value, str)]
     missing_values = [
         label
         for label, expected in (
@@ -138,9 +171,9 @@ def check_bohr_job_stop_record(
     if not any(value.startswith(job_name_prefix) for value in strings):
         return False, f'{filename}: no job name starts with {job_name_prefix!r}'
 
-    mappings = [value for value in _walk(data) if isinstance(value, dict)]
+    mappings = [value for value in _walk_json(data) if isinstance(value, dict)]
     has_job_id = any(
-        _positive_id(value)
+        _is_positive_id(value)
         and 'group' not in _normalise_key(key)
         and (
             _normalise_key(key).endswith('jobid')
@@ -185,6 +218,57 @@ def check_bohr_job_stop_record(
     return (
         True,
         f'{filename}: job identity, configuration, status history, and graceful stop '
+        'are recorded',
+    )
+
+
+def check_bohr_job_upgrade_record(
+    workspace_dir: str | Path,
+    *,
+    filename: str,
+    seed_id: int,
+    source_machine_pattern: str,
+    target_machine_pattern: str,
+    image: str,
+    command: str,
+) -> tuple[bool, str]:
+    """Validate a Bohr job upgrade record without prescribing its JSON layout."""
+    if (
+        not filename
+        or seed_id <= 0
+        or not all((source_machine_pattern, target_machine_pattern, image, command))
+    ):
+        return False, 'bohr_job_upgrade_record: incomplete verifier configuration'
+
+    root = Path(workspace_dir)
+    fpath = _resolve_file(root, filename)
+    if fpath is None:
+        return False, f'{filename} not found in workspace'
+    try:
+        data = json.loads(fpath.read_text(encoding='utf-8'))
+    except ValueError as exc:
+        return False, f'{filename} is not valid JSON: {exc}'
+
+    values = list(_walk_json(data))
+    strings = [value.strip() for value in values if isinstance(value, str)]
+    identifiers = _collect_json_identifiers(data)
+
+    if seed_id not in identifiers:
+        return False, f'{filename}: supplied source task identifier is not recorded'
+    if not any(identifier != seed_id for identifier in identifiers):
+        return False, f'{filename}: no distinct positive resubmitted job identifier'
+    if not any(re.search(source_machine_pattern, value) for value in strings):
+        return False, f'{filename}: source machine evidence is missing'
+    if not any(re.search(target_machine_pattern, value) for value in strings):
+        return False, f'{filename}: target A100 machine evidence is missing'
+    if image not in strings:
+        return False, f'{filename}: preserved image evidence is missing'
+    if command not in strings:
+        return False, f'{filename}: preserved command evidence is missing'
+
+    return (
+        True,
+        f'{filename}: source and resubmitted jobs, machine change, image, and command '
         'are recorded',
     )
 

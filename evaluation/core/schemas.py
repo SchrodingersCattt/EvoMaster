@@ -99,6 +99,7 @@ VerifyLiteral = Literal[
     # JSON file checks
     "json_file_schema",
     "bohr_job_stop_record",
+    "bohr_job_upgrade_record",
     "json_file_key_values",
     "json_file_numeric_range",
     "json_file_artifacts",
@@ -369,6 +370,7 @@ class QuestionItem(BaseModel):
             "answer_json_numeric",
             "json_file_schema",
             "bohr_job_stop_record",
+            "bohr_job_upgrade_record",
             "json_file_numeric_range",
             "json_file_artifacts",
             "stru_file_check",
@@ -450,6 +452,51 @@ class QuestionItem(BaseModel):
                     f"bohr_job_stop_record reference '{item.id}' requires non-empty "
                     f"string values for: {missing_keys}"
                 )
+        for item in self.scoring_checklist:
+            if item.verify != "bohr_job_upgrade_record":
+                continue
+            value = refs_by_key[item.id].value
+            if not isinstance(value, dict):
+                raise ValueError(
+                    f"bohr_job_upgrade_record reference '{item.id}' must be an object"
+                )
+            expected_keys = {
+                "filename",
+                "seed_id",
+                "source_machine_pattern",
+                "target_machine_pattern",
+                "image",
+                "command",
+            }
+            unknown_keys = set(value) - expected_keys
+            if unknown_keys:
+                raise ValueError(
+                    f"bohr_job_upgrade_record reference '{item.id}' has unsupported "
+                    f"keys: {sorted(unknown_keys)}"
+                )
+            string_keys = expected_keys - {"seed_id"}
+            missing_keys = [
+                key
+                for key in sorted(string_keys)
+                if not isinstance(value.get(key), str) or not value[key]
+            ]
+            if (
+                missing_keys
+                or type(value.get("seed_id")) is not int
+                or value["seed_id"] <= 0
+            ):
+                raise ValueError(
+                    f"bohr_job_upgrade_record reference '{item.id}' requires a positive "
+                    f"seed_id and non-empty strings for: {sorted(string_keys)}"
+                )
+            for key in ("source_machine_pattern", "target_machine_pattern"):
+                try:
+                    re.compile(value[key])
+                except re.error as exc:
+                    raise ValueError(
+                        f"bohr_job_upgrade_record reference '{item.id}' has invalid "
+                        f"{key}: {exc}"
+                    ) from exc
         for item in self.scoring_checklist:
             if item.verify != "tool_args_regex":
                 continue
