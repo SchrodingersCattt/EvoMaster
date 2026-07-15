@@ -5,7 +5,9 @@
   留待下轮（at-least-once）。observed_terminal 收 run 内前台查询观察到的终态。
 - confirm：run 成功收尾、release_session_run 之前，按 snapshot rows 与观察集
   并集批量 ack——ack 范围 = agent 看到范围（snapshot 行 ∪ 前台查询结果）。
-handled_at 的唯一写入点在这里；poller 与 trigger enqueued 均不得 ack。
+- 用户关闭程序化 trigger 时，monitor 侧 scheduler 可直接 ack 未交付终态行，
+  表示“用户不希望自动唤醒 AI 消费这些完成事件”。除此之外，poller 与
+  trigger enqueued 均不得 ack。
 """
 
 from __future__ import annotations

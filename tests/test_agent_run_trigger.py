@@ -1,5 +1,6 @@
 """程序化触发原语测试：DeliverySpec / ChatSendRequest 扩展 / dedup / _prepare_run / _enqueue_run / trigger_run。"""
 
+from contextlib import contextmanager
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -86,7 +87,7 @@ def test_internal_trigger_token_constant_importable():
 
 
 def test_run_handle_and_busy_and_trigger_result_shapes():
-    from src.services.stream_service import Busy, RunHandle, TriggerResult
+    from src.services.stream_types import Busy, RunHandle, TriggerResult
 
     handle = RunHandle(
         task_id="trig_x",
@@ -107,7 +108,7 @@ def test_run_handle_and_busy_and_trigger_result_shapes():
 
 
 def test_send_stream_context_has_job_field():
-    from src.services.stream_service import SendStreamContext
+    from src.services.stream_types import SendStreamContext
 
     ctx = SendStreamContext(
         task_id="t",
@@ -136,7 +137,7 @@ def _make_service():
 
 def test_prepare_run_snapshots_boundary_before_writing_event():
     """历史边界必须在写发起事件之前快照（否则注入消息被算进自身历史）。"""
-    from src.services.stream_service import RunHandle
+    from src.services.stream_types import RunHandle
 
     service, sessions_service, events_service = _make_service()
     call_order = []
@@ -157,6 +158,7 @@ def test_prepare_run_snapshots_boundary_before_writing_event():
         files=None,
         images=None,
         workspace_paths=None,
+        structure_selections=None,
         event_writer=writer,
         id_prefix="trig_",
         mode="direct",
@@ -178,7 +180,7 @@ def test_prepare_run_snapshots_boundary_before_writing_event():
 
 
 def test_prepare_run_returns_busy_when_lock_held():
-    from src.services.stream_service import Busy
+    from src.services.stream_types import Busy
 
     service, sessions_service, events_service = _make_service()
     sessions_service.try_acquire_session_run.return_value = (False, "already_in_run")
@@ -190,6 +192,7 @@ def test_prepare_run_returns_busy_when_lock_held():
         files=None,
         images=None,
         workspace_paths=None,
+        structure_selections=None,
         event_writer=lambda t, i: {},
         id_prefix="trig_",
         mode="direct",
@@ -216,6 +219,7 @@ def test_prepare_run_runs_pre_event_hook_after_lock_before_snapshot():
         files=None,
         images=None,
         workspace_paths=None,
+        structure_selections=None,
         event_writer=lambda t, i: {},
         id_prefix="sse_",
         mode="direct",
@@ -291,9 +295,47 @@ def _make_trigger_service(owner="owner-1"):
     return service, sessions_service, events_service
 
 
-def _trigger_patches(fake_redis):
-    return (
+@contextmanager
+def _redis_and_trigger_preference_patches(
+    fake_redis,
+    *,
+    trigger_enabled=True,
+    node_lifecycle_policy="run_end",
+    node_idle_timeout_seconds=None,
+):
+    from clients.matmaster_platform.runtime_preference import (
+        UserLevelRuntimePreference,
+    )
+
+    with (
         patch("src.services.stream_service.get_redis_dao", return_value=fake_redis),
+        patch(
+            "src.services.stream_service.get_user_level_runtime_preference",
+            return_value=UserLevelRuntimePreference(
+                bohrium_node_lifecycle_policy=node_lifecycle_policy,
+                bohrium_node_idle_timeout_seconds=node_idle_timeout_seconds,
+                programmatic_trigger_enabled=trigger_enabled is True,
+                loaded=trigger_enabled is not None,
+            ),
+        ) as preference_getter,
+    ):
+        yield preference_getter
+
+
+def _trigger_patches(
+    fake_redis,
+    *,
+    trigger_enabled=True,
+    node_lifecycle_policy="run_end",
+    node_idle_timeout_seconds=None,
+):
+    return (
+        _redis_and_trigger_preference_patches(
+            fake_redis,
+            trigger_enabled=trigger_enabled,
+            node_lifecycle_policy=node_lifecycle_policy,
+            node_idle_timeout_seconds=node_idle_timeout_seconds,
+        ),
         patch("src.services.stream_service.notify_post_async"),
         patch(
             "src.services.stream_service.UserService.get_user_info_for_display",
@@ -307,12 +349,88 @@ def _trigger_patches(fake_redis):
 
 
 def test_trigger_run_error_when_no_owner():
-    from src.services.stream_service import TriggerResult
+    from src.services.stream_types import TriggerResult
 
     service, sessions_service, events_service = _make_trigger_service(owner=None)
     res = service.trigger_run("s1", "作业完成", origin="hpc_job")
     assert isinstance(res, TriggerResult)
     assert res.status == "error"
+    events_service.add_history_event.assert_not_called()
+
+
+def test_programmatic_trigger_preference_state_distinguishes_unavailable():
+    from types import SimpleNamespace
+
+    from src.services.programmatic_trigger_preference import (
+        get_programmatic_trigger_enabled_state,
+    )
+
+    assert (
+        get_programmatic_trigger_enabled_state(
+            "u1",
+            preference_getter=lambda _user_id: SimpleNamespace(
+                loaded=True,
+                programmatic_trigger_enabled=True,
+            ),
+        )
+        is True
+    )
+    assert (
+        get_programmatic_trigger_enabled_state(
+            "u1",
+            preference_getter=lambda _user_id: SimpleNamespace(
+                loaded=True,
+                programmatic_trigger_enabled=False,
+            ),
+        )
+        is False
+    )
+    assert (
+        get_programmatic_trigger_enabled_state(
+            "u1",
+            preference_getter=lambda _user_id: SimpleNamespace(
+                loaded=False,
+                programmatic_trigger_enabled=True,
+            ),
+        )
+        is None
+    )
+
+
+def test_programmatic_trigger_bool_wrapper_fails_closed(monkeypatch):
+    from src.services import programmatic_trigger_preference as pref_mod
+
+    monkeypatch.setattr(
+        pref_mod,
+        "get_programmatic_trigger_enabled_state",
+        lambda _user_id: None,
+    )
+
+    assert pref_mod.is_programmatic_trigger_enabled("u1") is False
+
+
+@pytest.mark.parametrize("trigger_enabled", [None, False])
+def test_trigger_run_requires_user_enabled_preference(trigger_enabled):
+    service, sessions_service, events_service = _make_trigger_service()
+    fake_redis = MagicMock()
+    p1, p2, p3, p4 = _trigger_patches(
+        fake_redis,
+        trigger_enabled=trigger_enabled,
+    )
+
+    with p1, p2, p3, p4:
+        res = service.trigger_run(
+            "s1",
+            "作业完成",
+            origin="hpc_job",
+            dedup_key="job:123:done",
+        )
+
+    assert res.status == "error"
+    assert res.reason == "programmatic_trigger_disabled"
+    sessions_service.try_acquire_session_run.assert_not_called()
+    fake_redis.dedup_key_exists.assert_not_called()
+    fake_redis.lpush_agent_run_job.assert_not_called()
     events_service.add_history_event.assert_not_called()
 
 
@@ -344,6 +462,27 @@ def test_trigger_run_enqueues_and_writes_system_event():
     assert pushed["turn_input"]["instruction_tag"] == "system-reminder"
     fake_redis.mark_dedup_key_nx.assert_called_once()
     assert fake_redis.mark_dedup_key_nx.call_args.args[0] == "job:123:done"
+
+
+def test_trigger_run_snapshots_persisted_node_lifecycle_preference():
+    service, _sessions_service, _events_service = _make_trigger_service()
+    fake_redis = MagicMock()
+    fake_redis.dedup_key_exists.return_value = False
+    fake_redis.lpush_agent_run_job.return_value = True
+    p1, p2, p3, p4 = _trigger_patches(
+        fake_redis,
+        node_lifecycle_policy="idle_timeout",
+        node_idle_timeout_seconds=1800,
+    )
+
+    with p1 as preference_getter, p2, p3, p4:
+        result = service.trigger_run("s1", "作业完成", origin="hpc_job")
+
+    assert result.status == "enqueued"
+    job = fake_redis.lpush_agent_run_job.call_args.args[0]
+    assert job["bohrium_node_lifecycle_policy"] == "idle_timeout"
+    assert job["bohrium_node_idle_timeout_seconds"] == 1800
+    preference_getter.assert_called_once_with("owner-1")
 
 
 def test_trigger_run_accepts_workspace_for_programmatic_wakeup():

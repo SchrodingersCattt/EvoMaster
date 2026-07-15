@@ -106,11 +106,11 @@ async def test_source_normalization_on_events():
 
 
 @pytest.mark.asyncio
-async def test_stream_closed_after_run_result():
-    """StreamClosedEvent is dispatched after RunResultEvent."""
+async def test_stream_closed_is_last_event_after_run_result():
+    """StreamClosedEvent is the final user-visible and persisted run event."""
     run_result = RunResultEvent(source='agent', status='completed', reason='natural')
 
-    async with _patched_service([run_result]) as (svc, sse_events, _):
+    async with _patched_service([run_result]) as (svc, sse_events, persist_events):
         await svc.run_agent(
             session_id='s1',
             user_prompt='hi',
@@ -128,6 +128,8 @@ async def test_stream_closed_after_run_result():
     sc = stream_closed[0]
     assert sc.task_completed is True
     assert sc.end_reason == 'natural'
+    assert sse_events[-1] is sc
+    assert getattr(persist_events[-1], 'type', None) == 'stream_closed'
 
 
 @pytest.mark.asyncio
@@ -416,4 +418,5 @@ async def test_run_agent_runs_bohrium_cleanup_after_success():
         session_id="s1",
         pg_for_run=pg_for_run,
         ssh_attached=False,
+        invocation_id="inv-cleanup",
     )

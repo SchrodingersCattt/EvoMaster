@@ -49,7 +49,7 @@ def _mock_events_table():
     return t
 
 
-async def _check_quota_noop(user_id: str):
+async def _check_quota_noop(user_id: str, project_id=None):
     from src.services.quota_service import QuotaStatus
 
     return QuotaStatus(remaining_yuan=10.0, reset_at=None)
@@ -190,11 +190,22 @@ def test_prepare_send_message_captures_turn_input_before_user_event():
         events_service=events_service,
         deploy_state_service=MagicMock(),
     )
+    structure_selections = [
+        {
+            "id": "sel-1",
+            "source_path": "/share/current/POSCAR",
+            "source_format": "vasp",
+            "atoms": [
+                {"order": 1, "element": "C", "cart_coord": [1.0, 2.0, 3.0]},
+            ],
+        }
+    ]
     req = ChatSendRequest(
         content="analyze current",
         files=["https://oss.example.com/chat/new.cif"],
         images=["https://oss.example.com/chat/current.png"],
         workspace_paths=["/share/current/POSCAR"],
+        structure_selections=structure_selections,
     )
 
     with (
@@ -210,8 +221,10 @@ def test_prepare_send_message_captures_turn_input_before_user_event():
         "https://oss.example.com/chat/current.png"
     ]
     assert ctx.job["turn_input"]["workspace_paths"] == ["/share/current/POSCAR"]
+    assert ctx.job["turn_input"]["structure_selections"] == structure_selections
     assert ctx.job["turn_input"]["pre_turn_history_event_id"] == 77
     assert ctx.user_msg["content"] == "analyze current"
+    assert ctx.user_msg["structure_selections"] == structure_selections
     assert "schema_version" not in ctx.user_msg
     events_service.get_latest_scope_event_id.assert_called_once_with("sess-1", None)
     events_service.add_history_event.assert_called_once()
@@ -283,7 +296,8 @@ def test_prepare_send_message_uses_session_submit_confirmation_when_request_omit
 
 def test_generate_send_stream_skips_current_task_in_history_replay():
     """发送流回放历史时不应再次回放当前任务刚落库的 query。"""
-    from src.services.stream_service import ChatStreamService, SendStreamContext
+    from src.services.stream_service import ChatStreamService
+    from src.services.stream_types import SendStreamContext
 
     sessions_service = MagicMock()
     sessions_service.get_session_status_payload.return_value = {
@@ -591,7 +605,8 @@ async def test_sse_frames_match_frontend_contract_without_mysql():
 
 
 def test_generate_send_stream_normalizes_replayed_history_source():
-    from src.services.stream_service import ChatStreamService, SendStreamContext
+    from src.services.stream_service import ChatStreamService
+    from src.services.stream_types import SendStreamContext
 
     sessions_service = MagicMock()
     sessions_service.get_session_status_payload.return_value = {
@@ -655,7 +670,8 @@ def test_generate_send_stream_normalizes_replayed_history_source():
 
 
 def test_generate_send_stream_replay_prefers_run_result_over_response():
-    from src.services.stream_service import ChatStreamService, SendStreamContext
+    from src.services.stream_service import ChatStreamService
+    from src.services.stream_types import SendStreamContext
 
     sessions_service = MagicMock()
     sessions_service.get_session_status_payload.return_value = {
@@ -732,8 +748,8 @@ def test_generate_send_stream_replay_prefers_run_result_over_response():
         "run_result",
         "query",
     ]
-    assert frames[2]["final_content"] == "old answer"
-    assert frames[2]["status"] == "completed"
+    assert frames[2]["content"]["content"] == "old answer"
+    assert frames[2]["content"]["status"] == "completed"
     assert frames[3]["content"] == "new question"
     events_service.get_session_events.assert_called_with(
         "sess-1", include_spawn=True, exclude_types=REPLAY_DISCARDED_EVENT_TYPES
@@ -742,7 +758,8 @@ def test_generate_send_stream_replay_prefers_run_result_over_response():
 
 def test_generate_send_stream_replay_keeps_intermediate_response():
     """终态去重只隐藏最终答案副本：tool_call 前的中间 response 在刷新回放中保留。"""
-    from src.services.stream_service import ChatStreamService, SendStreamContext
+    from src.services.stream_service import ChatStreamService
+    from src.services.stream_types import SendStreamContext
 
     sessions_service = MagicMock()
     sessions_service.get_session_status_payload.return_value = {
@@ -849,12 +866,13 @@ def test_generate_send_stream_replay_keeps_intermediate_response():
         "query",
     ]
     assert frames[2]["content"] == "let me check the files"
-    assert frames[5]["final_content"] == "old answer"
+    assert frames[5]["content"]["content"] == "old answer"
     assert frames[6]["content"] == "new question"
 
 
 def test_generate_send_stream_subscribes_before_enqueue():
-    from src.services.stream_service import ChatStreamService, SendStreamContext
+    from src.services.stream_service import ChatStreamService
+    from src.services.stream_types import SendStreamContext
 
     sessions_service = MagicMock()
     sessions_service.get_session_status_payload.return_value = {

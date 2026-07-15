@@ -1,12 +1,12 @@
 """LLM 金额计费上报 HTTP 客户端（瘦客户端）。
 
-只负责把一次 LLM 调用的 usage 事件 POST 给 matmaster-tools-server
-（POST /api/v1/billing/usage），并按需返回当次定价金额。定价、用量流水、对账等
-权威逻辑都在 tools-server 侧，这里不落本地账单表。
+只负责把一次 LLM 调用的 usage 事件 POST 给 MatMaster 平台
+（POST /api/v1/billing/usage），并按需返回当次定价金额。定价、用量流水、
+对账等权威逻辑都在平台侧，这里不落本地账单表。
 
-本模块只依赖 aiohttp + utils.env，不依赖 matmaster / src 业务，放在与 src 并列的
-clients/ 顶层，供 src（线上 Worker）、matmaster.devshell、evaluation 共用，避免
-matmaster 反向 import src（见 tests/matmaster/test_import_audit.py）。
+本模块只依赖 aiohttp + utils.env，不依赖 matmaster / src 业务，供 src（线上
+Worker）、matmaster.devshell、evaluation 共用，避免 matmaster 反向 import src
+（见 tests/matmaster/test_import_audit.py）。
 """
 
 from __future__ import annotations
@@ -20,13 +20,26 @@ from typing import Any, Literal
 
 import aiohttp
 
-from utils.env import MATMASTER_TOOLS_SERVER
+from utils.env import MATMASTER_TOOLS_INTERNAL_BEARER, MATMASTER_TOOLS_SERVER
 
 logger = logging.getLogger(__name__)
 
 _REQUEST_TIMEOUT_SECONDS = 5.0
 
-# tools-server 接受的计费模式：platform 扣额度；byok/eval 仅记账（eval 额外定价）。
+
+def _auth_headers(extra: dict[str, str] | None = None) -> dict[str, str]:
+    """内网机器接口鉴权头：带上统一服务 Bearer（缺配置则不带，由服务端拒绝）。
+
+    与 tools-server ``require_internal_service_token`` 对齐；token 见
+    ``utils.env.MATMASTER_TOOLS_INTERNAL_BEARER``（迁移期回落 BYOK bearer）。
+    """
+    headers = dict(extra or {})
+    if MATMASTER_TOOLS_INTERNAL_BEARER:
+        headers["Authorization"] = f"Bearer {MATMASTER_TOOLS_INTERNAL_BEARER}"
+    return headers
+
+
+# 平台接受的计费模式：platform 扣额度；byok/eval 仅记账（eval 额外定价）。
 BillingMode = Literal["platform", "byok", "eval"]
 
 
@@ -38,7 +51,7 @@ class BillingRunContext:
 
 
 class BillingService:
-    """把一次 LLM 调用的 usage 事件上报给 tools-server 计费服务。"""
+    """把一次 LLM 调用的 usage 事件上报给平台计费服务。"""
 
     def __init__(
         self,
@@ -73,7 +86,7 @@ class BillingService:
     ) -> dict[str, Any] | None:
         """POST 一次 usage 事件，返回响应 ``data``（含 ``recorded`` 与定价金额），失败返回 None。
 
-        定价字段见 tools-server ``UsageIngestData``：``total_amount_micro`` /
+        定价字段见平台 ``UsageIngestData``：``total_amount_micro`` /
         ``total_amount_settle_micro`` / ``pricing_status`` 等。网络/服务异常在此吞掉
         并记 warning，避免影响调用方主链路。
         """
@@ -89,7 +102,7 @@ class BillingService:
             "model": model,
             "usage": usage,
         }
-        # 仅在非默认（platform）时显式带上；tools-server 缺省即 platform，保持向后兼容。
+        # 仅在非默认（platform）时显式带上；平台缺省即 platform，保持向后兼容。
         if billing_mode and billing_mode != "platform":
             payload["billing_mode"] = billing_mode
         url = f"{self._base_url}/api/v1/billing/usage"
@@ -98,7 +111,7 @@ class BillingService:
             async with self._session(session) as http:
                 async with http.post(
                     url,
-                    headers={"Content-Type": "application/json"},
+                    headers=_auth_headers({"Content-Type": "application/json"}),
                     json=payload,
                     timeout=timeout,
                 ) as resp:
@@ -135,13 +148,7 @@ class BillingService:
         billing_mode: BillingMode = "eval",
         session: aiohttp.ClientSession | None = None,
     ) -> dict[str, Any] | None:
-        """上报一次 usage 并返回当次定价结果（含 ``total_amount_micro`` 等），失败返回 None。
-
-        统一上报入口（POST /billing/usage），返回完整响应 ``data``（含定价金额与
-        ``recorded``）。两类用途：① 评测侧（缺省 ``billing_mode='eval'``，记账并定价但不扣额度）按 call
-        攒成本明细；② 线上 in-run 成本熔断（传 ``billing_mode='platform'``，照常扣费记账）
-        据 ``total_amount_settle_micro`` 累加本次 run 已花成本。
-        """
+        """上报一次 usage 并返回当次定价结果（含 ``total_amount_micro`` 等），失败返回 None。"""
         return await self._post_usage(
             run_context=run_context,
             model=model,
@@ -170,9 +177,19 @@ class BillingService:
         try:
             async with self._session(session) as http:
                 async with http.get(
-                    url, params={"invocation_id": invocation_id}, timeout=timeout
+                    url,
+                    params={"invocation_id": invocation_id},
+                    headers=_auth_headers(),
+                    timeout=timeout,
                 ) as resp:
                     if resp.status >= 400:
+                        # 与 POST 上报对齐：4xx（含鉴权 401/403）须留痕，否则 bearer 配错
+                        # 会让本查询彻底静默，难以排障。
+                        logger.warning(
+                            "billing run cost query failed status=%s invocation_id=%s",
+                            resp.status,
+                            invocation_id,
+                        )
                         return None
                     data = (await resp.json() or {}).get("data")
                     return data or None

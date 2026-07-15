@@ -35,12 +35,13 @@ class ChatEventsService:
         source = normalize_event_source(payload.get('source', 'System'))
         event_type = payload.get('type', 'unknown')
         content = payload.get('content', '')
-        # User/query 带附件元数据时存成 { content, files?, images?, workspace_paths?, session_directory?, session_directory_source? }，
+        # User/query 带附件元数据时存成 { content, files?, images?, workspace_paths?, structure_selections?, ... }，
         # 以便读回时前端分开展示，agent 历史恢复也能拿到结构化图片输入和目录信息。
         query_metadata_keys = (
             'files',
             'images',
             'workspace_paths',
+            'structure_selections',
             'session_directory',
             'session_directory_source',
             'requested_llm',
@@ -58,6 +59,8 @@ class ChatEventsService:
                 content['images'] = list(payload['images'])
             if payload.get('workspace_paths'):
                 content['workspace_paths'] = list(payload['workspace_paths'])
+            if payload.get('structure_selections'):
+                content['structure_selections'] = list(payload['structure_selections'])
             if payload.get('session_directory'):
                 content['session_directory'] = payload['session_directory']
             if payload.get('session_directory_source'):

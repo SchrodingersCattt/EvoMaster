@@ -58,7 +58,7 @@ def _assert_encrypted(items: list[dict], label: str) -> None:
 async def main() -> None:
     base_url = os.environ["LITELLM_PROXY_RESPONSES_BASE"]
     api_key = os.environ["LITELLM_PROXY_API_KEY"]
-    model = "matmaster/gpt-5.5"
+    model = "matmaster/gpt-5.6-sol"
     tools = [
         {
             "type": "function",

@@ -23,6 +23,8 @@ def _run_one_round(
     submit_confirmation_required=False,
     max_runtime_seconds=None,
     node_sku_id=None,
+    node_lifecycle_policy=None,
+    node_idle_timeout_seconds=None,
 ):
     """注入全部外部依赖，跑一轮循环，返回 (有序调用名列表, run_agent 收到的 kwargs)。"""
     calls: list[str] = []
@@ -38,6 +40,8 @@ def _run_one_round(
         "bohrium_submit_confirmation_required": submit_confirmation_required,
         "bohrium_job_max_runtime_seconds": max_runtime_seconds,
         "bohrium_node_sku_id": node_sku_id,
+        "bohrium_node_lifecycle_policy": node_lifecycle_policy,
+        "bohrium_node_idle_timeout_seconds": node_idle_timeout_seconds,
     }
 
     fake_redis = MagicMock()
@@ -60,6 +64,7 @@ def _run_one_round(
     async def fake_run_agent(**kwargs):
         calls.append("run_agent")
         received.update(kwargs)
+        agent_worker._drain_requested = True
         if run_agent_exc is not None:
             raise run_agent_exc
         return (run_result, 5, None)
@@ -91,7 +96,7 @@ def _run_one_round(
     monkeypatch.setattr(agent_worker, "UserService", fake_user_service)
     monkeypatch.setattr(agent_worker, "get_worker_registry_service", MagicMock())
     monkeypatch.setattr(agent_worker, "notify_post_async", lambda *a, **k: None)
-    monkeypatch.setattr(agent_worker, "_drain_requested", True)
+    monkeypatch.setattr(agent_worker, "_drain_requested", False)
 
     agent_worker._run_worker_loop()
     return calls, received
@@ -180,3 +185,29 @@ def test_bohrium_node_sku_id_passed_to_run_agent(monkeypatch):
     )
 
     assert received["bohrium_node_sku_id"] == 12345
+
+
+def test_bohrium_node_lifecycle_snapshot_passed_to_run_agent(monkeypatch):
+    _, received = _run_one_round(
+        monkeypatch,
+        snapshot_obj=object(),
+        run_result=True,
+        node_lifecycle_policy="idle_timeout",
+        node_idle_timeout_seconds=1800,
+    )
+
+    assert received["bohrium_node_lifecycle_policy"] == "idle_timeout"
+    assert received["bohrium_node_idle_timeout_seconds"] == 1800
+
+
+def test_invalid_worker_lifecycle_snapshot_falls_back_to_run_end(monkeypatch):
+    _, received = _run_one_round(
+        monkeypatch,
+        snapshot_obj=object(),
+        run_result=True,
+        node_lifecycle_policy="forever",
+        node_idle_timeout_seconds=60,
+    )
+
+    assert received["bohrium_node_lifecycle_policy"] == "run_end"
+    assert received["bohrium_node_idle_timeout_seconds"] is None

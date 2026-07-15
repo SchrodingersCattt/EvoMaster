@@ -12,11 +12,15 @@ import time
 import uuid
 from collections.abc import Callable
 from contextlib import aclosing
+from dataclasses import replace
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
-from clients.billing.client import BillingRunContext, get_billing_service
+from clients.matmaster_platform.billing.client import (
+    BillingRunContext,
+    get_billing_service,
+)
 from matmaster.config.loader import load_agents_general_llm
 from matmaster.context.sources.turn_input import TurnInput
 from matmaster.core.playground import PlaygroundManager
@@ -43,6 +47,7 @@ from src.services.agent_run_history_wiring import build_history_wiring
 from src.services.billing_llm_provider import (
     COST_GUARD_CANCEL_REASON,
     BillingLLMProvider,
+    BillingRunState,
 )
 from src.services.bohrium_delivery_ack import DeliverySnapshot
 from src.services.bohrium_jobs_wiring import build_bohrium_jobs_ports
@@ -51,6 +56,7 @@ from src.services.history_checkpoint_service import HistoryCheckpointService
 from src.services.image_input_service import get_image_input_service
 from src.services.quota_service import check_quota_status
 from src.services.sessions_service import get_sessions_service
+from src.services.tool_timeout_alert_service import FeishuToolTimeoutObserver
 from src.services.user_turn_context_service import (
     write_user_turn_context_event as _persist_utc_event,
 )
@@ -69,15 +75,20 @@ _project_root = Path(__file__).resolve().parent.parent.parent
 RUN_ID_WEB = "mat_master_web"
 
 
-async def _resolve_run_budget_micro(user_id: str) -> int | None:
+async def _resolve_run_budget_micro(
+    user_id: str, project_id: int | str | None = None
+) -> int | None:
     """查启动时可用额度作 in-run 成本熔断预算（含宽限）；不可用返回 None（不熔断）。
 
     预算 = available_micro ×(1 + COST_GUARD_GRACE_RATIO)。available_micro 为 None
-    （旧 tools-server / 查询失败）或查询抛错时返回 None：熔断退化关闭，仍由发送前闸口
+    （旧平台接口 / 查询失败）或查询抛错时返回 None：熔断退化关闭，仍由发送前闸口
     兜底，绝不因预算查询失败阻断 run。
+
+    project_id：传入时平台把项目 org 钱包可用余额并入 available_micro（实扣瀑布
+    含 org_wallet），否则项目付钱的长任务会被熔断按「个人预算」提前掐掉。
     """
     try:
-        status = await check_quota_status(user_id)
+        status = await check_quota_status(user_id, project_id=project_id)
     except Exception:
         logger.warning("resolve run budget failed user_id=%s", user_id, exc_info=True)
         return None
@@ -87,6 +98,31 @@ async def _resolve_run_budget_micro(user_id: str) -> int | None:
 
 
 _MATMASTER_CONFIG_DIR = _project_root / "config"
+
+
+def make_subagent_provider_factory(
+    *,
+    llm_config,
+    run_context,
+    billing_service,
+    billing_state,
+):
+    """构造 subagent provider factory：按 profile_key 解析并包计费，共享 run_state。"""
+    from matmaster.providers.llm_factory import build_provider_bundle
+
+    def factory(*, profile_key: str):
+        bundle = build_provider_bundle(llm_config, model_override=profile_key)
+        wrapped = BillingLLMProvider(
+            bundle.provider,
+            run_context=run_context,
+            model=bundle.model,
+            billing_service=billing_service,
+            billing_mode="platform",
+            run_state=billing_state,
+        )
+        return replace(bundle, provider=wrapped)
+
+    return factory
 
 
 @lru_cache(maxsize=1)
@@ -270,6 +306,8 @@ class AgentRunService:
         submit_confirmation_enabled: bool = False,
         bohrium_job_max_runtime_seconds: int | None = None,
         bohrium_node_sku_id: int | None = None,
+        bohrium_node_lifecycle_policy: str = "run_end",
+        bohrium_node_idle_timeout_seconds: int | None = None,
     ) -> tuple[bool | tuple[bool, str], int, dict[str, Any] | None]:
         """Execute agent pipeline using generator event stream with fanout dispatch.
 
@@ -371,6 +409,9 @@ class AgentRunService:
                 bohrium_required=bohrium_required,
                 workspace=workspace,
                 bohrium_node_sku_id=bohrium_node_sku_id,
+                bohrium_node_lifecycle_policy=bohrium_node_lifecycle_policy,
+                bohrium_node_idle_timeout_seconds=(bohrium_node_idle_timeout_seconds),
+                invocation_id=invocation_id,
             )
             bohrium_svc = stage_result.bohrium_svc
             if stage_result.abort_result is not None:
@@ -396,8 +437,8 @@ class AgentRunService:
 
             byok_id = (byok_credential_id or "").strip() or None
             if byok_id:
-                # BYOK：凭证由 tools-server 下发，绕开 llm_config / routes，用户自付不扣额度。
-                from clients.llm_credential_client import (
+                # BYOK：凭证由 MatMaster 平台下发，绕开 llm_config / routes，用户自付不扣额度。
+                from clients.matmaster_platform.llm_credentials import (
                     ByokCredentialError,
                     fetch_byok_credential,
                 )
@@ -442,24 +483,38 @@ class AgentRunService:
                 billing_mode = "platform"
             llm_provider = llm_bundle.provider
             # in-run 成本熔断预算（防线二）：仅 platform 计费且有取消句柄时启用。
-            # 预算查询失败/旧 tools-server 不返回 available_micro -> None（不熔断，
+            # 预算查询失败/旧平台接口不返回 available_micro -> None（不熔断，
             # 退化为只靠发送前闸口），绝不阻断 run。
             budget_micro = None
             if billing_mode == "platform" and cancel_controller is not None and user_id:
-                budget_micro = await _resolve_run_budget_micro(user_id)
+                # 项目归属从会话行取（本 run 的计费归属就是它）；读不到按 None，
+                # 预算退化为个人口径，绝不因此阻断 run。
+                try:
+                    _row = self._sessions_service.get_session(session_id) or {}
+                    run_project_id = _row.get("project_id")
+                except Exception:  # noqa: BLE001 - 预算查询失败不阻断 run
+                    run_project_id = None
+                budget_micro = await _resolve_run_budget_micro(
+                    user_id, project_id=run_project_id
+                )
+            billing_state = BillingRunState(
+                session_id=session_id,
+                budget_micro=budget_micro,
+                cancel_controller=cancel_controller,
+            )
+            billing_run_context = BillingRunContext(
+                session_id=session_id,
+                task_id=task_id,
+                invocation_id=invocation_id,
+            )
             try:
                 llm_provider = BillingLLMProvider(
                     llm_provider,
-                    run_context=BillingRunContext(
-                        session_id=session_id,
-                        task_id=task_id,
-                        invocation_id=invocation_id,
-                    ),
+                    run_context=billing_run_context,
                     model=llm_bundle.model,
                     billing_service=get_billing_service(),
                     billing_mode=billing_mode,
-                    budget_micro=budget_micro,
-                    cancel_controller=cancel_controller,
+                    run_state=billing_state,
                 )
             except Exception:
                 logger.warning(
@@ -572,6 +627,14 @@ class AgentRunService:
                 job_context_mode=job_context_mode,
                 delivery_snapshot=delivery_snapshot,
             )
+            subagent_provider_factory = None
+            if billing_mode == "platform":
+                subagent_provider_factory = make_subagent_provider_factory(
+                    llm_config=llm_config,
+                    run_context=billing_run_context,
+                    billing_service=get_billing_service(),
+                    billing_state=billing_state,
+                )
             agent_run_ctx = AgentRunContext(
                 environment=environment,
                 request=AgentRunRequest(
@@ -601,6 +664,8 @@ class AgentRunService:
                         bohrium_job_ledger=bohrium_ledger_port,
                         workspace_jobs=bohrium_jobs_port,
                         submit_approval_gate=submit_approval_gate,
+                        tool_timeout_observer=FeishuToolTimeoutObserver(),
+                        subagent_provider_factory=subagent_provider_factory,
                     ),
                 ),
             )
@@ -685,7 +750,7 @@ class AgentRunService:
                     )
                 )
                 if run_result_event.status == "completed":
-                    # 扣费由 tools-server 侧按金额实时完成（billing usage 上报），
+                    # 扣费由 MatMaster 平台侧按金额实时完成（billing usage 上报），
                     # evo 不再做按次扣减。
                     return (True, _elapsed_ms(), usage_summary)
                 fail_reason = (
@@ -709,13 +774,15 @@ class AgentRunService:
                 elapsed,
             )
             # Cleanup order matters:
-            # 1. Bohrium cleanup -- can still emit events via event bridge
+            # 1. Bohrium cleanup is infrastructure-only. Normal node teardown must
+            #    not append user-visible events after StreamClosedEvent.
             if bohrium_svc:
                 try:
                     await bohrium_svc.run_cleanup(
                         session_id=session_id,
                         pg_for_run=playground,
                         ssh_attached=ssh_attached,
+                        invocation_id=invocation_id,
                     )
                 except Exception:
                     logger.warning("Bohrium cleanup error", exc_info=True)

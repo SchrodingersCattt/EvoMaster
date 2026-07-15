@@ -44,6 +44,8 @@ class ChatEventsTable(BaseTable):
             ev['files'] = content.get('files', [])
             ev['images'] = content.get('images', [])
             ev['workspace_paths'] = content.get('workspace_paths', [])
+            if content.get('structure_selections'):
+                ev['structure_selections'] = content.get('structure_selections')
             if content.get('session_directory'):
                 ev['session_directory'] = content.get('session_directory')
             if content.get('session_directory_source'):
@@ -393,7 +395,7 @@ class ChatEventsTable(BaseTable):
                     # 供刷新后回放时计算 stream_started_at / elapsed_ms
                     if row.get('created_at') is not None:
                         ev['created_at_ms'] = int(row['created_at'].timestamp() * 1000)
-                    # 仅 User/query：存的是 { content, files?, workspace_paths? } 时拆成顶层供前端分开展示。
+                    # 仅 User/query：存的是 { content, files?, workspace_paths?, structure_selections? } 时拆成顶层供前端分开展示。
                     # assistant_state 等事件的 content 也是含 'content' 键的 dict，不可在此拆包，否则会丢掉
                     # tool_calls/meta，并把整段 AssistantMessage 误当成内层字符串传给下游。
                     if (
@@ -406,6 +408,10 @@ class ChatEventsTable(BaseTable):
                         ev['files'] = content.get('files', [])
                         ev['images'] = content.get('images', [])
                         ev['workspace_paths'] = content.get('workspace_paths', [])
+                        if content.get('structure_selections'):
+                            ev['structure_selections'] = content.get(
+                                'structure_selections'
+                            )
                         if content.get('session_directory'):
                             ev['session_directory'] = content.get('session_directory')
                         if content.get('session_directory_source'):
@@ -471,6 +477,8 @@ class ChatEventsTable(BaseTable):
                         'files': content.get('files') or [],
                         'images': content.get('images') or [],
                         'workspace_paths': content.get('workspace_paths') or [],
+                        'structure_selections': content.get('structure_selections')
+                        or [],
                         'mode': content.get('mode') or 'direct',
                         'session_directory': content.get('session_directory'),
                         'session_directory_source': content.get(
@@ -486,6 +494,7 @@ class ChatEventsTable(BaseTable):
                     'files': [],
                     'images': [],
                     'workspace_paths': [],
+                    'structure_selections': [],
                     'mode': 'direct',
                     'session_directory': None,
                     'session_directory_source': 'none',

@@ -104,6 +104,7 @@ class TestAgentWorkerCancellationIntegration:
 
         async def fake_run_agent(**kwargs):
             observed.update(kwargs)
+            mod._drain_requested = True
             return (True, 0)
 
         agent_run_service = MagicMock()
@@ -127,7 +128,7 @@ class TestAgentWorkerCancellationIntegration:
                 bridge_events["stopped"] = True
 
         with (
-            patch.object(mod, "_drain_requested", True),
+            patch.object(mod, "_drain_requested", False),
             patch.object(mod, "_current_session_id", None),
             patch.object(mod, "_active_controller", None, create=True),
             patch.object(mod, "get_redis_dao", return_value=redis_dao),
@@ -164,6 +165,64 @@ class TestAgentWorkerCancellationIntegration:
         assert observed["bohrium_required"] is True
         assert observed["turn_input"] is None
 
+    def test_run_worker_loop_exits_without_polling_when_draining(self) -> None:
+        from src.worker import agent_worker as mod
+
+        redis_dao = MagicMock()
+        redis_dao.get_command_client.return_value = True
+
+        agent_run_service = MagicMock()
+        agent_run_service.init_playground_sync.return_value = None
+
+        with (
+            patch.object(mod, "_drain_requested", True),
+            patch.object(mod, "get_redis_dao", return_value=redis_dao),
+            patch.object(mod, "get_sessions_service", return_value=MagicMock()),
+            patch.object(mod, "get_agent_run_service", return_value=agent_run_service),
+        ):
+            mod._run_worker_loop()
+
+        agent_run_service.init_playground_sync.assert_called_once()
+        redis_dao.blpop_agent_run_job.assert_not_called()
+
+    def test_run_worker_loop_requeues_payload_when_drain_arrives_after_blpop(
+        self,
+    ) -> None:
+        from src.worker import agent_worker as mod
+
+        payload = {
+            "session_id": "sid-1",
+            "task_id": "task-1",
+            "user_prompt": "hello",
+            "mode": "direct",
+        }
+        redis_dao = MagicMock()
+        redis_dao.get_command_client.return_value = True
+
+        def fake_blpop(timeout_sec: int):
+            mod._drain_requested = True
+            return payload
+
+        redis_dao.blpop_agent_run_job.side_effect = fake_blpop
+        redis_dao.lpush_agent_run_job.return_value = True
+
+        sessions_service = MagicMock()
+        agent_run_service = MagicMock()
+        agent_run_service.init_playground_sync.return_value = None
+
+        with (
+            patch.object(mod, "_drain_requested", False),
+            patch.object(mod, "get_redis_dao", return_value=redis_dao),
+            patch.object(mod, "get_sessions_service", return_value=sessions_service),
+            patch.object(mod, "get_agent_run_service", return_value=agent_run_service),
+        ):
+            mod._run_worker_loop()
+
+        redis_dao.blpop_agent_run_job.assert_called_once()
+        redis_dao.lpush_agent_run_job.assert_called_once_with(payload)
+        sessions_service.try_acquire_session_run.assert_not_called()
+        agent_run_service.run_agent.assert_not_called()
+
     def test_main_sigterm_handler_drains_without_cancelling_active_controller(
         self,
     ) -> None:
@@ -195,7 +254,6 @@ class TestAgentWorkerCancellationIntegration:
             patch.object(mod.signal, "signal", side_effect=fake_signal),
             patch.object(mod.threading, "Thread", FakeThread),
             patch.object(mod, "_run_worker_loop", side_effect=fake_run_loop),
-            patch.object(mod, "_publish_run_interrupted_deploy") as publish_mock,
             patch.object(mod, "get_worker_id", return_value="worker-1"),
         ):
             mod.main()
@@ -204,5 +262,4 @@ class TestAgentWorkerCancellationIntegration:
 
         assert captured["signal"] == signal.SIGTERM
         assert captured["thread_started"] is True
-        publish_mock.assert_called_once_with("sid-1")
         active_controller.cancel.assert_not_called()

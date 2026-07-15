@@ -132,13 +132,14 @@ def normalize_response_sse_payload(payload: dict[str, Any]) -> dict[str, Any]:
 
 
 def normalize_replayed_terminal_payload(payload: dict[str, Any]) -> dict[str, Any]:
-    """Lift persisted run_result/finish content fields back to the live SSE shape.
+    """Strip persist-only model identity from replayed terminal content.
 
-    The live path lifts these fields to the top level via
-    ``_carry_top_level_fields``, but persistence stores only the ``content`` dict
-    produced by ``_public_content_for_event``, so replay reconstructs the
-    top-level shape here. Counterpart of ``normalize_response_sse_payload`` for
-    terminal event payloads.
+    Replay and live share one contract: business fields stay in ``content``
+    only and are never duplicated at the top level. Persistence retains the
+    terminal model identity for backend analysis, so replay strips
+    ``_MODEL_IDENTITY_KEYS`` from the content before the download reaches the
+    frontend. Counterpart of ``normalize_response_sse_payload`` for terminal
+    event payloads.
     """
     if payload.get('type') not in _TERMINAL_EVENT_TYPES:
         return payload
@@ -148,17 +149,8 @@ def normalize_replayed_terminal_payload(payload: dict[str, Any]) -> dict[str, An
         return payload
 
     normalized = dict(payload)
-    normalized['final_content'] = content.get('content') or ''
-    for key in (
-        'status',
-        'reason',
-        'finish_detail',
-        'num_turns',
-        'usage',
-        *_MODEL_IDENTITY_KEYS,
-    ):
-        if content.get(key) is not None:
-            normalized[key] = content[key]
+    content = {k: v for k, v in content.items() if k not in _MODEL_IDENTITY_KEYS}
+    normalized['content'] = content
     return normalized
 
 
@@ -249,9 +241,13 @@ class PublicInteractionSseEnvelope(BaseModel):
 
 
 def _public_content_for_event(
-    event_type: str, payload: dict[str, Any]
+    event_type: str, payload: dict[str, Any], *, for_persistence: bool = False
 ) -> object | None:
-    """Adapt internal event payloads to the frontend SSE contract."""
+    """Adapt internal event payloads to the frontend SSE contract.
+
+    ``for_persistence`` keeps persist-only fields (terminal model identity)
+    that are deliberately withheld from the live SSE / replay download.
+    """
     if event_type == 'response':
         return _response_public_content(payload)
 
@@ -357,6 +353,11 @@ def _public_content_for_event(
             content['num_turns'] = payload['num_turns']
         if payload.get('usage'):
             content['usage'] = payload['usage']
+        # Model identity is persist-only: stored for backend analysis but
+        # withheld from the live SSE / replay download (stripped again in
+        # normalize_replayed_terminal_payload).
+        if for_persistence:
+            _copy_nonempty_keys(content, payload, _MODEL_IDENTITY_KEYS)
         # usage_vendor_by_turn (per-turn vendor detail) is intentionally NOT
         # projected into the public payload: it is consumed only by the
         # in-process drain (eval / devshell) via the event object, never by the

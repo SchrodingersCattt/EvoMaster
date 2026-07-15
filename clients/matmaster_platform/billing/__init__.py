@@ -1,11 +1,11 @@
-"""matmaster-tools-server 计费上报客户端。"""
+"""MatMaster platform billing clients."""
 
-from clients.billing.client import (
+from clients.matmaster_platform.billing.client import (
     BillingRunContext,
     BillingService,
     get_billing_service,
 )
-from clients.billing.usage_reporter import BillingUsageReporter
+from clients.matmaster_platform.billing.usage_reporter import BillingUsageReporter
 
 __all__ = [
     "BillingRunContext",

@@ -3,7 +3,10 @@ from __future__ import annotations
 import pytest
 
 from src.services import bohrium_node_service as node_module
-from src.services.bohrium_node_service import BohriumNodeService
+from src.services.bohrium_node_service import (
+    BohriumNodeNotFoundError,
+    BohriumNodeService,
+)
 from src.utils.logger import LogContext
 
 
@@ -67,6 +70,10 @@ class _FakeClient:
 
     def post(self, url: str, *, headers: dict, json: dict) -> _FakeResponse:
         self._captured.update({"url": url, "headers": headers, "json": json})
+        return self._response
+
+    def get(self, url: str, *, params: dict, headers: dict) -> _FakeResponse:
+        self._captured.update({"url": url, "params": params, "headers": headers})
         return self._response
 
 
@@ -164,3 +171,126 @@ def test_create_node_records_platform_code_failure(
     assert len(span.exceptions) == 1
     assert "record not found" in str(span.exceptions[0])
     assert "secret-ak" not in span.attributes["bohrium.request.body_json"]
+
+
+def test_stop_node_uses_pause_contract_instead_of_delete(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+
+    class _StopResponse(_FakeResponse):
+        content = b'{"code": 0}'
+
+    monkeypatch.setattr(
+        node_module.httpx,
+        "Client",
+        lambda timeout: _FakeClient(_StopResponse({"code": 0}), captured),
+    )
+
+    _service().stop_node("secret-ak", 123, 42, creator_id=110680)
+
+    assert captured["url"].endswith("/openapi/v1/node/stop/123")
+    assert captured["json"] == {
+        "creatorId": 110680,
+        "projectId": 42,
+        "device": "container",
+        "stopType": 1,
+    }
+
+
+def test_stop_node_reports_provider_deleted_node(monkeypatch: pytest.MonkeyPatch):
+    captured: dict[str, object] = {}
+
+    class _MissingResponse(_FakeResponse):
+        content = b'{"code": 404}'
+        status_code = 404
+
+    monkeypatch.setattr(
+        node_module.httpx,
+        "Client",
+        lambda timeout: _FakeClient(_MissingResponse({"code": 404}), captured),
+    )
+
+    with pytest.raises(BohriumNodeNotFoundError):
+        _service().stop_node("secret-ak", 123, 42, creator_id=110680)
+
+
+def test_node_list_log_redacts_access_key(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    captured: dict[str, object] = {}
+    response = _FakeResponse(
+        {
+            "code": 0,
+            "data": {
+                "items": [
+                    {
+                        "nodeId": 123,
+                        "status": 2,
+                        "imageName": "matmaster:v1",
+                    }
+                ]
+            },
+        }
+    )
+    monkeypatch.setattr(
+        node_module.httpx,
+        "Client",
+        lambda timeout: _FakeClient(response, captured),
+    )
+    caplog.set_level("INFO", logger=node_module.__name__)
+
+    detail = _service().get_node_detail("secret-ak", 123)
+
+    assert detail is not None
+    assert captured["headers"]["accessKey"] == "secret-ak"
+    assert "accessKey: <redacted>" in caplog.text
+    assert "secret-ak" not in caplog.text
+
+
+def test_wait_until_ready_timeout_reports_last_sanitized_observation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+    response = _FakeResponse(
+        {
+            "code": 0,
+            "data": {
+                "items": [
+                    {
+                        "nodeId": 123,
+                        "status": 1,
+                        "startingUpMsg": "waiting for capacity",
+                        "errCode": 203901,
+                        "ip": "10.0.0.1",
+                        "nodePwd": "secret-password",
+                    }
+                ]
+            },
+        }
+    )
+    monotonic_values = iter((100.0, 100.1, 100.6))
+    monkeypatch.setattr(
+        node_module.httpx,
+        "Client",
+        lambda timeout: _FakeClient(response, captured),
+    )
+    monkeypatch.setattr(node_module.time, "monotonic", lambda: next(monotonic_values))
+
+    with pytest.raises(TimeoutError) as exc_info:
+        _service().wait_until_ready(
+            "secret-ak",
+            123,
+            poll_interval=0,
+            timeout=0.5,
+        )
+
+    message = str(exc_info.value)
+    assert "found=True" in message
+    assert "last_status=1" in message
+    assert "starting_up_msg='waiting for capacity'" in message
+    assert "error_code=203901" in message
+    assert "secret-ak" not in message
+    assert "secret-password" not in message
+    assert "10.0.0.1" not in message

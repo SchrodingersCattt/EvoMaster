@@ -3,6 +3,8 @@ description = "Read-only exploration subagent for searching files, reading code,
 when_to_use = "Use only when the parent agent needs to orient itself in the current materials-computation workspace before planning or acting: identify the relevant directories, entry points, configs, data/structure assets, environment definitions, and likely execution path for the specific task."
 read_only = true
 visible_as_subagent = true
+# Subagent-only model profile override. Leave commented to inherit parent agent.
+# llm = "matmaster/DeepSeek-v4-Pro"
 context_mode = "fresh"
 result_style = "findings"
 max_turns = 200

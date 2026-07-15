@@ -34,12 +34,13 @@ from matmaster.context.user_turn_context import (
     USER_CONTEXT_RENDER_VERSION,
     USER_TURN_CONTEXT_SCHEMA_VERSION,
 )
+from matmaster.core.child_llm import _resolve_child_run_ctx
 from matmaster.core.hooks import HookExecutor
 from matmaster.core.path_access import derive_path_access_roots
 from matmaster.core.run_context import AgentRunContext
+from matmaster.core.run_identity import build_run_identity
 from matmaster.tools.tool_registry import ToolRegistry
 from matmaster.types.cancellation import CancellationToken
-from matmaster.types.run_metadata import RunIdentity
 from matmaster.types.runtime import (
     AgentKernelResources,
     AgentKernelRuntime,
@@ -179,31 +180,21 @@ class Exp:
         ) -> AsyncIterator[Any]:
             from matmaster.config.loader import load_exp_config
 
+            child_cfg = load_exp_config(exp_name)
             child_exp = Exp(
-                load_exp_config(exp_name),
+                child_cfg,
                 allow_spawn=False,
                 inherited_skill_cache=skill_cache,
             )
+            child_ctx = _resolve_child_run_ctx(ctx, child_cfg)
             return child_exp.run_stream(
-                ctx,
+                child_ctx,
                 task,
                 cancel_token=cancel_token,
                 spawn_id=spawn_id,
             )
 
         return child_run_factory
-
-    @staticmethod
-    def _build_run_identity(
-        ctx: AgentRunContext,
-        *,
-        spawn_id: str | None,
-    ) -> RunIdentity:
-        return RunIdentity(
-            task_id=ctx.environment.metadata.task_id,
-            session_id=ctx.environment.session_id,
-            spawn_id=spawn_id,
-        )
 
     @staticmethod
     def _derive_active_planes(
@@ -383,19 +374,30 @@ class Exp:
         capability_policy = DefaultCapabilityPolicy()
         scheduler = ToolScheduler()
         runner_state = ToolRunnerState()
+        run_identity = build_run_identity(ctx, spawn_id=spawn_id)
         figure_upload_config = request.ports.figure_upload.config
         if figure_upload_config is not None:
             runner_state.set("figure_upload_config", figure_upload_config)
+        tool_timeout_observer = request.ports.tool_timeout_observer
+        if tool_timeout_observer is not None:
+            from matmaster.core.tool_timeout_observer import (
+                install_tool_timeout_observer_hooks,
+            )
+
+            install_tool_timeout_observer_hooks(
+                hook_executor=hook_executor,
+                observer=tool_timeout_observer,
+                run_identity=run_identity,
+                logger=self.logger,
+            )
         submit_approval_gate = request.ports.submit_approval_gate
         if submit_approval_gate is not None and spawn_id is None:
-            from matmaster.core.submit_review_support import (
-                install_submit_review_hooks,
-            )
+            from matmaster.core.submit_review_support import install_submit_review_hooks
 
             install_submit_review_hooks(
                 runner_state=runner_state,
                 hook_executor=hook_executor,
-                run_identity=self._build_run_identity(ctx, spawn_id=spawn_id),
+                run_identity=run_identity,
                 submit_approval_gate=submit_approval_gate,
             )
         self._register_cleanup(runner_state.clear)
@@ -420,7 +422,7 @@ class Exp:
             system_prompt=system_prompt,
             max_turns=self._config.max_turns,
             compaction=compaction,
-            run_identity=self._build_run_identity(ctx, spawn_id=spawn_id),
+            run_identity=run_identity,
             llm_model=request.llm_model,
             llm_model_profile=request.llm_model_profile,
             llm_model_route=request.llm_model_route,

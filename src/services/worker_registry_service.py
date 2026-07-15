@@ -62,18 +62,23 @@ class WorkerRegistryService:
 
     def get_session_run_owner(self, session_id: str) -> str | None:
         """返回该会话当前 run 所在 worker_id，无或失败返回 None。"""
+        ok, owner = self.get_session_run_owner_state(session_id)
+        return owner if ok else None
+
+    def get_session_run_owner_state(self, session_id: str) -> tuple[bool, str | None]:
+        """三态读取 run owner：ok=False 表示 Redis 不可用或异常；ok=True 且 owner=None 表示无 owner。"""
         client = get_redis_dao().get_command_client()
         if not client:
-            return None
+            return False, None
         sid = (session_id or '').strip()
         if not sid:
-            return None
+            return True, None
         try:
             value = client.get(_session_run_owner_key(sid))
-            return (value or '').strip() or None
+            return True, (value or '').strip() or None
         except Exception as e:
             logger.warning('get_session_run_owner failed session_id=%s: %s', sid, e)
-            return None
+            return False, None
 
     def delete_session_run_owner(self, session_id: str) -> None:
         """清除该会话的 run owner。release 时调用。"""
@@ -126,9 +131,13 @@ class WorkerRegistryService:
 
     def is_worker_alive(self, worker_id: str) -> bool:
         """该 worker 的存活 key 是否仍存在（未过期）。用于区分「别的 pod 在跑」与「已重启的旧 pid」。"""
+        return bool(self.get_worker_alive_state(worker_id))
+
+    def get_worker_alive_state(self, worker_id: str) -> bool | None:
+        """三态读取 worker alive：True=存活 / False=不存在 / None=Redis 不可用或异常。"""
         client = get_redis_dao().get_command_client()
         if not client:
-            return False
+            return None
         wid = (worker_id or '').strip()
         if not wid:
             return False
@@ -136,7 +145,7 @@ class WorkerRegistryService:
             return client.exists(_worker_alive_key(wid)) > 0
         except Exception as e:
             logger.warning('is_worker_alive failed worker_id=%s: %s', wid, e)
-            return False
+            return None
 
 
 @lru_cache(maxsize=1)

@@ -6,7 +6,7 @@ import asyncio
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -98,6 +98,7 @@ def test_successful_setup_returns_execution_binding_and_stores_runtime(
     mock_ssh._env.upload_directory_tarball = MagicMock(return_value=1)
     mock_ssh.remote_project_root = "/remote/proj"
 
+    event_callback = MagicMock()
     with patch.object(arb, "SSHSession", return_value=mock_ssh) as mock_ssh_cls:
         svc = _make_bohrium_service()
         result = svc._setup_bohrium_for_run(
@@ -109,7 +110,7 @@ def test_successful_setup_returns_execution_binding_and_stores_runtime(
             },
             user_id_for_ak="u1",
             org_id="o1",
-            event_callback=MagicMock(),
+            event_callback=event_callback,
             run_started_at=0.0,
             bohrium_node_sku_id=12345,
         )
@@ -140,27 +141,48 @@ def test_successful_setup_returns_execution_binding_and_stores_runtime(
     node_svc.create_node.assert_called_once_with("ak", 99, sku_id=12345)
     nodes_table.insert_node.assert_called_once_with("u1", "o1", 99, 12345, 42)
     assert SESSIONS["sess-ok"]["bohrium_node_reuse_tracked"] is True
+    statuses = [
+        call.args[2]["status"]
+        for call in event_callback.call_args_list
+        if call.args[1] == "bohrium_node"
+    ]
+    assert statuses == [
+        "acquiring",
+        "creating",
+        "starting",
+        "ready",
+        "connecting",
+        "connected",
+    ]
 
 
-def test_cleanup_destroys_created_node_when_reuse_table_insert_fails() -> None:
-    node_svc = MagicMock()
-    nodes_table = MagicMock()
-    nodes_table.find_one_for_reuse.return_value = None
-    nodes_table.list_node_ids_for_user_org.return_value = []
-    nodes_table.insert_node.side_effect = RuntimeError("db down")
+def test_invocation_setup_uses_fenced_lease_and_cleanup_releases_it() -> None:
+    from src.services.bohrium_node_lifecycle import NodeIdentity, NodeLease
 
-    node_svc.create_node.return_value = {"node_id": 42}
-    node_svc.wait_until_ready.return_value = {
-        "ip": "10.0.0.1",
-        "password": "secret",
-    }
+    identity = NodeIdentity("u1", "o1", 99, 12345)
+    lease = NodeLease(
+        identity=identity,
+        node_slot_id=7,
+        node_id=42,
+        session_id="sess-lease",
+        invocation_id="inv-1",
+        lease_token="token-1",
+        ip="10.0.0.1",
+        password="secret",
+    )
+    manager = MagicMock()
 
-    original_session = MagicMock()
-    original_session.is_open = True
+    def acquire_with_progress(*_args: Any, **kwargs: Any) -> Any:
+        report = kwargs["progress_reporter"]
+        report("creating", None, "正在创建 Bohrium 计算节点...")
+        report("starting", 42, "节点已创建，正在等待资源就绪...")
+        return lease
+
+    manager.acquire.side_effect = acquire_with_progress
+    heartbeat = MagicMock()
+    original_session = MagicMock(is_open=True)
     pg = _make_pg(original_session)
-    mock_ssh = MagicMock()
-    mock_ssh.is_open = True
-
+    ssh = MagicMock(is_open=True, remote_project_root="/remote/proj")
     sessions_service = MagicMock()
     sessions_service.get_session.return_value = {
         "user_id": "u1",
@@ -169,229 +191,68 @@ def test_cleanup_destroys_created_node_when_reuse_table_insert_fails() -> None:
     }
 
     with (
-        patch.object(arb, "SSHSession", return_value=mock_ssh),
+        patch.object(arb, "SSHSession", return_value=ssh),
         patch.object(arb, "_run_clear_remote_proxy", MagicMock()),
         patch.object(arb, "_remote_session_workspace_root", return_value="/share"),
-        patch(
-            "src.services.agent_run_bohrium.get_bohrium_node_service",
-            return_value=node_svc,
-        ),
-        patch(
-            "src.services.agent_run_bohrium.get_bohrium_nodes_table",
-            return_value=nodes_table,
-        ),
-        patch(
-            "src.services.agent_run_bohrium.UserService.get_bohrium_access_key",
-            return_value="ak",
-        ),
+        patch.object(arb, "get_bohrium_node_lease_manager", return_value=manager),
+        patch.object(arb, "NodeLeaseHeartbeat", return_value=heartbeat),
+        patch.object(arb.UserService, "get_bohrium_access_key", return_value="ak"),
     ):
+        event_callback = MagicMock()
         svc = _make_bohrium_service(sessions_service)
         result = svc._setup_bohrium_for_run(
-            session_id="sess-untracked",
+            session_id="sess-lease",
             pg=pg,
-            run_creds={
-                "access_key": "ak",
-                "project_id": 99,
-            },
+            run_creds={"access_key": "ak", "project_id": 99},
             user_id_for_ak="u1",
             org_id="o1",
-            event_callback=MagicMock(),
+            event_callback=event_callback,
             run_started_at=0.0,
             bohrium_node_sku_id=12345,
+            invocation_id="inv-1",
+            bohrium_node_lifecycle_policy="idle_timeout",
+            bohrium_node_idle_timeout_seconds=1800,
         )
 
         assert result.ssh_attached is True
-        assert SESSIONS["sess-untracked"]["bohrium_node_reuse_tracked"] is False
+        manager.acquire.assert_called_once_with(
+            identity,
+            session_id="sess-lease",
+            invocation_id="inv-1",
+            access_key="ak",
+            creator_id=arb._creator_id_from_user("u1"),
+            lifecycle_policy="idle_timeout",
+            idle_timeout_seconds=1800,
+            progress_reporter=ANY,
+        )
+        heartbeat.start.assert_called_once_with()
+        statuses = [
+            call.args[2]["status"]
+            for call in event_callback.call_args_list
+            if call.args[1] == "bohrium_node"
+        ]
+        assert statuses == [
+            "acquiring",
+            "creating",
+            "starting",
+            "ready",
+            "connecting",
+            "connected",
+        ]
 
         svc._cleanup_bohrium_after_run(
-            session_id="sess-untracked",
-            event_callback=MagicMock(),
+            session_id="sess-lease",
             pg_for_run=pg,
             ssh_attached=True,
+            invocation_id="inv-1",
         )
 
-    nodes_table.update_last_used_at.assert_not_called()
-    node_svc.destroy_node.assert_called_once_with(
-        "ak",
-        42,
-        99,
+    heartbeat.stop.assert_called_once_with()
+    manager.release.assert_called_once_with(
+        lease,
+        access_key="ak",
         creator_id=arb._creator_id_from_user("u1"),
     )
-
-
-@patch.object(arb, "_run_clear_remote_proxy", MagicMock())
-@patch.object(arb, "_remote_session_workspace_root", return_value="/share")
-@patch("src.services.agent_run_bohrium.get_bohrium_nodes_table")
-@patch("src.services.agent_run_bohrium.get_bohrium_node_service")
-def test_setup_does_not_emit_skills_synced_event(
-    mock_node_svc_factory: MagicMock,
-    mock_nodes_table_factory: MagicMock,
-    mock_remote_workspace_root: MagicMock,
-) -> None:
-    """Bohrium setup no longer owns skill directory sync telemetry."""
-    node_svc = MagicMock()
-    mock_node_svc_factory.return_value = node_svc
-    nodes_table = MagicMock()
-    mock_nodes_table_factory.return_value = nodes_table
-    nodes_table.find_one_for_reuse.return_value = None
-    nodes_table.list_node_ids_for_user_org.return_value = []
-
-    node_svc.create_node.return_value = {"node_id": 42}
-    node_svc.wait_until_ready.return_value = {
-        "ip": "10.0.0.1",
-        "password": "secret",
-    }
-
-    original_session = MagicMock()
-    original_session.is_open = True
-    pg = _make_pg(original_session)
-    event_callback = MagicMock()
-
-    class FakeSSHSession:
-        def __init__(self, config: Any) -> None:
-            self.config = config
-            self.is_open = False
-
-        def open(self) -> None:
-            self.is_open = True
-
-        def close(self) -> None:
-            self.is_open = False
-
-    with patch.object(arb, "SSHSession", new=FakeSSHSession):
-        svc = _make_bohrium_service()
-        result = svc._setup_bohrium_for_run(
-            session_id="sess-no-skill-sync",
-            pg=pg,
-            run_creds={
-                "access_key": "ak",
-                "project_id": 99,
-            },
-            user_id_for_ak="u1",
-            org_id="o1",
-            event_callback=event_callback,
-            run_started_at=0.0,
-        )
-
-    assert result.ssh_attached is True
-    assert not any(
-        call.args[1] == "bohrium_node"
-        and isinstance(call.args[2], dict)
-        and call.args[2].get("status") == "skills_synced"
-        for call in event_callback.call_args_list
-    )
-
-
-@patch.object(arb, "_run_clear_remote_proxy")
-@patch.object(arb, "_remote_session_workspace_root", return_value="/share")
-@patch("src.services.agent_run_bohrium.get_bohrium_nodes_table")
-@patch("src.services.agent_run_bohrium.get_bohrium_node_service")
-def test_setup_failure_after_open_restores_original_and_clears_runtime(
-    mock_node_svc_factory: MagicMock,
-    mock_nodes_table_factory: MagicMock,
-    mock_remote_workspace_root: MagicMock,
-    mock_run_clear_remote_proxy: MagicMock,
-) -> None:
-    """If setup fails after swap/store, restore the original playground session."""
-    node_svc = MagicMock()
-    mock_node_svc_factory.return_value = node_svc
-    nodes_table = MagicMock()
-    mock_nodes_table_factory.return_value = nodes_table
-    nodes_table.find_one_for_reuse.return_value = None
-    nodes_table.list_node_ids_for_user_org.return_value = []
-
-    node_svc.create_node.return_value = {"node_id": 42}
-    node_svc.wait_until_ready.return_value = {
-        "ip": "10.0.0.1",
-        "password": "secret",
-    }
-
-    original_session = MagicMock()
-    original_session.is_open = True
-    pg = _make_pg(original_session)
-
-    mock_ssh = MagicMock()
-    mock_ssh.is_open = True
-
-    def _raise_after_store(pg_obj: object, phase: str) -> None:
-        if phase == "post_ssh":
-            raise RuntimeError("post-store failure")
-
-    with patch.object(arb, "SSHSession", return_value=mock_ssh):
-        mock_run_clear_remote_proxy.side_effect = _raise_after_store
-        event_callback = MagicMock()
-        svc = _make_bohrium_service()
-        result = svc._setup_bohrium_for_run(
-            session_id="sess-fail",
-            pg=pg,
-            run_creds={
-                "access_key": "ak",
-                "project_id": 99,
-            },
-            user_id_for_ak="u1",
-            org_id="o1",
-            event_callback=event_callback,
-            run_started_at=0.0,
-        )
-
-    assert result.ssh_attached is False
-    assert result.abort_result is not None
-    assert pg.session is original_session
-    assert pg._owns_session is True
-    assert "bohrium_runtime" not in SESSIONS.get("sess-fail", {})
-    mock_ssh.open.assert_called_once()
-    mock_ssh.close.assert_called_once()
-    mock_run_clear_remote_proxy.assert_called_once_with(pg, "post_ssh")
-    event_callback.assert_any_call(
-        "System",
-        "bohrium_node",
-        {
-            "status": "failed",
-            "message": "Bohrium 节点创建失败: post-store failure",
-            "node_id": 42,
-        },
-    )
-
-
-@patch("src.services.agent_run_bohrium.get_bohrium_nodes_table")
-@patch("src.services.agent_run_bohrium.get_bohrium_node_service")
-def test_cleanup_restores_when_ssh_attached_false(
-    _mock_node_svc: MagicMock,
-    _mock_nodes_table: MagicMock,
-) -> None:
-    """cleanup_bohrium_after_run restores session/_owns_session from runtime when ssh_attached=False."""
-    original_session = MagicMock()
-    original_session.is_open = True
-    ssh_session = MagicMock()
-    ssh_session.is_open = True
-
-    pg = SimpleNamespace(session=ssh_session, _owns_session=False)
-
-    SESSIONS["sess-x"] = {
-        "bohrium_runtime": {
-            "original_session": original_session,
-            "original_owns_session": True,
-            "ssh_session": ssh_session,
-        },
-        "bohrium_node_id": None,
-    }
-
-    sessions_service = MagicMock()
-    sessions_service.get_session.return_value = None
-    sessions_service.get_session_user_id.return_value = None
-
-    svc = _make_bohrium_service(sessions_service)
-    svc._cleanup_bohrium_after_run(
-        session_id="sess-x",
-        event_callback=MagicMock(),
-        pg_for_run=pg,
-        ssh_attached=False,
-    )
-
-    assert pg.session is original_session
-    assert pg._owns_session is True
-    ssh_session.close.assert_called_once()
-    assert "bohrium_runtime" not in SESSIONS["sess-x"]
 
 
 def test_setup_with_required_bohrium_can_continue_after_retry_success() -> None:

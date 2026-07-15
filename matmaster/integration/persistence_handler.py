@@ -62,8 +62,10 @@ class PersistenceHandler:
 
         # Use the same JSON-safe payload mode as SSEHandler so persistence
         # and live SSE derive content from the same normalized field values.
+        # for_persistence additionally retains terminal model identity for
+        # backend analysis; the live SSE / replay download withholds it.
         payload = event.model_dump(mode='json')
-        content = _public_content_for_event(event_type, payload)
+        content = _public_content_for_event(event_type, payload, for_persistence=True)
 
         try:
             await asyncio.to_thread(

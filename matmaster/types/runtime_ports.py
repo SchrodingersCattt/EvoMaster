@@ -37,7 +37,10 @@ __all__ = [
     "PlaygroundCompactionPort",
     "PreCompactionBarrier",
     "SessionEventHistoryPort",
+    "SubagentProviderFactory",
     "SubmitApprovalGate",
+    "ToolTimeoutNotice",
+    "ToolTimeoutObserver",
     "UserTurnContextWriteRequest",
     "UserTurnContextWriter",
 ]
@@ -143,6 +146,22 @@ class InterruptChecker(Protocol):
     def cleanup(self) -> None: ...
 
 
+@runtime_checkable
+class SubagentProviderFactory(Protocol):
+    """按 profile_key 物化一个 subagent 用的 LLM provider bundle。
+
+    消费者：Exp 的 child_run_factory，在 child config 解析后、run_stream 前调用。
+    返回：每次调用返回全新 bundle，其中 provider 已按当前 run 模式包装，平台
+    模式下含计费。严禁按 profile 缓存复用同一个 bundle，否则并发 spawn 同
+    profile 的两个 subagent 会共用同一个 async context manager 与 HTTP session。
+    返回类型用 Any 以免 types 层反向依赖 providers 层，实际为
+    providers.llm_factory.LLMProviderBundle。profile_key 非法时实现内部抛
+    KeyError，由消费者捕获并回退继承父 provider。
+    """
+
+    def __call__(self, *, profile_key: str) -> Any: ...
+
+
 @dataclass(frozen=True)
 class UserTurnContextWriteRequest:
     session_id: str
@@ -160,6 +179,31 @@ class UserTurnContextWriteRequest:
 @runtime_checkable
 class UserTurnContextWriter(Protocol):
     async def __call__(self, request: UserTurnContextWriteRequest) -> None: ...
+
+
+@dataclass(frozen=True)
+class ToolTimeoutNotice:
+    session_id: str
+    task_id: str | None
+    spawn_id: str | None
+    tool_name: str
+    tool_call_id: str
+    turn: int
+    result_content: str
+    arguments_preview: str
+
+
+@runtime_checkable
+class ToolTimeoutObserver(Protocol):
+    """Observe tool timeouts after tool execution.
+
+    Consumer: service-layer observability integrations such as Feishu alerting.
+    Timing: invoked from the POST_TOOL_CALL observer path after result rewrites.
+    Return: ignored; the observer is for side effects only.
+    Exceptions: implementations should swallow failures; callers also guard and log.
+    """
+
+    def __call__(self, notice: ToolTimeoutNotice) -> Awaitable[None] | None: ...
 
 
 @dataclass(frozen=True)
@@ -183,6 +227,8 @@ class AgentRunPorts:
     bohrium_job_ledger: BohriumJobLedgerPort | None = None
     workspace_jobs: WorkspaceJobsPort | None = None
     submit_approval_gate: SubmitApprovalGate | None = None
+    tool_timeout_observer: ToolTimeoutObserver | None = None
+    subagent_provider_factory: SubagentProviderFactory | None = None
 
 
 @dataclass(frozen=True)

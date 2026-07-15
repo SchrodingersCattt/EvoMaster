@@ -4,7 +4,7 @@ import uuid
 from unittest.mock import MagicMock, patch
 
 
-async def _check_quota_ok(user_id: str):
+async def _check_quota_ok(user_id: str, project_id=None):
     from src.services.quota_service import QuotaStatus
 
     return QuotaStatus(remaining_yuan=10.0, reset_at=None)
@@ -28,7 +28,7 @@ def _clear_overrides(app, *dependencies):
 
 
 def test_internal_trigger_enqueues_with_valid_token():
-    from src.services.stream_service import TriggerStreamContext
+    from src.services.stream_types import TriggerStreamContext
 
     fake_stream = MagicMock()
     fake_stream.prepare_internal_trigger_run.return_value = TriggerStreamContext(
@@ -86,7 +86,7 @@ def test_internal_trigger_enqueues_with_valid_token():
 
 
 def test_internal_trigger_deduped_returns_json_not_stream():
-    from src.services.stream_service import TriggerResult
+    from src.services.stream_types import TriggerResult
 
     fake_stream = MagicMock()
     fake_stream.prepare_internal_trigger_run.return_value = TriggerResult(

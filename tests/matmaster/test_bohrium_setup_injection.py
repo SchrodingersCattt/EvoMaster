@@ -72,6 +72,7 @@ class TestBohriumSetupServiceOrchestration:
                 session_id="session-123",
                 playground=object(),
                 run_started_at=1000.0,
+                invocation_id="inv-123",
             )
 
         mock_load.assert_called_once_with("session-123")
@@ -82,29 +83,28 @@ class TestBohriumSetupServiceOrchestration:
         assert kwargs["user_id_for_ak"] == "u1"
         assert kwargs["org_id"] == "org1"
         assert kwargs["event_callback"] is event_cb
+        assert kwargs["invocation_id"] == "inv-123"
         assert result is expected
 
     @pytest.mark.asyncio
     async def test_run_cleanup_delegates_to_owned_cleanup_method(self):
         sink = MagicMock()
         svc = _make_service(event_sink=sink)
-        event_cb = MagicMock()
 
-        with (
-            patch.object(svc, "_cleanup_bohrium_after_run") as mock_cleanup,
-            patch.object(svc, "_make_event_bridge", return_value=event_cb),
-        ):
+        with patch.object(svc, "_cleanup_bohrium_after_run") as mock_cleanup:
             await svc.run_cleanup(
                 session_id="s1",
                 pg_for_run=object(),
                 ssh_attached=True,
+                invocation_id="inv-1",
             )
 
         mock_cleanup.assert_called_once()
         kwargs = mock_cleanup.call_args.kwargs
         assert kwargs["session_id"] == "s1"
-        assert kwargs["event_callback"] is event_cb
         assert kwargs["ssh_attached"] is True
+        assert kwargs["invocation_id"] == "inv-1"
+        sink.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_run_setup_delegates_bohrium_required_flag(self):
@@ -174,20 +174,20 @@ class TestBohriumSetupServiceOrchestration:
         mock_setup.assert_not_called()
 
     def test_configure_remote_user_skill_root_on_ssh_session(self):
-        from src.services.agent_run_bohrium import (
-            _BOHRIUM_REMOTE_USER_PLUGINS_ROOT,
-            _BOHRIUM_REMOTE_USER_SKILLS_ROOT,
-            _configure_remote_user_skill_root,
+        from src.services.agent_run_bohrium import _configure_remote_user_skill_root
+        from src.services.bohrium_runtime_config import (
+            BOHRIUM_REMOTE_USER_PLUGINS_ROOT,
+            BOHRIUM_REMOTE_USER_SKILLS_ROOT,
         )
 
         session = SimpleNamespace(remote_skill_roots=['/stale'])
 
         _configure_remote_user_skill_root(session)
 
-        assert session.remote_user_skills_root == _BOHRIUM_REMOTE_USER_SKILLS_ROOT
+        assert session.remote_user_skills_root == BOHRIUM_REMOTE_USER_SKILLS_ROOT
         assert session.remote_skill_roots == [
-            _BOHRIUM_REMOTE_USER_PLUGINS_ROOT,
-            _BOHRIUM_REMOTE_USER_SKILLS_ROOT,
+            BOHRIUM_REMOTE_USER_PLUGINS_ROOT,
+            BOHRIUM_REMOTE_USER_SKILLS_ROOT,
         ]
 
 

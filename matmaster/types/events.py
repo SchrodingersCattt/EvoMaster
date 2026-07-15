@@ -129,7 +129,6 @@ class FinishDetail(BaseModel):
     has_tool_calls: bool = False
     tool_call_count: int = 0
     last_turn_usage: dict[str, int] = Field(default_factory=dict)
-    last_turn_usage_vendor: dict[str, Any] = Field(default_factory=dict)
     attempts: int | None = None
     last_error_kind: str | None = None
     truncation_risk: bool = False

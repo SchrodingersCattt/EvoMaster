@@ -8,7 +8,7 @@ ag-ui 协议（前后端约定）：
   response：assistant 对用户可见的正文内容；流式分片同样在 payload 顶层附带 stream_state / stream_id，非流式 response 用于持久化与历史回放。
   response_figures：回答级图片绑定事件；content.figures 为已上传图片列表，顶层仍带 session_id、task_id、invocation_id、spawn_id。该事件用于侧边栏等图像展示，不会把图片写回正文文本。该事件可以在同一 invocation_id 下出现多次，每次都是当前已知完整图片组快照；合法顺序包括早于第一段 response、位于多个 response chunk 之间、或位于 run_result 之前的 final flush。前端应按 invocation_id eager upsert，且不从 tool_result.payload.figures 反推正式回答级图片。
   session_status：流开头推送，含 status: 'idle'|'active'|'waiting'|'failed'（waiting=已入队未接手，failed=上一轮因 run_interrupted reason=restart 或 deploy 按失败结束），可选 last_task_id；便于部署/重启后前端根据 idle/failed 结束“未结束的 stream”状态。
-  run_interrupted：部署/重启导致上一轮在别的 pod 上被中断时推送；reason 现区分 'deploy'（新版本部署）与 'restart'（同版本实例重启），并追加 current_version、previous_version（可选，缺失时表示未知），可选 last_user_content；若无法读取上一版本会提供 reason_note='missing_previous_version'。reason 为 'restart' 或 'deploy' 时 payload 带 treat_as_failure=true，且后端会立即推送 type='stream_closed'（end_reason='run_interrupted_restart' 或 'run_interrupted_deploy', treat_as_failure=true），按失败直接结束流；前端应据此结束“未结束的 stream”并展示为失败。bohrium_node 的 content 含 node_id, status: 'created'|'ready'|'connected'|'destroyed', message，ready/connected 时另有 ip。
+  run_interrupted：部署/重启导致上一轮在别的 pod 上被中断时推送；reason 现区分 'deploy'（新版本部署）与 'restart'（同版本实例重启），并追加 current_version、previous_version（可选，缺失时表示未知），可选 last_user_content；若无法读取上一版本会提供 reason_note='missing_previous_version'。reason 为 'restart' 或 'deploy' 时 payload 带 treat_as_failure=true，且后端会立即推送 type='stream_closed'（end_reason='run_interrupted_restart' 或 'run_interrupted_deploy', treat_as_failure=true），按失败直接结束流；前端应据此结束“未结束的 stream”并展示为失败。bohrium_node 的 content 含 node_id、message 与 status；启动阶段依次使用 acquiring、waiting/creating/restarting、starting、ready、connecting、connected，异常阶段使用 failed，ready/connecting/connected 时可含 ip。正常清理的 paused/destroyed 是内部节点状态，不推送或回放给前端。
   stream_closed：SSE 传输层关闭标记；run_result 表示本轮业务结果，stream_closed 只表示这条实时流可以结束。payload 顶层可选 task_completed（boolean），true 表示本轮任务成功完成（已发 run_result），false 或缺失表示未成功（用户取消、异常或 run_interrupted 等）。
 - 客户端 -> 服务端：REST
   POST /chat/sessions/{session_id}/stream  Body 可选：不传或 content 为空→仅历史+ping；有 content→发送并返回本次 SSE 流
@@ -21,6 +21,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from matmaster.bohrium.node_lifecycle import resolve_node_lifecycle
 from src.base.base_res import BaseResponse
 
 
@@ -513,6 +514,33 @@ class DeliverySpec(BaseModel):
     notify: bool = True
 
 
+class StructureSelectionAtom(BaseModel):
+    """前端结构预览中选中的单个原子。"""
+
+    order: int | str | None = Field(
+        default=None,
+        description="原子在结构中的序号；由前端结构查看器提供。",
+    )
+    element: str | None = Field(default=None, description="元素符号")
+    cart_coord: list[float] | None = Field(
+        default=None,
+        description="笛卡尔坐标，单位 Angstrom。",
+    )
+    frac_coord: list[float] | None = Field(
+        default=None,
+        description="分数坐标；若前端查看器可提供则透传。",
+    )
+
+
+class StructureSelection(BaseModel):
+    """一次从结构文件中选择的一组原子。"""
+
+    id: str | None = Field(default=None, description="前端生成的选择批次 ID")
+    source_path: str | None = Field(default=None, description="结构文件路径或 URL")
+    source_format: str | None = Field(default=None, description="结构文件格式")
+    atoms: list[StructureSelectionAtom] = Field(default_factory=list)
+
+
 class ChatSendRequest(BaseModel):
     """POST /chat/sessions/{session_id}/stream 请求体：不传或 content 为空则仅拉历史+ping；有 content 则发送消息并返回本次运行的 SSE 流"""
 
@@ -525,6 +553,10 @@ class ChatSendRequest(BaseModel):
     )
     workspace_paths: list[str] | None = (
         None  # 可选，工作区/个人路径列表，如 /personal/1.cif，与 files(OSS) 区分
+    )
+    structure_selections: list[StructureSelection] | None = Field(
+        default=None,
+        description="可选，本轮从结构预览中选中的结构上下文；后端作为结构化 turn input 渲染给 agent。",
     )
     mode: str = "direct"  # "direct" | "planner"
     model: str | None = (
@@ -556,6 +588,16 @@ class ChatSendRequest(BaseModel):
         gt=0,
         description="可选，本轮 Bohrium 会话节点 SKU ID；透传为 node/add 与 node/restart 的 skuId，未传则使用平台默认",
     )
+    bohrium_node_lifecycle_policy: Literal[
+        "run_end", "idle_timeout", "keep_running"
+    ] = Field(
+        default="run_end",
+        description="本轮 Bohrium Node 最后一个 lease 释放后的关闭策略",
+    )
+    bohrium_node_idle_timeout_seconds: int | None = Field(
+        default=None,
+        description="idle_timeout 策略的空闲时长；仅允许 900/1800/7200 秒",
+    )
     replace_last_turn: bool = Field(
         default=False,
         description="为 true 时先物理删除最后一条 User/query 及之后的所有事件，再以新 content 发送；用于编辑重发",
@@ -573,6 +615,14 @@ class ChatSendRequest(BaseModel):
         default=None,
         description="内部发起的完成通知控制；缺省时按 origin 约定默认（用户发送路径恒为 None=保持现状）",
     )
+
+    @model_validator(mode="after")
+    def validate_bohrium_node_lifecycle(self):
+        resolve_node_lifecycle(
+            self.bohrium_node_lifecycle_policy,
+            self.bohrium_node_idle_timeout_seconds,
+        )
+        return self
 
     model_config = ConfigDict(
         json_schema_extra={

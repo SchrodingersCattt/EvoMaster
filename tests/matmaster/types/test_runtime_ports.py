@@ -20,6 +20,7 @@ from matmaster.types.runtime_ports import (
     FigureUploadPort,
     KernelRuntimePorts,
     PlaygroundCompactionPort,
+    SubagentProviderFactory,
     UserTurnContextWriteRequest,
 )
 
@@ -191,3 +192,22 @@ def test_checkpoint_sink_factory_protocol_signature() -> None:
     typed_factory: CheckpointSinkFactory = factory
 
     assert typed_factory(spawn_id="child-1") is sink
+
+
+def test_subagent_provider_factory_defaults_none():
+    assert AgentRunPorts().subagent_provider_factory is None
+
+
+def test_subagent_provider_factory_settable():
+    def fac(*, profile_key: str):
+        return ("bundle", profile_key)
+
+    ports = AgentRunPorts(subagent_provider_factory=fac)
+    assert ports.subagent_provider_factory(profile_key="x") == ("bundle", "x")
+
+
+def test_subagent_provider_factory_protocol_runtime_checkable():
+    def fac(*, profile_key: str):
+        return None
+
+    assert isinstance(fac, SubagentProviderFactory)

@@ -55,6 +55,8 @@ from .runtime_ports import (
     PlaygroundCompactionPort,
     PreCompactionBarrier,
     SessionEventHistoryPort,
+    ToolTimeoutNotice,
+    ToolTimeoutObserver,
 )
 from .session import LocalSessionConfig, Session, SessionConfig, SSHSessionConfig
 from .tool_decision import ToolDecision
@@ -154,6 +156,8 @@ __all__ = [
     "PlaygroundCompactionPort",
     "PreCompactionBarrier",
     "SessionEventHistoryPort",
+    "ToolTimeoutNotice",
+    "ToolTimeoutObserver",
     # tool runtime v2
     "ToolPlane",
     "SessionCapabilities",

@@ -32,7 +32,7 @@ def test_publish_reply_event_publishes_redis() -> None:
 def test_send_stream_context_does_not_carry_unused_reply_queue() -> None:
     from dataclasses import fields
 
-    from src.services.stream_service import SendStreamContext
+    from src.services.stream_types import SendStreamContext
 
     field_names = {field.name for field in fields(SendStreamContext)}
 

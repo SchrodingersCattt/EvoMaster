@@ -64,9 +64,9 @@ from src.services.sessions_service import (
 )
 from src.services.stream_service import (
     ChatStreamService,
-    TriggerStreamContext,
     get_stream_service,
 )
+from src.services.stream_types import TriggerStreamContext
 from src.services.user_service import UserService
 from src.services.worker_registry_service import get_worker_registry_service
 from src.utils.constant import INTERNAL_TRIGGER_TOKEN, REDIS_URL
@@ -173,10 +173,13 @@ async def _handle_internal_trigger(
         raise BaseErrorResponse(
             http_status=400, code=400, msg="内部触发需要非空 content"
         )
-    owner = chat_svc.get_session_user_id(sid)
+    session_row = chat_svc.get_session(sid) or {}
+    owner = str(session_row.get("user_id") or "") or None
     if not owner:
         raise NotFoundErrorResponse(msg="会话不存在或无所有者，无法内部触发")
-    quota_status = await check_quota_status(owner)
+    quota_status = await check_quota_status(
+        owner, project_id=session_row.get("project_id")
+    )
     if quota_status.is_exhausted:
         raise ForbiddenErrorResponse(
             msg=quota_status.exhausted_message("额度已用完，无法触发")
@@ -404,10 +407,16 @@ async def chat_stream(
             request, stream_svc.generate_subscribe_stream(sid)
         )
 
-    # 发送消息前检查额度（计价化：金额额度 <= 0 则 403；模型级限制已并入金额额度）
     assert req is not None
     if user_id:
-        quota_status = await check_quota_status(user_id)
+        # 本次请求的 project 优先；缺失时 fail-soft 回落会话归属。
+        gate_project_id = req.bohrium_project_id
+        if gate_project_id in (None, ""):
+            try:
+                gate_project_id = (chat_svc.get_session(sid) or {}).get("project_id")
+            except Exception:  # noqa: BLE001 - 拿不到归属不阻断闸口检查
+                gate_project_id = None
+        quota_status = await check_quota_status(user_id, project_id=gate_project_id)
         remaining = quota_status.remaining_yuan
         logger.info(
             "stream quota check: session_id=%s user_id=%s remaining=%s reset_at=%s",
@@ -417,7 +426,6 @@ async def chat_stream(
             quota_status.reset_at,
         )
         if quota_status.is_exhausted:
-            # 403 时打出请求详情便于 UAT 排查
             req_headers = dict(request.headers) if request else {}
             safe_headers = {}
             for k, v in req_headers.items():

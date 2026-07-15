@@ -282,6 +282,8 @@ finish_detail: FinishDetail | None = None
 `RunResultEvent.model_dump()` 的 Pydantic 字段自动展开，是实时 SSE 的附加信息。
 消费者应优先读取 `content.finish_detail`，没有时再回退到顶层 `finish_detail`。
 
+> **2026-06-26 更新（run-result-replay-toplevel-cleanup）**：上文「两处 `finish_detail`、回退顶层」的描述已过期。现 contract 为业务字段只在 `content`、顶层不重复（live 与 replay 一致）；`normalize_replayed_terminal_payload` 已不再 lift 任何顶层字段。请勿据本节旧描述把顶层 `finish_detail`/`status` 加回。
+
 历史回放中的 run_result 至少包含：
 
 ```json

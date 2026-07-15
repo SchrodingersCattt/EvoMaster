@@ -1,7 +1,7 @@
-"""Bohrium 节点生命周期服务：按需创建节点、等待就绪、会话结束后销毁。
+"""Bohrium 节点 provider adapter：创建、等待、停止、重启与永久销毁。
 
 参考 ~/Downloads/start.sh：通过 Open API 创建节点，轮询 list 直到 status=2 就绪，
-run 结束时调用删除接口释放节点。删除接口若与文档不一致，可通过环境变量覆盖。
+普通 run 结束调用 stop 保留节点供下一轮 restart；delete 只用于永久清理。
 host 由 constant.py 的 BOHRIUM_OPENAPI_HOST 提供（不含 /openapi/v1），请求时拼接版本路径。
 """
 
@@ -32,11 +32,17 @@ DEFAULT_TURNOFF_AFTER = -1
 DEFAULT_SKU_ID = 388  # c2_m4_cpu
 # 节点就绪状态码（与 start.sh 中 STATUS=2 一致）
 NODE_STATUS_READY = 2
+# 节点已停机状态码（Bohrium Core machine status stopped）
+NODE_STATUS_STOPPED = -1
 # 轮询间隔与最大等待时间（秒）
 POLL_INTERVAL = 5
 POLL_TIMEOUT = 600  # 10 分钟
 # 默认节点名（与 create_node 用同一来源，保证 destroy_untracked_nodes_by_name 匹配）
 _DEFAULT_NODE_NAME = 'matmaster-session'
+
+
+class BohriumNodeNotFoundError(RuntimeError):
+    """The provider confirms that the requested Node no longer exists."""
 
 
 def _set_span_response_code(span: Any, code: Any) -> None:
@@ -170,6 +176,10 @@ class BohriumNodeService:
         轮询 node/list 直到该节点 status=2（就绪）。返回包含 ip、nodePwd 的节点信息。
         """
         deadline = time.monotonic() + timeout
+        found = False
+        last_status: Any = None
+        last_starting_up_msg: Any = None
+        last_error_code: Any = None
         with httpx.Client(timeout=30.0) as client:
             while time.monotonic() < deadline:
                 r = client.get(
@@ -182,7 +192,11 @@ class BohriumNodeService:
                 items = (data.get('data') or {}).get('items') or []
                 for item in items:
                     if str(item.get('nodeId')) == str(node_id):
+                        found = True
                         status = item.get('status')
+                        last_status = status
+                        last_starting_up_msg = item.get('startingUpMsg')
+                        last_error_code = item.get('errCode')
                         if status == NODE_STATUS_READY:
                             logger.info(
                                 'Bohrium node ready node_id=%s ip=%s',
@@ -197,15 +211,20 @@ class BohriumNodeService:
                         break
                 time.sleep(poll_interval)
         raise TimeoutError(
-            f"Bohrium node node_id={node_id} did not become ready within {timeout}s"
+            f"Bohrium node node_id={node_id} did not become ready within {timeout}s; "
+            f"found={found} last_status={last_status!r} "
+            f"starting_up_msg={last_starting_up_msg!r} "
+            f"error_code={last_error_code!r}"
         )
 
     def _fetch_node_list(self, access_key: str) -> list[dict[str, Any]]:
         """请求 node/list 返回 items，供 get_node_info / get_node_detail 复用。"""
         url = f"{self._host}/openapi/v1/node/list?queryType=private"
-        ak_esc = access_key.replace("'", "'\\''")
-        curl_cmd = f"curl -v -X GET '{url}' -H 'accessKey: {ak_esc}'"
-        logger.info('Bohrium node/list curl (copy to reproduce): %s', curl_cmd)
+        logger.info(
+            "Bohrium node/list request: curl -v -X GET '%s' "
+            "-H 'accessKey: <redacted>'",
+            url,
+        )
         with httpx.Client(timeout=30.0) as client:
             r = client.get(
                 f"{self._host}/openapi/v1/node/list",
@@ -448,6 +467,45 @@ class BohriumNodeService:
                 f"Bohrium restart node failed: code={code}, response={data}"
             )
         logger.info('Bohrium node restart requested node_id=%s', node_id)
+
+    def stop_node(
+        self,
+        access_key: str,
+        node_id: int,
+        project_id: int,
+        *,
+        creator_id: int = 0,
+        device: str = 'container',
+    ) -> None:
+        """停止运行中的节点并保留节点记录，以便后续 restart 复用。"""
+        url = f"{self._host}/openapi/v1/node/stop/{node_id}"
+        body = {
+            'creatorId': creator_id,
+            'projectId': project_id,
+            'device': device,
+            'stopType': 1,
+        }
+        with httpx.Client(timeout=60.0) as client:
+            response = client.post(
+                url,
+                headers={
+                    'accessKey': access_key,
+                    'content-type': 'application/json',
+                },
+                json=body,
+            )
+            if getattr(response, 'status_code', None) == 404:
+                raise BohriumNodeNotFoundError(
+                    f"Bohrium node no longer exists: node_id={node_id}"
+                )
+            response.raise_for_status()
+            data = response.json() if response.content else {}
+        code = data.get('code')
+        if code != 0:
+            raise RuntimeError(
+                f"Bohrium stop node failed: code={code}, response={data}"
+            )
+        logger.info('Bohrium node stop requested node_id=%s', node_id)
 
     def destroy_node(
         self,

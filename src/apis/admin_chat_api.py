@@ -1,6 +1,6 @@
 """Admin-only endpoints for session trajectory analysis.
 
-All endpoints require the caller to be in the tools-server ``allowlist.admin``.
+All endpoints require the caller to be in MatMaster platform ``allowlist.admin``.
 """
 
 import logging
@@ -9,9 +9,10 @@ from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, Path, Query
 from pydantic import BaseModel
 
+from clients.matmaster_platform.allowlist import is_user_in_admin_allowlist
 from src.dao.chat_events_table import ChatEventsTable
 from src.dao.chat_sessions_table import ChatSessionsTable
-from src.services.tools_server_allowlist import is_user_in_admin_allowlist
+from src.services.sessions_service import ChatSessionsService, get_sessions_service
 from src.services.user_service import UserService
 from src.utils.exceptions import ForbiddenErrorResponse
 
@@ -19,6 +20,7 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 router = APIRouter(tags=["Admin Chat Sessions"])
+user_router = APIRouter(tags=["Admin Users"])
 
 
 def _require_admin(user_id: str = Depends(UserService.require_user_id)) -> str:
@@ -67,6 +69,34 @@ class AdminSessionEventsResponse(BaseModel):
     events: list[dict]
     max_event_id: int
     total: int
+
+
+class AdminRunSessionSummary(BaseModel):
+    session_id: str
+    project_id: int | None = None
+    status: str | None = None
+    worker_id: str | None = None
+    updated_at: int | None = None
+
+
+class AdminUserRunStatusListItem(BaseModel):
+    user_id: str
+    redis_enabled: bool
+    running_count: int
+    queued_count: int
+    stale_count: int
+    latest_updated_at: int | None = None
+    running_sessions: list[AdminRunSessionSummary]
+    queued_sessions: list[AdminRunSessionSummary]
+    stale_sessions: list[AdminRunSessionSummary]
+
+
+class AdminUserRunStatusListResponse(BaseModel):
+    items: list[AdminUserRunStatusListItem]
+    total: int
+    page: int
+    page_size: int
+    redis_enabled: bool
 
 
 # ─── Endpoints ────────────────────────────────────────────────────────────────
@@ -181,6 +211,29 @@ def admin_list_sessions(
 
     return AdminSessionListResponse(
         sessions=sessions, total=total, limit=limit, offset=offset
+    )
+
+
+@user_router.get(
+    "/sessions/run-status",
+    response_model=AdminUserRunStatusListResponse,
+    summary="列出用户会话运行状态（admin）",
+    description="管理员接口：分页列出当前有运行态候选会话的用户，可按 user_id 精确筛选；每行经 Redis owner、queue 与 worker 心跳复核。",
+    operation_id="adminListUserRunStatuses",
+)
+def admin_list_user_run_statuses(
+    _admin: str = Depends(_require_admin),
+    chat_svc: ChatSessionsService = Depends(get_sessions_service),
+    user_id: str | None = Query(None, description="按用户 ID 精确筛选"),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+):
+    return AdminUserRunStatusListResponse(
+        **chat_svc.list_user_run_statuses(
+            user_id=user_id,
+            page=page,
+            page_size=page_size,
+        )
     )
 
 

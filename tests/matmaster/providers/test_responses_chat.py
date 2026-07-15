@@ -162,22 +162,20 @@ class TestNormalizeResponse:
 
 
 class TestChat:
-    async def test_chat_uses_stream_get_final_response(self) -> None:
+    async def test_chat_uses_create_non_streaming(self) -> None:
         provider = ResponsesTransport(model="matmaster/gpt-5.5", api_key="sk-test")
         final = SimpleNamespace(
             output=[], status="completed", incomplete_details=None, usage=None
         )
-        stream_cm = MagicMock()
-        stream_cm.__aenter__ = AsyncMock(return_value=stream_cm)
-        stream_cm.__aexit__ = AsyncMock(return_value=None)
-        stream_cm.get_final_response = AsyncMock(return_value=final)
         mock_client = MagicMock()
-        mock_client.responses.stream.return_value = stream_cm
+        mock_client.responses.create = AsyncMock(return_value=final)
         provider._client = mock_client
 
         result = await provider.chat([UserMessage(content="hi")], tool_choice="none")
 
         assert result.finish_reason == "stop"
-        assert "tool_choice" not in mock_client.responses.stream.call_args.kwargs
-        assert "stream" not in mock_client.responses.stream.call_args.kwargs
-        stream_cm.get_final_response.assert_awaited_once()
+        mock_client.responses.create.assert_awaited_once()
+        create_kwargs = mock_client.responses.create.await_args.kwargs
+        # 非流式：不带 stream 形参（默认 False），也不泄漏无工具时的 tool_choice
+        assert "tool_choice" not in create_kwargs
+        assert "stream" not in create_kwargs

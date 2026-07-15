@@ -1,6 +1,6 @@
 """用户运行偏好组合服务。
 
-用户级偏好由根目录 clients 层从 matmaster-tools-server 读取；evo 本地只补充
+用户级偏好由根目录 clients 层从 MatMaster 平台读取；evo 本地只补充
 会话运行态上下文（例如最近 org_id），避免业务入口直接依赖 user_preference 表结构。
 """
 
@@ -11,7 +11,9 @@ from dataclasses import dataclass
 
 from pymysql import Error
 
-from clients.user_runtime_preference_client import get_user_level_runtime_preference
+from clients.matmaster_platform.runtime_preference import (
+    get_user_level_runtime_preference,
+)
 from src.dao.chat_sessions_table import ChatSessionsTable, get_chat_sessions_table
 
 logger = logging.getLogger(__name__)
@@ -26,6 +28,11 @@ class UserRuntimePreference:
     user_bohrium_submit_confirmation_required: bool | None = None
     bohrium_job_max_runtime_seconds: int | None = None
     bohrium_node_sku_id: int | None = None
+    bohrium_node_lifecycle_policy: str = "run_end"
+    bohrium_node_idle_timeout_seconds: int | None = None
+    bohrium_node_lifecycle_prompt_enabled: bool = True
+    programmatic_trigger_enabled: bool | None = None
+    loaded: bool = False
 
 
 def _get_latest_org_id(
@@ -70,4 +77,13 @@ def get_user_runtime_preference(
         ),
         bohrium_job_max_runtime_seconds=user_level.bohrium_job_max_runtime_seconds,
         bohrium_node_sku_id=user_level.bohrium_node_sku_id,
+        bohrium_node_lifecycle_policy=user_level.bohrium_node_lifecycle_policy,
+        bohrium_node_idle_timeout_seconds=(
+            user_level.bohrium_node_idle_timeout_seconds
+        ),
+        bohrium_node_lifecycle_prompt_enabled=(
+            user_level.bohrium_node_lifecycle_prompt_enabled
+        ),
+        programmatic_trigger_enabled=user_level.programmatic_trigger_enabled,
+        loaded=user_level.loaded,
     )

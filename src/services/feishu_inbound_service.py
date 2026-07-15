@@ -8,16 +8,16 @@ import re
 import uuid
 from typing import Any
 
-from src.dao.feishu_app_config_table import FeishuAppConfig, get_feishu_app_config_table
-from src.dao.feishu_binding_table import get_feishu_binding_table
-from src.dao.redis_dao import get_redis_dao
-from src.models.chat import ChatSendRequest
-from src.services.feishu_open_api import (
+from clients.feishu.open_api import (
     add_reaction,
     get_tenant_access_token,
     remove_reaction,
     reply_text_message,
 )
+from src.dao.feishu_app_config_table import FeishuAppConfig, get_feishu_app_config_table
+from src.dao.feishu_binding_table import get_feishu_binding_table
+from src.dao.redis_dao import get_redis_dao
+from src.models.chat import ChatSendRequest
 from src.services.quota_service import check_quota_status
 from src.services.stream_service import get_stream_service
 from src.services.user_runtime_preference_service import get_user_runtime_preference
@@ -99,9 +99,17 @@ async def _run_agent_and_reply_feishu(
         ),
         bohrium_job_max_runtime_seconds=runtime_pref.bohrium_job_max_runtime_seconds,
         bohrium_node_sku_id=runtime_pref.bohrium_node_sku_id,
+        bohrium_node_lifecycle_policy=runtime_pref.bohrium_node_lifecycle_policy,
+        bohrium_node_idle_timeout_seconds=(
+            runtime_pref.bohrium_node_idle_timeout_seconds
+        ),
     )
     try:
-        quota_status = await check_quota_status(user_id)
+        # 传 project：飞书入口的会话归属就是 runtime_pref.project_id，
+        # 平台据此判定「项目扣费能否兜底」（org_wallet_pass）。
+        quota_status = await check_quota_status(
+            user_id, project_id=runtime_pref.project_id
+        )
         if quota_status.is_exhausted:
             reply_text_message(
                 message_id,

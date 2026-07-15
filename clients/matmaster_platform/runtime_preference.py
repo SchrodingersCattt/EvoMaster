@@ -1,4 +1,4 @@
-"""matmaster-tools-server 用户运行偏好客户端。"""
+"""MatMaster 平台用户运行偏好客户端。"""
 
 from __future__ import annotations
 
@@ -9,6 +9,7 @@ from urllib.parse import quote
 
 import httpx
 
+from matmaster.bohrium.node_lifecycle import resolve_node_lifecycle
 from utils.env import MATMASTER_TOOLS_SERVER
 
 logger = logging.getLogger(__name__)
@@ -24,6 +25,11 @@ class UserLevelRuntimePreference:
     bohrium_submit_confirmation_required: bool | None = None
     bohrium_job_max_runtime_seconds: int | None = None
     bohrium_node_sku_id: int | None = None
+    bohrium_node_lifecycle_policy: str = "run_end"
+    bohrium_node_idle_timeout_seconds: int | None = None
+    bohrium_node_lifecycle_prompt_enabled: bool = True
+    programmatic_trigger_enabled: bool | None = None
+    loaded: bool = False
 
 
 def _runtime_preference_url(user_id: str) -> str:
@@ -58,8 +64,18 @@ def _coerce_positive_int(value: Any) -> int | None:
     return parsed if parsed > 0 else None
 
 
+def _coerce_node_lifecycle(data: dict[str, Any]) -> tuple[str, int | None]:
+    policy = data.get("bohrium_node_lifecycle_policy")
+    timeout = _coerce_positive_int(data.get("bohrium_node_idle_timeout_seconds"))
+    try:
+        resolved, timeout = resolve_node_lifecycle(policy, timeout)
+    except ValueError:
+        return "run_end", None
+    return resolved.value, timeout
+
+
 def get_user_level_runtime_preference(user_id: str) -> UserLevelRuntimePreference:
-    """从 tools-server 读取用户级运行偏好。
+    """从平台读取用户级运行偏好。
 
     fail-soft：调用方可在偏好服务抖动时继续运行，仅回退为不带默认项目/模型。
     """
@@ -77,7 +93,7 @@ def get_user_level_runtime_preference(user_id: str) -> UserLevelRuntimePreferenc
             response = client.get(url, headers={"X-User-Id": uid})
         if response.status_code >= 400:
             logger.warning(
-                "tools-server runtime preference HTTP %s user_id=%s body=%s",
+                "platform runtime preference HTTP %s user_id=%s body=%s",
                 response.status_code,
                 uid,
                 (response.text or "")[:256],
@@ -86,7 +102,7 @@ def get_user_level_runtime_preference(user_id: str) -> UserLevelRuntimePreferenc
         body = response.json()
     except (httpx.HTTPError, OSError, ValueError) as exc:
         logger.warning(
-            "tools-server runtime preference failed user_id=%s error=%s",
+            "platform runtime preference failed user_id=%s error=%s",
             uid,
             exc,
             exc_info=True,
@@ -95,13 +111,14 @@ def get_user_level_runtime_preference(user_id: str) -> UserLevelRuntimePreferenc
 
     if body.get("code") != 0:
         logger.warning(
-            "tools-server runtime preference non-zero user_id=%s code=%s msg=%s",
+            "platform runtime preference non-zero user_id=%s code=%s msg=%s",
             uid,
             body.get("code"),
             body.get("msg"),
         )
         return UserLevelRuntimePreference()
     data = body.get("data") or {}
+    lifecycle_policy, idle_timeout_seconds = _coerce_node_lifecycle(data)
     return UserLevelRuntimePreference(
         project_id=_coerce_project_id(data.get("last_selected_project_id")),
         model=_coerce_model(data.get("last_selected_model")),
@@ -114,6 +131,19 @@ def get_user_level_runtime_preference(user_id: str) -> UserLevelRuntimePreferenc
             data.get("bohrium_job_max_runtime_seconds")
         ),
         bohrium_node_sku_id=_coerce_positive_int(data.get("bohrium_node_sku_id")),
+        bohrium_node_lifecycle_policy=lifecycle_policy,
+        bohrium_node_idle_timeout_seconds=idle_timeout_seconds,
+        bohrium_node_lifecycle_prompt_enabled=(
+            data.get("bohrium_node_lifecycle_prompt_enabled")
+            if isinstance(data.get("bohrium_node_lifecycle_prompt_enabled"), bool)
+            else True
+        ),
+        programmatic_trigger_enabled=(
+            data.get("programmatic_trigger_enabled")
+            if isinstance(data.get("programmatic_trigger_enabled"), bool)
+            else None
+        ),
+        loaded=True,
     )
 
 

@@ -704,9 +704,13 @@ class AnthropicMessagesTransport(Transport):
             )
 
     def classify_error(self, exc: Exception) -> LLMError | None:
+        import httpx as _httpx
+
         if isinstance(exc, LLMError):
             return None
         if isinstance(exc, anthropic.APITimeoutError):
+            return LLMError(str(exc), retryable=True, error_category="timeout")
+        if isinstance(exc, _httpx.TimeoutException):
             return LLMError(str(exc), retryable=True, error_category="timeout")
         if isinstance(exc, anthropic.APIConnectionError):
             return LLMError(str(exc), retryable=True, error_category="connection")
