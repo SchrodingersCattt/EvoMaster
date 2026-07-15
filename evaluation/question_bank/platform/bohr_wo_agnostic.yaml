@@ -838,54 +838,141 @@ questions:
     axis: efficiency
     verify: turn_budget
 
-- id: BWO_monitor_D6_20260715
+- id: BWO_monitor_D6_20260715_v2
   capability: workflow_orchestration
   domain: agnostic
   scope: platform
   intent: Test agent can submit a job and poll its status until completion.
   human_prompt_seed: |
     利用 bohr-cli，先提一个 `echo "hello from bohrium" > result.txt && sleep 60` 的短任务（镜像用 `registry.dp.tech/dptech/ubuntu:22.04-cuda12.1`，机型 `c2_m4_cpu`），然后轮询监控它，完成后把日志存下来。
-    监控记录保存到 `d6_monitor.json`，格式：
-    ```json
-    {"job_id": ..., "polls": [{"time": "...", "status": ...}], "final_status": "...", "log_saved": true/false}
-    ```
+    将平台日志保存为工作区根目录下的 `d6_job.log`，并将实际提交参数、每次轮询结果和日志保存结果记录到 `d6_monitor.json`。JSON 需包含 `job_id`、`image`、`machine_type`、`command`、`polls`、`final_status` 和 `log_saved`；`polls` 中每条记录包含 `time` 和 `status`，状态字段保留 bohr-cli 实际返回的整数状态码。
   tags:
   - bohr-cli
   reference_answers:
   - key: artifact
     value: d6_monitor.json
-  - key: has_job_id
+    workspace_resolve: root
+  - key: monitor_schema
     value:
       filename: d6_monitor.json
-      pattern: '"job_id"\s*:\s*\d+'
-  - key: has_polls
+      schema:
+        type: object
+        required:
+        - job_id
+        - image
+        - machine_type
+        - command
+        - polls
+        - final_status
+        - log_saved
+        properties:
+          job_id:
+            type: integer
+            minimum: 1
+          image:
+            const: registry.dp.tech/dptech/ubuntu:22.04-cuda12.1
+          machine_type:
+            const: c2_m4_cpu
+          command:
+            const: echo "hello from bohrium" > result.txt && sleep 60
+          polls:
+            type: array
+            minItems: 2
+            items:
+              type: object
+              required:
+              - time
+              - status
+              properties:
+                time:
+                  type: string
+                  minLength: 1
+                status:
+                  type: integer
+                  enum:
+                  - -1
+                  - 0
+                  - 1
+                  - 2
+                  - 3
+                  - 4
+                  - 5
+                status_text:
+                  type: string
+                  minLength: 1
+              additionalProperties: false
+            allOf:
+            - contains:
+                type: object
+                required:
+                - status
+                properties:
+                  status:
+                    enum:
+                    - 0
+                    - 1
+                    - 3
+            - contains:
+                type: object
+                required:
+                - status
+                properties:
+                  status:
+                    const: 2
+          final_status:
+            const: 2
+          log_saved:
+            const: true
+        additionalProperties: false
+  - key: log_artifact
+    value: d6_job.log
+    workspace_resolve: root
+  - key: submitted_via_cli
+    tool_name: Bash|execute_bash
+    tool_arg: command
     value:
-      filename: d6_monitor.json
-      pattern: '"polls"\s*:\s*\['
-  - key: has_final
+      pattern: '(?:^|[\n;&|]\s*)(?:(?:env|sudo)(?:\s+[^\s;&|]+)*\s+)?(?:[^\s;&|]+/)?bohr\s+job\s+submit\b'
+      min_matches: 1
+  - key: polled_via_cli
+    tool_name: Bash|execute_bash
+    tool_arg: command
     value:
-      filename: d6_monitor.json
-      pattern: '"final_status"\s*:\s*"[^"]+"'
+      pattern: '(?:^|[\n;&|]\s*)(?:(?:env|sudo)(?:\s+[^\s;&|]+)*\s+)?(?:[^\s;&|]+/)?bohr\s+job\s+describe\b'
+      min_matches: 2
+  - key: log_retrieved_via_cli
+    tool_name: Bash|execute_bash
+    tool_arg: command
+    value:
+      pattern: '(?:^|[\n;&|]\s*)(?:(?:env|sudo)(?:\s+[^\s;&|]+)*\s+)?(?:[^\s;&|]+/)?bohr\s+job\s+(?:log|download)\b'
+      min_matches: 1
   - key: turn_budget
     value:
-      max: 20
+      max: 30
   scoring_checklist:
   - id: artifact
     criterion: d6_monitor.json written to workspace.
     axis: correctness
     verify: artifact_exists
-  - id: has_job_id
-    criterion: Real job ID from platform submission.
+  - id: monitor_schema
+    criterion: Monitoring record captures the requested job configuration, multiple non-terminal and terminal polls, successful final status, and saved-log flag.
     axis: correctness
-    verify: text_file_regex
-  - id: has_polls
-    criterion: Multiple polling records captured.
+    verify: json_file_schema
+  - id: log_artifact
+    criterion: Platform job log is saved as d6_job.log at workspace root.
     axis: correctness
-    verify: text_file_regex
-  - id: has_final
-    criterion: Final status recorded.
-    axis: correctness
-    verify: text_file_regex
+    verify: artifact_exists
+  - id: submitted_via_cli
+    criterion: Job was submitted through bohr-cli.
+    axis: grounding
+    verify: tool_args_regex
+  - id: polled_via_cli
+    criterion: Job status was polled through bohr-cli at least twice.
+    axis: grounding
+    verify: tool_args_regex
+  - id: log_retrieved_via_cli
+    criterion: Job log or results were retrieved through bohr-cli.
+    axis: grounding
+    verify: tool_args_regex
   - id: turn_budget
     criterion: Agent completes within turn budget.
     axis: efficiency

@@ -10,6 +10,8 @@ Importing this module has the side effect of populating
 at module bottom; do not import this file from anywhere else.
 """
 
+import re
+
 from evaluation.validators.dpgen_dargs import check_dpgen_dargs
 from evaluation.validators.gpumd_run_in import check_gpumd_run_in
 from evaluation.validators.gromacs_top import check_gromacs_top
@@ -129,6 +131,51 @@ def _h_tool_call_exists(ctx):
     if found:
         return True, f"tool call found: {found[0]} ({len(found)} call(s))"
     return False, f"no tool call matching {names} in {len(evidence.tool_calls)} calls"
+
+
+@_R("tool_args_regex")
+def _h_tool_args_regex(ctx):
+    """Count regex matches in one argument across matching tool calls."""
+    ref = ctx["ref"]
+    if not ref.tool_name or not ref.tool_arg:
+        return False, "tool_args_regex requires tool_name and tool_arg"
+    names = [name.strip() for name in ref.tool_name.split("|") if name.strip()]
+    config = ref.value
+    if isinstance(config, str):
+        pattern = config
+        min_matches, max_matches = 1, None
+    elif isinstance(config, dict):
+        pattern = config.get("pattern")
+        min_matches = config.get("min_matches", 1)
+        max_matches = config.get("max_matches")
+    else:
+        return False, "tool_args_regex value must be a string or object"
+    try:
+        regex = re.compile(str(pattern))
+        minimum = int(min_matches)
+        maximum = int(max_matches) if max_matches is not None else None
+    except (re.error, TypeError, ValueError) as exc:
+        return False, f"invalid tool_args_regex configuration: {exc}"
+
+    count = 0
+    calls_inspected = 0
+    for call in ctx["tool_calls"]:
+        if call.get("tool_name") not in names:
+            continue
+        args = call.get("tool_args", {})
+        actual = args.get(ref.tool_arg) if isinstance(args, dict) else None
+        if not isinstance(actual, str):
+            continue
+        calls_inspected += 1
+        count += sum(1 for _ in regex.finditer(actual))
+
+    passed = count >= minimum and (maximum is None or count <= maximum)
+    expected = f">={minimum}" if maximum is None else f"[{minimum},{maximum}]"
+    return (
+        passed,
+        f"regex matches={count}, expected={expected}, "
+        f"matching tool calls inspected={calls_inspected}",
+    )
 
 
 @_R("artifact_exists")

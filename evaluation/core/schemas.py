@@ -19,6 +19,7 @@ Scoring model:
 - Raw pass counts preserved for backward compatibility and debugging
 """
 
+import re
 from datetime import datetime, timezone
 from typing import Any, Literal
 
@@ -40,6 +41,7 @@ VerifyLiteral = Literal[
     "numerical_range",
     "contains_all",
     "tool_args_match",
+    "tool_args_regex",
     "tool_observation_field",
     "event_type_called",
     "call_count_range",
@@ -342,6 +344,7 @@ class QuestionItem(BaseModel):
             "numerical_range",
             "contains_all",
             "tool_args_match",
+            "tool_args_regex",
             "tool_observation_field",
             "event_type_called",
             "call_count_range",
@@ -411,6 +414,60 @@ class QuestionItem(BaseModel):
                 raise ValueError(
                     f"json_file_schema reference '{item.id}' has an invalid "
                     f"JSON Schema: {exc.message}"
+                ) from exc
+        for item in self.scoring_checklist:
+            if item.verify != "tool_args_regex":
+                continue
+            ref = refs_by_key[item.id]
+            if not ref.tool_name or not ref.tool_arg:
+                raise ValueError(
+                    f"tool_args_regex reference '{item.id}' requires "
+                    "tool_name and tool_arg"
+                )
+            config = ref.value
+            if isinstance(config, str):
+                pattern = config
+                min_matches, max_matches = 1, None
+            elif isinstance(config, dict):
+                unknown = set(config) - {
+                    "pattern",
+                    "min_matches",
+                    "max_matches",
+                }
+                if unknown:
+                    raise ValueError(
+                        f"tool_args_regex reference '{item.id}' has unsupported "
+                        f"keys: {sorted(unknown)}"
+                    )
+                pattern = config.get("pattern")
+                min_matches = config.get("min_matches", 1)
+                max_matches = config.get("max_matches")
+            else:
+                raise ValueError(
+                    f"tool_args_regex reference '{item.id}' must be a regex "
+                    "string or configuration object"
+                )
+            if not isinstance(pattern, str) or not pattern:
+                raise ValueError(
+                    f"tool_args_regex reference '{item.id}' requires pattern"
+                )
+            if type(min_matches) is not int or min_matches < 1:
+                raise ValueError(
+                    f"tool_args_regex reference '{item.id}' requires "
+                    "min_matches >= 1"
+                )
+            if max_matches is not None and (
+                type(max_matches) is not int or max_matches < min_matches
+            ):
+                raise ValueError(
+                    f"tool_args_regex reference '{item.id}' requires "
+                    "max_matches >= min_matches"
+                )
+            try:
+                re.compile(pattern)
+            except re.error as exc:
+                raise ValueError(
+                    f"tool_args_regex reference '{item.id}' has invalid regex: {exc}"
                 ) from exc
         # Safety questions (capability='safety_refusal') may skip reference_answers
         if self.capability != "safety_refusal" and not self.reference_answers:
