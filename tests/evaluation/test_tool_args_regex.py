@@ -371,3 +371,63 @@ def test_bwo_sandbox_ase_v2_requires_real_lifecycle_and_cleanup() -> None:
         refs_by_key["sandbox_created_via_cli"].value["pattern"],
         "bohr sandbox create ch4-deepmd -o json",
     )
+
+
+def test_bwo_stop_running_v2_is_isolated_and_uses_terminate() -> None:
+    questions = flatten_banks(load_question_banks(QUESTION_BANK_DIR))
+    question = next(q for q in questions if q.id == "BWO_stop_running_009_20260715_v2")
+    assert all(q.id != "BWO_stop_running_009_20260715" for q in questions)
+    assert question.tags == ["bohr-cli"]
+    prompt = question.human_prompt_seed.lower()
+    assert "terminate" not in prompt
+    assert "kill" not in prompt
+    assert "stopped" not in prompt
+
+    schema_ref = next(
+        ref for ref in question.reference_answers if ref.key == "stop_schema"
+    )
+    schema = schema_ref.value["schema"]
+    validator = validator_for(schema)(schema)
+    valid = {
+        "job_id": 20409999,
+        "job_name": "b9-stop-running-1721123456",
+        "image": "registry.dp.tech/dptech/ubuntu:22.04-py3.10-cuda12.1",
+        "machine_type": "c2_m4_cpu",
+        "command": 'echo "b9 started" > b9_started.txt && sleep 600',
+        "polls": [
+            {"time": "2026-07-16 15:00:00", "status": 1},
+            {"time": "2026-07-16 15:00:10", "status": 4},
+            {"time": "2026-07-16 15:00:20", "status": 5},
+        ],
+        "action": "terminate",
+        "final_status": 5,
+    }
+    validator.validate(valid)
+    with pytest.raises(ValidationError):
+        validator.validate({**valid, "action": "kill"})
+    with pytest.raises(ValidationError):
+        validator.validate({**valid, "final_status": 4})
+    with pytest.raises(ValidationError):
+        validator.validate({**valid, "polls": valid["polls"][1:]})
+
+    refs_by_key = {ref.key: ref for ref in question.reference_answers}
+    commands_by_key = {
+        "submitted_via_cli": (
+            "bohr job submit --job_name b9-stop-running-1721123456 "
+            "--command 'echo \"b9 started\" > b9_started.txt && sleep 600'"
+        ),
+        "polled_via_cli": "bohr job describe -j 20409999 --json",
+        "one_control_action_via_cli": "bohr job terminate 20409999",
+        "terminated_via_cli": "bohr job terminate 20409999",
+    }
+    for key, command in commands_by_key.items():
+        assert re.search(refs_by_key[key].value["pattern"], command)
+
+    control_ref = refs_by_key["one_control_action_via_cli"]
+    assert control_ref.value["min_matches"] == 1
+    assert control_ref.value["max_matches"] == 1
+    assert re.search(control_ref.value["pattern"], "bohr job kill 20409999")
+    assert not re.search(
+        refs_by_key["terminated_via_cli"].value["pattern"],
+        "bohr job kill 20409999",
+    )
