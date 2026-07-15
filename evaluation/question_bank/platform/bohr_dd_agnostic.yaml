@@ -8,8 +8,7 @@ questions:
   scope: platform
   intent: Test agent navigates file system to find large/old files and plans cleanup.
   human_prompt_seed: |
-    请利用 bohr-cli 完成以下任务：
-    储存快满了，帮我找找哪些文件又大又久没动过的，规划一下清理列表。不要直接删，先给我看方案。
+    利用 bohr-cli，储存快满了，帮我找找哪些文件又大又久没动过的，规划一下清理列表。不要直接删，先给我看方案。
     清理规划保存到 `c1_cleanup_plan.json`，格式：
     ```json
     {"files": [{"path": "...", "size_mb": ..., "last_modified": "...", "recommendation": "delete|keep|archive"}], "total_reclaimable_mb": ...}
@@ -62,8 +61,7 @@ questions:
   scope: platform
   intent: Test agent understands dataset sharing via project mechanism.
   human_prompt_seed: |
-    请利用 bohr-cli 完成以下任务：
-    数据集怎么分享给同一个项目组的其他人？
+    利用 bohr-cli，数据集怎么分享给同一个项目组的其他人？
     说明保存到 `c2_guide.md`。
   tags:
   - bohr-cli
@@ -107,8 +105,7 @@ questions:
   scope: platform
   intent: Test agent downloads job results and copies to personal storage.
   human_prompt_seed: |
-    请利用 bohr-cli 完成以下任务：
-    看看最近完成的任务有没有结果文件，帮我拷到 personal 盘存着。
+    利用 bohr-cli，看看最近完成的任务有没有结果文件，帮我拷到 personal 盘存着。
     操作记录保存到 `c3_transfer.json`，格式：
     ```json
     {"transferred": [{"job_id": ..., "source": "...", "destination": "personal/...", "success": true/false}]}
@@ -162,8 +159,7 @@ questions:
   scope: platform
   intent: Test agent creates directory structure on personal storage.
   human_prompt_seed: |
-    请利用 bohr-cli 完成以下任务：
-    personal 盘里建个 "2026_experiments" 文件夹，下面分 A、B、C 三个子目录。
+    利用 bohr-cli，personal 盘里建个 "2026_experiments" 文件夹，下面分 A、B、C 三个子目录。
     创建完成后用 bohr file list 验证，把结果保存到 `c4_verify.json`，格式：
     ```json
     {"created_dirs": ["personal/2026_experiments/", "personal/2026_experiments/A/", "personal/2026_experiments/B/", "personal/2026_experiments/C/"]}
@@ -224,8 +220,7 @@ questions:
   scope: platform
   intent: Test agent understands large file upload capabilities and strategies.
   human_prompt_seed: |
-    请利用 bohr-cli 完成以下任务：
-    我这有个 500M 的文件能传吗？怎么传最快？
+    利用 bohr-cli，我这有个 500M 的文件能传吗？怎么传最快？
     方案保存到 `c5_upload_guide.md`。
   tags:
   - bohr-cli
@@ -269,8 +264,7 @@ questions:
   scope: platform
   intent: Test agent inspects dataset versions and manages lifecycle.
   human_prompt_seed: |
-    请利用 bohr-cli 完成以下任务：
-    看看我有哪些数据集，哪个版本最多，查查各版本什么时候建的、多大。
+    利用 bohr-cli，看看我有哪些数据集，哪个版本最多，查查各版本什么时候建的、多大。
     操作记录保存到 `c6_dataset_ops.json`，格式：
     ```json
     {"datasets": [{"id": ..., "name": "...", "version_count": ...}], "most_versions_dataset": {"id": ..., "versions": [{"version": "...", "created_at": "...", "size": "..."}]}}
@@ -323,8 +317,7 @@ questions:
   scope: platform
   intent: Test agent uploads file and lists directory contents sorted by size.
   human_prompt_seed: |
-    请利用 bohr-cli 完成以下任务：
-    先往 personal 盘的 test_upload/ 目录传个小文件（内容随意），然后看一下该目录里都有什么，按文件大小排一下。
+    利用 bohr-cli，先往 personal 盘的 test_upload/ 目录传个小文件（内容随意），然后看一下该目录里都有什么，按文件大小排一下。
     结果保存到 `c7_listing.json`，格式：
     ```json
     {"uploaded_path": "personal/test_upload/...", "files": [{"name": "...", "size_bytes": ...}]}
@@ -377,8 +370,7 @@ questions:
   scope: platform
   intent: Test agent handles filenames with spaces when uploading to knowledge base.
   human_prompt_seed: |
-    请利用 bohr-cli 完成以下任务：
-    把这篇文献传到知识库里去，然后搜一下里面有没有提到 bandgap 的数据。
+    利用 bohr-cli，把这篇文献传到知识库里去，然后搜一下里面有没有提到 bandgap 的数据。
     搜索结果保存到 `c8_kb_search.json`，格式：
     ```json
     {"kb_id": ..., "upload_success": true/false, "filename": "...", "search_results": [{"text": "...", "score": ...}]}
