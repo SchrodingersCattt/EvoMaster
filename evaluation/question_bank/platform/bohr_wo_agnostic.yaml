@@ -14,7 +14,7 @@ questions:
     {"images": [{"name": "...", "version": "..."}], "machine_types": [{"name": "...", "spec": "..."}]}
     ```
   tags:
-  - bohr_compute
+  - bohr_cli
   reference_answers:
   - key: artifact
     value: b1_resources.json
@@ -67,7 +67,7 @@ questions:
     {"long_running_jobs": [{"job_id": ..., "name": "...", "duration_hours": ..., "status": ..., "recommendation": "terminate|kill|wait"}], "total_checked": ...}
     ```
   tags:
-  - bohr_compute
+  - bohr_cli
   reference_answers:
   - key: artifact
     value: b2_diagnosis.json
@@ -113,7 +113,7 @@ questions:
     {"job_group_id": ..., "jobs": [{"temperature_K": ..., "job_id": ...}]}
     ```
   tags:
-  - bohr_compute
+  - bohr_cli
   reference_answers:
   - key: artifact
     value: b3_jobs.json
@@ -171,7 +171,7 @@ questions:
     列出所有 GPU 可用机型，对比显存和价格，推荐用于500原子体系deepmd训练的配置。
     保存到 `b4_gpu_comparison.md`，要求有markdown表格对比和最终推荐。
   tags:
-  - bohr_compute
+  - bohr_cli
   reference_answers:
   - key: artifact
     value: b4_gpu_comparison.md
@@ -226,7 +226,7 @@ questions:
     {"failed_jobs": [{"job_id": ..., "error_type": "OOM|timeout|image_error|other", "root_cause": "..."}], "action_taken": "resubmitted_with_upgrade|no_action_needed|..."}
     ```
   tags:
-  - bohr_compute
+  - bohr_cli
   reference_answers:
   - key: artifact
     value: b5_diagnosis.json
@@ -279,7 +279,7 @@ questions:
     {"finished_jobs": [{"job_id": ..., "name": "...", "has_result": true/false, "result_path": "..."}]}
     ```
   tags:
-  - bohr_compute
+  - bohr_cli
   reference_answers:
   - key: artifact
     value: b6_results.json
@@ -321,7 +321,7 @@ questions:
     跑一段 ASE 脚本优化水分子结构，优化完的 xyz 拿出来。最好开个沙箱，别污染本地环境。
     把优化后的水分子坐标保存到 `b7_water_optimized.xyz`，把运行日志保存到 `b7_log.txt`。
   tags:
-  - bohr_compute
+  - bohr_cli
   reference_answers:
   - key: xyz_artifact
     value: b7_water_optimized.xyz
@@ -384,7 +384,7 @@ questions:
     ```
     注：如果环境里没有模型文件，可以用 mock 数据演示流程，但要体现完整的 dp test 对比逻辑。
   tags:
-  - bohr_compute
+  - bohr_cli
   reference_answers:
   - key: artifact
     value: b8_comparison.json
@@ -445,7 +445,7 @@ questions:
     {"running_jobs_found": [{"job_id": ..., "name": "..."}], "action_per_job": [{"job_id": ..., "action": "terminate|kill", "success": true/false}]}
     ```
   tags:
-  - bohr_compute
+  - bohr_cli
   reference_answers:
   - key: artifact
     value: b9_actions.json
@@ -499,7 +499,7 @@ questions:
     {"nodes": [{"id": ..., "status": ...}], "datasets": [{"id": ..., "name": "..."}], "hot_mount_supported": true/false, "explanation": "..."}
     ```
   tags:
-  - bohr_compute
+  - bohr_cli
   reference_answers:
   - key: artifact
     value: b10_analysis.json
@@ -547,7 +547,7 @@ questions:
     ```
     要求查询真实的机型和价格信息。
   tags:
-  - bohr_composite
+  - bohr_cli
   reference_answers:
   - key: artifact
     value: d1_plan.json
@@ -605,7 +605,7 @@ questions:
     能不能搞个自动化：任务跑完自动把结果写到我的数据库表里？
     方案保存到 `d2_automation.md`，包含"## 轮询机制"和"## 数据流"和"## 可行性评估"三节。
   tags:
-  - bohr_composite
+  - bohr_cli
   reference_answers:
   - key: artifact
     value: d2_automation.md
@@ -662,7 +662,7 @@ questions:
     ```
     然后在平台上搜一下有没有对应的镜像。
   tags:
-  - bohr_composite
+  - bohr_cli
   data_files:
   - key: pdf_paper
     path: data/bohr_cli/s41524-025-01739-7.pdf
@@ -719,7 +719,7 @@ questions:
     {"jobs_analyzed": [{"job_id": ..., "data_type": "..."}], "data_collected": ["..."], "missing_items": ["..."]}
     ```
   tags:
-  - bohr_composite
+  - bohr_cli
   reference_answers:
   - key: artifact
     value: d4_data_report.json
@@ -764,7 +764,7 @@ questions:
     {"schema": {"fields": [{"name": "...", "type": "...", "description": "..."}]}, "papers_found": ..., "batch_strategy": "..."}
     ```
   tags:
-  - bohr_composite
+  - bohr_cli
   reference_answers:
   - key: artifact
     value: d5_literature_db.json
@@ -817,7 +817,7 @@ questions:
     {"job_id": ..., "polls": [{"time": "...", "status": ...}], "final_status": "...", "log_saved": true/false}
     ```
   tags:
-  - bohr_composite
+  - bohr_cli
   reference_answers:
   - key: artifact
     value: d6_monitor.json
@@ -871,7 +871,7 @@ questions:
     {"node_id": ..., "machine_type": "...", "ssh_command": "...", "file_transferred": true/false}
     ```
   tags:
-  - bohr_composite
+  - bohr_cli
   data_files:
   - key: test_file
     path: data/bohr_cli/test
