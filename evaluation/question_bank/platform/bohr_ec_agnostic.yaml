@@ -14,7 +14,7 @@ questions:
     {"initial_image": "dptech/deepmd-kit", "error_message": "...", "correct_image": "registry.dp.tech/...", "resubmit_job_id": ...}
     ```
   tags:
-  - bohr_edge
+  - bohr-cli
   reference_answers:
   - key: artifact
     value: e1_troubleshoot.json
@@ -78,7 +78,7 @@ questions:
     {"nodes": [{"id": ..., "name": "...", "status": ..., "status_text": "...", "action_taken": "none|restart"}]}
     ```
   tags:
-  - bohr_edge
+  - bohr-cli
   reference_answers:
   - key: artifact
     value: e2_nodes.json
@@ -131,7 +131,7 @@ questions:
     {"balance_cny": ..., "paid_operations": ["计算任务", "..."], "free_operations": ["文献搜索", "..."], "notes": "..."}
     ```
   tags:
-  - bohr_edge
+  - bohr-cli
   reference_answers:
   - key: artifact
     value: e3_billing.json
@@ -181,7 +181,7 @@ questions:
     项目里怎么加人？
     保存到 `e4_guide.md`。
   tags:
-  - bohr_edge
+  - bohr-cli
   reference_answers:
   - key: artifact
     value: e4_guide.md
@@ -225,8 +225,7 @@ questions:
     我误删了网盘里的一个文件夹，能恢复吗？
     保存到 `e5_recovery.md`。
   tags:
-  - bohr_edge
-  - meta_grounding
+  - bohr-cli
   reference_answers:
   - key: artifact
     value: e5_recovery.md
@@ -274,7 +273,7 @@ questions:
     {"original_job_id": ..., "original_machine": "...", "new_machine": "...", "new_job_id": ..., "config_preserved": ["image", "command"]}
     ```
   tags:
-  - bohr_edge
+  - bohr-cli
   reference_answers:
   - key: artifact
     value: e6_upgrade.json
@@ -336,7 +335,7 @@ questions:
     {"period": "...", "total_cny": ..., "breakdown": [{"category": "...", "amount_cny": ...}]}
     ```
   tags:
-  - bohr_edge
+  - bohr-cli
   reference_answers:
   - key: artifact
     value: e7_spending.json
@@ -389,7 +388,7 @@ questions:
     {"unit_price_per_page": ..., "pages_per_paper": ..., "total_papers": ..., "estimated_total_cny": ..., "advice": "..."}
     ```
   tags:
-  - bohr_edge
+  - bohr-cli
   reference_answers:
   - key: artifact
     value: e8_cost_estimate.json
@@ -447,8 +446,7 @@ questions:
     上次搜论文的结果我忘存了，能找回来吗？
     保存到 `e9_answer.md`。
   tags:
-  - bohr_edge
-  - meta_grounding
+  - bohr-cli
   reference_answers:
   - key: artifact
     value: e9_answer.md

@@ -14,7 +14,7 @@ questions:
     {"papers": [{"title": "...", "authors": "...", "year": ..., "doi": "..."}], "summary": "对Mn掺杂Invar合金研究现状的总结"}
     ```
   tags:
-  - bohr_literature
+  - bohr-cli
   reference_answers:
   - key: artifact
     value: a1_result.json
@@ -65,7 +65,7 @@ questions:
     Invar合金的低热膨胀机理都有什么机理？文献都是怎么说的？
     整理成 `a2_mechanisms.md`，每种机理一个二级标题（## 机理名称），下面写解释和对应文献。
   tags:
-  - bohr_literature
+  - bohr-cli
   reference_answers:
   - key: artifact
     value: a2_mechanisms.md
@@ -111,7 +111,7 @@ questions:
     {"entries": [{"paper": "文件名", "formula": "...", "space_group": "...", "cell_params": "a=... b=... c=..."}]}
     ```
   tags:
-  - bohr_literature
+  - bohr-cli
   data_files:
   - key: pdf_conform1
     path: data/bohr_cli/conform_074503_1_online.pdf
@@ -179,7 +179,7 @@ questions:
     {"scholars": [{"name": "...", "affiliation": "...", "research_focus": ["..."]}], "comparison": "两人研究重点区别的总结"}
     ```
   tags:
-  - bohr_literature
+  - bohr-cli
   reference_answers:
   - key: artifact
     value: a4_scholars.json
@@ -234,7 +234,7 @@ questions:
     {"concepts": ["..."], "key_figures": [{"name": "...", "contribution": "..."}], "papers": [{"title": "...", "year": ..., "why": "..."}]}
     ```
   tags:
-  - bohr_literature
+  - bohr-cli
   reference_answers:
   - key: artifact
     value: a5_roadmap.json
@@ -296,7 +296,7 @@ questions:
     {"patents": [{"title": "...", "applicant": "..."}], "papers": [{"title": "...", "year": ...}]}
     ```
   tags:
-  - bohr_literature
+  - bohr-cli
   reference_answers:
   - key: artifact
     value: a6_result.json
@@ -350,7 +350,7 @@ questions:
     {"papers": [{"title": "...", "journal": "...", "year": ..., "relevance": "..."}]}
     ```
   tags:
-  - bohr_literature
+  - bohr-cli
   reference_answers:
   - key: artifact
     value: a7_papers.json
@@ -405,7 +405,7 @@ questions:
     ```
     要求至少5篇。
   tags:
-  - bohr_literature
+  - bohr-cli
   reference_answers:
   - key: artifact
     value: a8_review.json
@@ -457,7 +457,7 @@ questions:
     声子色散和热导率到底什么关系？平台上有没有相关科普？
     写到 `a9_wiki.md`，要求包含"## 物理关系"和"## 平台资源"两节。
   tags:
-  - bohr_literature
+  - bohr-cli
   reference_answers:
   - key: artifact
     value: a9_wiki.md
@@ -510,7 +510,7 @@ questions:
     给我深入浅出讲解一下：石墨烯纳米带的边缘效应怎么影响电子输运的？引用要标出来。
     保存到 `a10_mentor.md`，引用标注格式为 [1] [2]...
   tags:
-  - bohr_literature
+  - bohr-cli
   reference_answers:
   - key: artifact
     value: a10_mentor.md
@@ -565,7 +565,7 @@ questions:
     {"claims": [{"source": "...", "claim": "...", "stance": "support|conflict"}], "summary": "..."}
     ```
   tags:
-  - bohr_literature
+  - bohr-cli
   reference_answers:
   - key: artifact
     value: a11_mxene.json
@@ -619,7 +619,7 @@ questions:
     {"tools": [{"name": "...", "description": "...", "usage_steps": ["step1", "step2", ...]}]}
     ```
   tags:
-  - bohr_literature
+  - bohr-cli
   reference_answers:
   - key: artifact
     value: a12_tools.json

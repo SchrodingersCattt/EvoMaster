@@ -14,7 +14,7 @@ questions:
     {"files": [{"path": "...", "size_mb": ..., "last_modified": "...", "recommendation": "delete|keep|archive"}], "total_reclaimable_mb": ...}
     ```
   tags:
-  - bohr_data
+  - bohr-cli
   reference_answers:
   - key: artifact
     value: c1_cleanup_plan.json
@@ -64,7 +64,7 @@ questions:
     数据集怎么分享给同一个项目组的其他人？
     说明保存到 `c2_guide.md`。
   tags:
-  - bohr_data
+  - bohr-cli
   reference_answers:
   - key: artifact
     value: c2_guide.md
@@ -111,7 +111,7 @@ questions:
     {"transferred": [{"job_id": ..., "source": "...", "destination": "personal/...", "success": true/false}]}
     ```
   tags:
-  - bohr_data
+  - bohr-cli
   reference_answers:
   - key: artifact
     value: c3_transfer.json
@@ -165,7 +165,7 @@ questions:
     {"created_dirs": ["personal/2026_experiments/", "personal/2026_experiments/A/", "personal/2026_experiments/B/", "personal/2026_experiments/C/"]}
     ```
   tags:
-  - bohr_data
+  - bohr-cli
   reference_answers:
   - key: artifact
     value: c4_verify.json
@@ -223,7 +223,7 @@ questions:
     我这有个 500M 的文件能传吗？怎么传最快？
     方案保存到 `c5_upload_guide.md`。
   tags:
-  - bohr_data
+  - bohr-cli
   reference_answers:
   - key: artifact
     value: c5_upload_guide.md
@@ -270,7 +270,7 @@ questions:
     {"datasets": [{"id": ..., "name": "...", "version_count": ...}], "most_versions_dataset": {"id": ..., "versions": [{"version": "...", "created_at": "...", "size": "..."}]}}
     ```
   tags:
-  - bohr_data
+  - bohr-cli
   reference_answers:
   - key: artifact
     value: c6_dataset_ops.json
@@ -323,7 +323,7 @@ questions:
     {"uploaded_path": "personal/test_upload/...", "files": [{"name": "...", "size_bytes": ...}]}
     ```
   tags:
-  - bohr_data
+  - bohr-cli
   reference_answers:
   - key: artifact
     value: c7_listing.json
@@ -376,7 +376,7 @@ questions:
     {"kb_id": ..., "upload_success": true/false, "filename": "...", "search_results": [{"text": "...", "score": ...}]}
     ```
   tags:
-  - bohr_data
+  - bohr-cli
   data_files:
   - key: pdf_perovskite
     path: "data/bohr_cli/Fabrication and characterization of Nano  H2dabco  K ClO4 3  molecular Perovskite by ball milling.pdf"
