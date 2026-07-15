@@ -8,6 +8,7 @@ questions:
   scope: platform
   intent: Test agent queries images and machine types without creating resources.
   human_prompt_seed: |
+    请利用 bohr-cli 完成以下任务：
     我有个 CP2K 输入文件要跑 DFT，有没有现成的镜像？版本都是几？有哪些计算机型？
     结果保存到 `b1_resources.json`，格式：
     ```json
@@ -61,6 +62,7 @@ questions:
   scope: platform
   intent: Test agent diagnoses long-running jobs with appropriate recommendations.
   human_prompt_seed: |
+    请利用 bohr-cli 完成以下任务：
     看看我有没有跑超过一天还没结束的任务，有的话检查下是不是卡死了。
     将分析结果保存到 `b2_diagnosis.json`，格式：
     ```json
@@ -106,6 +108,7 @@ questions:
   scope: platform
   intent: Test agent can submit batch parameterized jobs with job group.
   human_prompt_seed: |
+    请利用 bohr-cli 完成以下任务：
     我要做参数扫描，温度 300K 到 1000K 每 100K 一个，同一个模板跑 8 个任务。
     用 `registry.dp.tech/dptech/ubuntu:22.04-cuda12.1` 镜像，命令为 `echo "T=$TEMP" > result.txt`（把 $TEMP 替换为实际温度值），机型 `c2_m4_cpu`。
     把所有提交的任务ID记录到 `b3_jobs.json`，格式：
@@ -168,6 +171,7 @@ questions:
   scope: platform
   intent: Test agent queries GPU resources and makes recommendation without creating anything.
   human_prompt_seed: |
+    请利用 bohr-cli 完成以下任务：
     列出所有 GPU 可用机型，对比显存和价格，推荐用于500原子体系deepmd训练的配置。
     保存到 `b4_gpu_comparison.md`，要求有markdown表格对比和最终推荐。
   tags:
@@ -220,6 +224,7 @@ questions:
   scope: platform
   intent: Test agent diagnoses failed jobs from logs and takes corrective action.
   human_prompt_seed: |
+    请利用 bohr-cli 完成以下任务：
     看看最近有没有失败的任务，拉日志分析下原因，内存不够的话换大机器重跑。
     诊断报告保存到 `b5_diagnosis.json`，格式：
     ```json
@@ -273,6 +278,7 @@ questions:
   scope: platform
   intent: Test agent checks finished jobs for result files availability.
   human_prompt_seed: |
+    请利用 bohr-cli 完成以下任务：
     看看最近完成的任务，有没有忘设回传路径的，输出文件能不能捞回来。
     结果保存到 `b6_results.json`，格式：
     ```json
@@ -318,6 +324,7 @@ questions:
   scope: platform
   intent: Test full sandbox lifecycle - create, upload, execute, download, delete.
   human_prompt_seed: |
+    请利用 bohr-cli 完成以下任务：
     跑一段 ASE 脚本优化水分子结构，优化完的 xyz 拿出来。最好开个沙箱，别污染本地环境。
     把优化后的水分子坐标保存到 `b7_water_optimized.xyz`，把运行日志保存到 `b7_log.txt`。
   tags:
@@ -377,6 +384,7 @@ questions:
   scope: platform
   intent: Test agent can run comparison tests on two models in sandbox.
   human_prompt_seed: |
+    请利用 bohr-cli 完成以下任务：
     我有两个势函数模型想对比精度，用同一组测试集分别跑 dp test，结果对比一下。
     对比结果保存到 `b8_comparison.json`，格式：
     ```json
@@ -439,6 +447,7 @@ questions:
   scope: platform
   intent: Test agent identifies running jobs and uses terminate (not kill) by default.
   human_prompt_seed: |
+    请利用 bohr-cli 完成以下任务：
     我输入文件写错了，把正在跑的任务全停掉。
     操作记录保存到 `b9_actions.json`，格式：
     ```json
@@ -493,6 +502,7 @@ questions:
   intent: Test agent assesses hot-mount feasibility for running nodes.
   priority: P1
   human_prompt_seed: |
+    请利用 bohr-cli 完成以下任务：
     我有节点在跑，能不能动态再挂一个数据集进去？先看看我有哪些节点和数据集。
     分析结果保存到 `b10_analysis.json`，格式：
     ```json
@@ -540,6 +550,7 @@ questions:
   scope: platform
   intent: Test agent designs a multi-step material screening workflow with real cost estimation.
   human_prompt_seed: |
+    请利用 bohr-cli 完成以下任务：
     我要做新材料筛选：先从文献里找候选结构，然后平台上跑 DFT 初筛，给我一个可行方案加预算。
     方案保存到 `d1_plan.json`，格式：
     ```json
@@ -602,6 +613,7 @@ questions:
   scope: platform
   intent: Test agent can design a job-completion automation workflow honestly.
   human_prompt_seed: |
+    请利用 bohr-cli 完成以下任务：
     能不能搞个自动化：任务跑完自动把结果写到我的数据库表里？
     方案保存到 `d2_automation.md`，包含"## 轮询机制"和"## 数据流"和"## 可行性评估"三节。
   tags:
@@ -655,6 +667,7 @@ questions:
   scope: platform
   intent: Test agent extracts computation parameters from a paper and matches platform images.
   human_prompt_seed: |
+    请利用 bohr-cli 完成以下任务：
     我想复现这篇论文的计算结果，帮我看看它用的什么软件什么参数。
     提取结果保存到 `d3_params.json`，格式：
     ```json
@@ -713,6 +726,7 @@ questions:
   scope: platform
   intent: Test agent can organize job results and identify missing data.
   human_prompt_seed: |
+    请利用 bohr-cli 完成以下任务：
     论文要投稿了，帮我把计算数据从任务结果里整理出来，看看还差什么图表。
     整理报告保存到 `d4_data_report.json`，格式：
     ```json
@@ -758,6 +772,7 @@ questions:
   scope: platform
   intent: Test agent designs a literature database construction pipeline.
   human_prompt_seed: |
+    请利用 bohr-cli 完成以下任务：
     我想搞个文献数据库：某个领域的 20 篇高引文献，解析关键性能参数存到平台数据库里。
     数据库设计保存到 `d5_literature_db.json`，格式：
     ```json
@@ -811,6 +826,7 @@ questions:
   scope: platform
   intent: Test agent can submit a job and poll its status until completion.
   human_prompt_seed: |
+    请利用 bohr-cli 完成以下任务：
     先提一个 `echo "hello from bohrium" > result.txt && sleep 60` 的短任务（镜像用 `registry.dp.tech/dptech/ubuntu:22.04-cuda12.1`，机型 `c2_m4_cpu`），然后轮询监控它，完成后把日志存下来。
     监控记录保存到 `d6_monitor.json`，格式：
     ```json
@@ -865,6 +881,7 @@ questions:
   intent: Test agent creates a node, gets SSH info, and transfers a file.
   priority: P1
   human_prompt_seed: |
+    请利用 bohr-cli 完成以下任务：
     用我的bohrium鉴权启动一个容器节点，机型选 T4 相关的最便宜的，获取其ssh的链接方式，启动完成后，把工作区的 test 文件传到 /personal 下面。
     操作记录保存到 `d7_node_ops.json`，格式：
     ```json

@@ -8,6 +8,7 @@ questions:
   scope: platform
   intent: Test agent can use bohr paper search with English keywords and present structured results.
   human_prompt_seed: |
+    请利用 bohr-cli 完成以下任务：
     看一眼文献到底有没有人做过Mn掺杂的Invar合金？效果怎么样？
     把搜索结果保存到 `a1_result.json`，格式：
     ```json
@@ -62,6 +63,7 @@ questions:
   scope: platform
   intent: Test agent can synthesize multiple literature sources on Invar effect mechanisms.
   human_prompt_seed: |
+    请利用 bohr-cli 完成以下任务：
     Invar合金的低热膨胀机理都有什么机理？文献都是怎么说的？
     整理成 `a2_mechanisms.md`，每种机理一个二级标题（## 机理名称），下面写解释和对应文献。
   tags:
@@ -105,6 +107,7 @@ questions:
   scope: platform
   intent: Test agent can extract crystallographic data from PDFs using bohr pdf parse.
   human_prompt_seed: |
+    请利用 bohr-cli 完成以下任务：
     这两篇文献的晶体学数据整理成表格，要求包含化学式、空间群、晶胞参数。
     输出为 `a3_crystal_data.json`，格式：
     ```json
@@ -173,6 +176,7 @@ questions:
   scope: platform
   intent: Test agent can search and compare two scholars using bohr scholar.
   human_prompt_seed: |
+    请利用 bohr-cli 完成以下任务：
     帮我查一下 Jörg Behler 和 Michele Parrinello 两位学者的合作关系和各自研究重点有什么区别。
     输出为 `a4_scholars.json`，格式：
     ```json
@@ -228,6 +232,7 @@ questions:
   scope: platform
   intent: Test agent can combine wiki+scholar+paper for a learning roadmap.
   human_prompt_seed: |
+    请利用 bohr-cli 完成以下任务：
     我现在要入门"拓扑绝缘体表面态"，给我一个入门路线图：核心概念 → 关键人物 → 推荐论文。
     输出为 `a5_roadmap.json`，格式：
     ```json
@@ -290,6 +295,7 @@ questions:
   scope: platform
   intent: Test agent uses both paper patent and paper search endpoints.
   human_prompt_seed: |
+    请利用 bohr-cli 完成以下任务：
     有个专利是做钠离子电池正极的，搜一下这块还有什么相关专利和学术论文。
     结果保存到 `a6_result.json`，格式：
     ```json
@@ -344,6 +350,7 @@ questions:
   scope: platform
   intent: Test agent applies year and journal filters in paper search.
   human_prompt_seed: |
+    请利用 bohr-cli 完成以下任务：
     找几篇 GNN 做分子性质预测的文章，要 Nature 系列的，最近两年的。
     保存到 `a7_papers.json`，格式：
     ```json
@@ -398,6 +405,7 @@ questions:
   scope: platform
   intent: Test agent can search and summarize 5 papers with key points.
   human_prompt_seed: |
+    请利用 bohr-cli 完成以下任务：
     下周组会我要讲"MOF催化CO2还原"，帮我快速整理 5 篇核心文献的要点。
     保存到 `a8_review.json`，格式：
     ```json
@@ -454,6 +462,7 @@ questions:
   scope: platform
   intent: Test agent uses bohr wiki for scientific encyclopedia lookup.
   human_prompt_seed: |
+    请利用 bohr-cli 完成以下任务：
     声子色散和热导率到底什么关系？平台上有没有相关科普？
     写到 `a9_wiki.md`，要求包含"## 物理关系"和"## 平台资源"两节。
   tags:
@@ -507,6 +516,7 @@ questions:
   scope: platform
   intent: Test agent uses bohr mentor for deep research Q&A with citations.
   human_prompt_seed: |
+    请利用 bohr-cli 完成以下任务：
     给我深入浅出讲解一下：石墨烯纳米带的边缘效应怎么影响电子输运的？引用要标出来。
     保存到 `a10_mentor.md`，引用标注格式为 [1] [2]...
   tags:
@@ -559,6 +569,7 @@ questions:
   scope: platform
   intent: Test agent uses bohr lkm for literature knowledge mining with stance analysis.
   human_prompt_seed: |
+    请利用 bohr-cli 完成以下任务：
     关于 MXene 表面官能团和电化学性能关系的讨论都是怎么样的？哪些结论是相互印证和冲突的，列个表。
     输出到 `a11_mxene.json`，格式：
     ```json
@@ -613,6 +624,7 @@ questions:
   scope: platform
   intent: Test agent uses bohr tools search to find scientific tools.
   human_prompt_seed: |
+    请利用 bohr-cli 完成以下任务：
     有没有能做docking的工具？给个详细教程。
     保存到 `a12_tools.json`，格式：
     ```json
