@@ -344,10 +344,17 @@ def test_bwo_monitor_v4_schema_requires_real_lifecycle() -> None:
         validator.validate({**valid, "log_saved": False})
 
 
-def test_bwo_lit_db_v2_requires_complete_design_and_real_search() -> None:
+def test_bwo_lit_db_v3_accepts_text_or_structured_batch_strategy() -> None:
     questions = flatten_banks(load_question_banks(QUESTION_BANK_DIR))
-    question = next(q for q in questions if q.id == "BWO_lit_db_D5_20260715_v2")
-    assert all(q.id != "BWO_lit_db_D5_20260715" for q in questions)
+    question = next(q for q in questions if q.id == "BWO_lit_db_D5_20260715_v3")
+    assert all(
+        q.id
+        not in {
+            "BWO_lit_db_D5_20260715",
+            "BWO_lit_db_D5_20260715_v2",
+        }
+        for q in questions
+    )
 
     schema_ref = next(
         ref for ref in question.reference_answers if ref.key == "literature_db_schema"
@@ -366,6 +373,15 @@ def test_bwo_lit_db_v2_requires_complete_design_and_real_search() -> None:
         "batch_strategy": "Parse papers in bounded batches.",
     }
     validator.validate(valid)
+    validator.validate(
+        {
+            **valid,
+            "batch_strategy": {
+                "batch_size": 5,
+                "stages": ["normalize", "deduplicate", "persist"],
+            },
+        }
+    )
     with pytest.raises(ValidationError):
         validator.validate({**valid, "papers_found": 19})
     with pytest.raises(ValidationError):
@@ -375,6 +391,10 @@ def test_bwo_lit_db_v2_requires_complete_design_and_real_search() -> None:
                 "schema": {"fields": valid["schema"]["fields"][:2]},
             }
         )
+    with pytest.raises(ValidationError):
+        validator.validate({**valid, "batch_strategy": ""})
+    with pytest.raises(ValidationError):
+        validator.validate({**valid, "batch_strategy": {}})
 
     search_ref = next(
         ref for ref in question.reference_answers if ref.key == "paper_search_via_cli"

@@ -1075,7 +1075,7 @@ questions:
     axis: efficiency
     verify: turn_budget
 
-- id: BWO_lit_db_D5_20260715_v2
+- id: BWO_lit_db_D5_20260715_v3
   capability: workflow_orchestration
   domain: agnostic
   scope: platform
@@ -1126,8 +1126,11 @@ questions:
             type: integer
             minimum: 20
           batch_strategy:
-            type: string
-            minLength: 10
+            oneOf:
+            - type: string
+              minLength: 10
+            - type: object
+              minProperties: 1
   - key: paper_search_via_cli
     tool_name: Bash
     tool_arg: command
