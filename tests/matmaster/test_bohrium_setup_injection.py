@@ -90,12 +90,8 @@ class TestBohriumSetupServiceOrchestration:
     async def test_run_cleanup_delegates_to_owned_cleanup_method(self):
         sink = MagicMock()
         svc = _make_service(event_sink=sink)
-        event_cb = MagicMock()
 
-        with (
-            patch.object(svc, "_cleanup_bohrium_after_run") as mock_cleanup,
-            patch.object(svc, "_make_event_bridge", return_value=event_cb),
-        ):
+        with patch.object(svc, "_cleanup_bohrium_after_run") as mock_cleanup:
             await svc.run_cleanup(
                 session_id="s1",
                 pg_for_run=object(),
@@ -106,9 +102,9 @@ class TestBohriumSetupServiceOrchestration:
         mock_cleanup.assert_called_once()
         kwargs = mock_cleanup.call_args.kwargs
         assert kwargs["session_id"] == "s1"
-        assert kwargs["event_callback"] is event_cb
         assert kwargs["ssh_attached"] is True
         assert kwargs["invocation_id"] == "inv-1"
+        sink.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_run_setup_delegates_bohrium_required_flag(self):
