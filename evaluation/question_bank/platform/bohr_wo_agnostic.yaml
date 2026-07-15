@@ -133,39 +133,120 @@ questions:
     axis: efficiency
     verify: turn_budget
 
-- id: BWO_param_sweep_003_20260715
+- id: BWO_param_sweep_003_20260715_v2
   capability: workflow_orchestration
   domain: agnostic
   scope: platform
   intent: Test agent can submit batch parameterized jobs with job group.
   human_prompt_seed: |
     利用 bohr-cli，我要做参数扫描，温度 300K 到 1000K 每 100K 一个，同一个模板跑 8 个任务。
-    用 `registry.dp.tech/dptech/ubuntu:22.04-cuda12.1` 镜像，命令为 `echo "T=$TEMP" > result.txt`（把 $TEMP 替换为实际温度值），机型 `c2_m4_cpu`。
-    把所有提交的任务ID记录到 `b3_jobs.json`，格式：
-    ```json
-    {"job_group_id": ..., "jobs": [{"temperature_K": ..., "job_id": ...}]}
-    ```
+    用 `registry.dp.tech/dptech/ubuntu:22.04-py3.10-cuda12.1` 镜像，命令为 `echo "T=$TEMP" > result.txt`（把 $TEMP 替换为实际温度值），机型 `c2_m4_cpu`。
+    把任务放在同一个任务组中，并将实际的任务组 ID 和每个温度对应的任务 ID 记录到 `b3_jobs.json`；每条任务记录包含 `temperature_K` 和 `job_id`。
   tags:
   - bohr-cli
   reference_answers:
   - key: artifact
     value: b3_jobs.json
-  - key: has_300K
+  - key: sweep_schema
     value:
       filename: b3_jobs.json
-      pattern: '"temperature_K"\s*:\s*300'
-  - key: has_1000K
+      schema:
+        type: object
+        required:
+        - job_group_id
+        - jobs
+        properties:
+          job_group_id:
+            type: integer
+            minimum: 1
+          jobs:
+            type: array
+            minItems: 8
+            maxItems: 8
+            items:
+              type: object
+              required:
+              - temperature_K
+              - job_id
+              properties:
+                temperature_K:
+                  type: integer
+                  enum:
+                  - 300
+                  - 400
+                  - 500
+                  - 600
+                  - 700
+                  - 800
+                  - 900
+                  - 1000
+                job_id:
+                  type: integer
+                  minimum: 1
+              additionalProperties: false
+            allOf:
+            - contains:
+                properties:
+                  temperature_K:
+                    const: 300
+                required:
+                - temperature_K
+            - contains:
+                properties:
+                  temperature_K:
+                    const: 400
+                required:
+                - temperature_K
+            - contains:
+                properties:
+                  temperature_K:
+                    const: 500
+                required:
+                - temperature_K
+            - contains:
+                properties:
+                  temperature_K:
+                    const: 600
+                required:
+                - temperature_K
+            - contains:
+                properties:
+                  temperature_K:
+                    const: 700
+                required:
+                - temperature_K
+            - contains:
+                properties:
+                  temperature_K:
+                    const: 800
+                required:
+                - temperature_K
+            - contains:
+                properties:
+                  temperature_K:
+                    const: 900
+                required:
+                - temperature_K
+            - contains:
+                properties:
+                  temperature_K:
+                    const: 1000
+                required:
+                - temperature_K
+        additionalProperties: false
+  - key: group_created_via_cli
+    tool_name: Bash
+    tool_arg: command
     value:
-      filename: b3_jobs.json
-      pattern: '"temperature_K"\s*:\s*1000'
-  - key: has_job_ids
+      pattern: '(?:^|[\n;&|]\s*)(?:(?:env|sudo)(?:\s+[^\s;&|]+)*\s+)?(?:[^\s;&|]+/)?bohr\s+job_group\s+create\b'
+      min_matches: 1
+      max_matches: 1
+  - key: group_jobs_submitted_via_cli
+    tool_name: Bash
+    tool_arg: command
     value:
-      filename: b3_jobs.json
-      pattern: '"job_id"\s*:\s*\d+'
-  - key: has_group
-    value:
-      filename: b3_jobs.json
-      pattern: '"job_group_id"\s*:\s*\d+'
+      pattern: '(?:^|[\n;&|]\s*)(?:(?:env|sudo)(?:\s+[^\s;&|]+)*\s+)?(?:[^\s;&|]+/)?bohr\s+job\s+submit\b(?=[^\n;&|]*(?:(?:--job_group_id)(?:\s+|=)|-g\s+)\S+)'
+      min_matches: 1
   - key: turn_budget
     value:
       max: 18
@@ -174,22 +255,18 @@ questions:
     criterion: b3_jobs.json written to workspace.
     axis: correctness
     verify: artifact_exists
-  - id: has_300K
-    criterion: Contains 300K temperature entry.
+  - id: sweep_schema
+    criterion: One positive job group ID and eight positive job IDs cover every 100 K step from 300 K through 1000 K.
     axis: correctness
-    verify: text_file_regex
-  - id: has_1000K
-    criterion: Contains 1000K temperature entry.
-    axis: correctness
-    verify: text_file_regex
-  - id: has_job_ids
-    criterion: Job IDs are real numeric values from platform.
-    axis: correctness
-    verify: text_file_regex
-  - id: has_group
-    criterion: Job group ID recorded.
-    axis: correctness
-    verify: text_file_regex
+    verify: json_file_schema
+  - id: group_created_via_cli
+    criterion: The job group was created through bohr-cli exactly once.
+    axis: grounding
+    verify: tool_args_regex
+  - id: group_jobs_submitted_via_cli
+    criterion: Jobs were submitted through bohr-cli with a job-group argument.
+    axis: grounding
+    verify: tool_args_regex
   - id: turn_budget
     criterion: Agent completes within turn budget.
     axis: efficiency
@@ -865,13 +942,13 @@ questions:
     axis: efficiency
     verify: turn_budget
 
-- id: BWO_monitor_D6_20260715_v2
+- id: BWO_monitor_D6_20260715_v3
   capability: workflow_orchestration
   domain: agnostic
   scope: platform
   intent: Test agent can submit a job and poll its status until completion.
   human_prompt_seed: |
-    利用 bohr-cli，先提一个 `echo "hello from bohrium" > result.txt && sleep 60` 的短任务（镜像用 `registry.dp.tech/dptech/ubuntu:22.04-cuda12.1`，机型 `c2_m4_cpu`），然后轮询监控它，完成后把日志存下来。
+    利用 bohr-cli，先提一个 `echo "hello from bohrium" > result.txt && sleep 60` 的短任务（镜像用 `registry.dp.tech/dptech/ubuntu:22.04-py3.10-cuda12.1`，机型 `c2_m4_cpu`），然后轮询监控它，完成后把日志存下来。
     将平台日志保存为工作区根目录下的 `d6_job.log`，并将实际提交参数、每次轮询结果和日志保存结果记录到 `d6_monitor.json`。JSON 需包含 `job_id`、`image`、`machine_type`、`command`、`polls`、`final_status` 和 `log_saved`；`polls` 中每条记录包含 `time` 和 `status`，状态字段保留 bohr-cli 实际返回的整数状态码。
   tags:
   - bohr-cli
@@ -897,7 +974,7 @@ questions:
             type: integer
             minimum: 1
           image:
-            const: registry.dp.tech/dptech/ubuntu:22.04-cuda12.1
+            const: registry.dp.tech/dptech/ubuntu:22.04-py3.10-cuda12.1
           machine_type:
             const: c2_m4_cpu
           command:

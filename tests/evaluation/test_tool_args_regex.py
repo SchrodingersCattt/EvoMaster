@@ -129,10 +129,13 @@ def test_tool_args_regex_reference_is_validated(value: object) -> None:
         )
 
 
-def test_bwo_monitor_v2_schema_requires_real_lifecycle() -> None:
+def test_bwo_monitor_v3_schema_requires_real_lifecycle() -> None:
     questions = flatten_banks(load_question_banks(QUESTION_BANK_DIR))
-    question = next(q for q in questions if q.id == "BWO_monitor_D6_20260715_v2")
-    assert all(q.id != "BWO_monitor_D6_20260715" for q in questions)
+    question = next(q for q in questions if q.id == "BWO_monitor_D6_20260715_v3")
+    assert all(
+        q.id not in {"BWO_monitor_D6_20260715", "BWO_monitor_D6_20260715_v2"}
+        for q in questions
+    )
     schema_ref = next(
         ref for ref in question.reference_answers if ref.key == "monitor_schema"
     )
@@ -140,7 +143,7 @@ def test_bwo_monitor_v2_schema_requires_real_lifecycle() -> None:
     validator = validator_for(schema)(schema)
     valid = {
         "job_id": 20400713,
-        "image": "registry.dp.tech/dptech/ubuntu:22.04-cuda12.1",
+        "image": "registry.dp.tech/dptech/ubuntu:22.04-py3.10-cuda12.1",
         "machine_type": "c2_m4_cpu",
         "command": 'echo "hello from bohrium" > result.txt && sleep 60',
         "polls": [
@@ -208,4 +211,57 @@ def test_bwo_lit_db_v2_requires_complete_design_and_real_search() -> None:
     assert not re.search(
         pattern,
         'bohr paper search "sodium-ion battery cathode" --size 10 -o json',
+    )
+
+
+def test_bwo_param_sweep_v2_requires_complete_grouped_sweep() -> None:
+    questions = flatten_banks(load_question_banks(QUESTION_BANK_DIR))
+    question = next(q for q in questions if q.id == "BWO_param_sweep_003_20260715_v2")
+    assert all(q.id != "BWO_param_sweep_003_20260715" for q in questions)
+
+    schema_ref = next(
+        ref for ref in question.reference_answers if ref.key == "sweep_schema"
+    )
+    schema = schema_ref.value["schema"]
+    validator = validator_for(schema)(schema)
+    valid = {
+        "job_group_id": 9876,
+        "jobs": [
+            {"temperature_K": temperature, "job_id": 1000 + index}
+            for index, temperature in enumerate(range(300, 1001, 100))
+        ],
+    }
+    validator.validate(valid)
+    with pytest.raises(ValidationError):
+        validator.validate(
+            {
+                **valid,
+                "jobs": [
+                    *valid["jobs"][:-1],
+                    {"temperature_K": 900, "job_id": 9999},
+                ],
+            }
+        )
+    with pytest.raises(ValidationError):
+        validator.validate({**valid, "job_group_id": 0})
+
+    group_ref = next(
+        ref for ref in question.reference_answers if ref.key == "group_created_via_cli"
+    )
+    assert re.search(
+        group_ref.value["pattern"],
+        'bohr job_group create -n "temperature-sweep" --project_id 123 -o json',
+    )
+    submit_ref = next(
+        ref
+        for ref in question.reference_answers
+        if ref.key == "group_jobs_submitted_via_cli"
+    )
+    assert re.search(
+        submit_ref.value["pattern"],
+        'bohr job submit -i job.json -g "$GROUP_ID" -o json',
+    )
+    assert not re.search(
+        submit_ref.value["pattern"],
+        'bohr job submit -i job.json -o json',
     )
