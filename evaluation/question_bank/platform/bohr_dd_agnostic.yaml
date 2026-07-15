@@ -1,0 +1,431 @@
+version: v5
+capability: data_diagnosis
+domain: agnostic
+questions:
+- id: BDD_cleanup_plan_001_20260715
+  capability: data_diagnosis
+  domain: agnostic
+  scope: platform
+  intent: Test agent navigates file system to find large/old files and plans cleanup.
+  human_prompt_seed: |
+    储存快满了，帮我找找哪些文件又大又久没动过的，规划一下清理列表。不要直接删，先给我看方案。
+    清理规划保存到 `c1_cleanup_plan.json`，格式：
+    ```json
+    {"files": [{"path": "...", "size_mb": ..., "last_modified": "...", "recommendation": "delete|keep|archive"}], "total_reclaimable_mb": ...}
+    ```
+  tags:
+  - bohr_data
+  reference_answers:
+  - key: artifact
+    value: c1_cleanup_plan.json
+  - key: has_files
+    value:
+      filename: c1_cleanup_plan.json
+      pattern: '"files"\s*:\s*\[\s*\{'
+  - key: has_size
+    value:
+      filename: c1_cleanup_plan.json
+      pattern: '"size_mb"\s*:\s*[\d.]'
+  - key: has_recommendation
+    value:
+      filename: c1_cleanup_plan.json
+      pattern: '"recommendation"\s*:\s*"(delete|keep|archive)"'
+  - key: turn_budget
+    value:
+      max: 10
+  scoring_checklist:
+  - id: artifact
+    criterion: c1_cleanup_plan.json written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: has_files
+    criterion: Files array populated with discovered files.
+    axis: correctness
+    verify: text_file_regex
+  - id: has_size
+    criterion: File sizes reported in MB.
+    axis: correctness
+    verify: text_file_regex
+  - id: has_recommendation
+    criterion: Each file has delete/keep/archive recommendation.
+    axis: correctness
+    verify: text_file_regex
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+
+- id: BDD_share_dataset_002_20260715
+  capability: data_diagnosis
+  domain: agnostic
+  scope: platform
+  intent: Test agent understands dataset sharing via project mechanism.
+  human_prompt_seed: |
+    数据集怎么分享给同一个项目组的其他人？
+    说明保存到 `c2_guide.md`。
+  tags:
+  - bohr_data
+  reference_answers:
+  - key: artifact
+    value: c2_guide.md
+  - key: mentions_project
+    value:
+      filename: c2_guide.md
+      pattern: project|项目
+      flags: i
+  - key: mentions_share
+    value:
+      filename: c2_guide.md
+      pattern: share|共享|分享|project.id
+      flags: i
+  - key: turn_budget
+    value:
+      max: 4
+  scoring_checklist:
+  - id: artifact
+    criterion: c2_guide.md written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: mentions_project
+    criterion: Mentions project-based sharing.
+    axis: correctness
+    verify: text_file_regex
+  - id: mentions_share
+    criterion: Explains sharing mechanism.
+    axis: correctness
+    verify: text_file_regex
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+
+- id: BDD_copy_results_003_20260715
+  capability: data_diagnosis
+  domain: agnostic
+  scope: platform
+  intent: Test agent downloads job results and copies to personal storage.
+  human_prompt_seed: |
+    看看最近完成的任务有没有结果文件，帮我拷到 personal 盘存着。
+    操作记录保存到 `c3_transfer.json`，格式：
+    ```json
+    {"transferred": [{"job_id": ..., "source": "...", "destination": "personal/...", "success": true/false}]}
+    ```
+  tags:
+  - bohr_data
+  reference_answers:
+  - key: artifact
+    value: c3_transfer.json
+  - key: has_transferred
+    value:
+      filename: c3_transfer.json
+      pattern: '"transferred"\s*:\s*\[\s*\{'
+  - key: personal_path
+    value:
+      filename: c3_transfer.json
+      tokens:
+      - personal
+  - key: has_success
+    value:
+      filename: c3_transfer.json
+      pattern: '"success"\s*:\s*true'
+  - key: turn_budget
+    value:
+      max: 10
+  scoring_checklist:
+  - id: artifact
+    criterion: c3_transfer.json written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: has_transferred
+    criterion: Transferred array populated.
+    axis: correctness
+    verify: text_file_regex
+  - id: personal_path
+    criterion: Destination is personal storage.
+    axis: correctness
+    verify: text_file_contains_all
+  - id: has_success
+    criterion: At least one successful transfer.
+    axis: correctness
+    verify: text_file_regex
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+
+- id: BDD_mkdir_structure_004_20260715
+  capability: data_diagnosis
+  domain: agnostic
+  scope: platform
+  intent: Test agent creates directory structure on personal storage.
+  human_prompt_seed: |
+    personal 盘里建个 "2026_experiments" 文件夹，下面分 A、B、C 三个子目录。
+    创建完成后用 bohr file list 验证，把结果保存到 `c4_verify.json`，格式：
+    ```json
+    {"created_dirs": ["personal/2026_experiments/", "personal/2026_experiments/A/", "personal/2026_experiments/B/", "personal/2026_experiments/C/"]}
+    ```
+  tags:
+  - bohr_data
+  reference_answers:
+  - key: artifact
+    value: c4_verify.json
+  - key: has_parent
+    value:
+      filename: c4_verify.json
+      pattern: 2026_experiments
+  - key: has_A
+    value:
+      filename: c4_verify.json
+      pattern: /A
+  - key: has_B
+    value:
+      filename: c4_verify.json
+      pattern: /B
+  - key: has_C
+    value:
+      filename: c4_verify.json
+      pattern: /C
+  - key: turn_budget
+    value:
+      max: 8
+  scoring_checklist:
+  - id: artifact
+    criterion: c4_verify.json written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: has_parent
+    criterion: Parent directory 2026_experiments created.
+    axis: correctness
+    verify: text_file_regex
+  - id: has_A
+    criterion: Subdirectory A created.
+    axis: correctness
+    verify: text_file_regex
+  - id: has_B
+    criterion: Subdirectory B created.
+    axis: correctness
+    verify: text_file_regex
+  - id: has_C
+    criterion: Subdirectory C created.
+    axis: correctness
+    verify: text_file_regex
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+
+- id: BDD_upload_strategy_005_20260715
+  capability: data_diagnosis
+  domain: agnostic
+  scope: platform
+  intent: Test agent understands large file upload capabilities and strategies.
+  human_prompt_seed: |
+    我这有个 500M 的文件能传吗？怎么传最快？
+    方案保存到 `c5_upload_guide.md`。
+  tags:
+  - bohr_data
+  reference_answers:
+  - key: artifact
+    value: c5_upload_guide.md
+  - key: mentions_size
+    value:
+      filename: c5_upload_guide.md
+      pattern: 500|大文件|large
+      flags: i
+  - key: mentions_method
+    value:
+      filename: c5_upload_guide.md
+      pattern: upload|上传|bohr file|dataset
+      flags: i
+  - key: turn_budget
+    value:
+      max: 4
+  scoring_checklist:
+  - id: artifact
+    criterion: c5_upload_guide.md written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: mentions_size
+    criterion: Addresses the 500M file size question.
+    axis: correctness
+    verify: text_file_regex
+  - id: mentions_method
+    criterion: Describes upload method.
+    axis: correctness
+    verify: text_file_regex
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+
+- id: BDD_dataset_versions_006_20260715
+  capability: data_diagnosis
+  domain: agnostic
+  scope: platform
+  intent: Test agent inspects dataset versions and manages lifecycle.
+  human_prompt_seed: |
+    看看我有哪些数据集，哪个版本最多，查查各版本什么时候建的、多大。
+    操作记录保存到 `c6_dataset_ops.json`，格式：
+    ```json
+    {"datasets": [{"id": ..., "name": "...", "version_count": ...}], "most_versions_dataset": {"id": ..., "versions": [{"version": "...", "created_at": "...", "size": "..."}]}}
+    ```
+  tags:
+  - bohr_data
+  reference_answers:
+  - key: artifact
+    value: c6_dataset_ops.json
+  - key: has_datasets
+    value:
+      filename: c6_dataset_ops.json
+      pattern: '"datasets"\s*:\s*\['
+  - key: has_version_count
+    value:
+      filename: c6_dataset_ops.json
+      pattern: '"version_count"\s*:\s*\d'
+  - key: has_most_versions
+    value:
+      filename: c6_dataset_ops.json
+      pattern: '"most_versions_dataset"'
+  - key: turn_budget
+    value:
+      max: 10
+  scoring_checklist:
+  - id: artifact
+    criterion: c6_dataset_ops.json written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: has_datasets
+    criterion: Datasets listed.
+    axis: correctness
+    verify: text_file_regex
+  - id: has_version_count
+    criterion: Version counts reported.
+    axis: correctness
+    verify: text_file_regex
+  - id: has_most_versions
+    criterion: Identified dataset with most versions.
+    axis: correctness
+    verify: text_file_regex
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+
+- id: BDD_upload_list_007_20260715
+  capability: data_diagnosis
+  domain: agnostic
+  scope: platform
+  intent: Test agent uploads file and lists directory contents sorted by size.
+  human_prompt_seed: |
+    先往 personal 盘的 test_upload/ 目录传个小文件（内容随意），然后看一下该目录里都有什么，按文件大小排一下。
+    结果保存到 `c7_listing.json`，格式：
+    ```json
+    {"uploaded_path": "personal/test_upload/...", "files": [{"name": "...", "size_bytes": ...}]}
+    ```
+  tags:
+  - bohr_data
+  reference_answers:
+  - key: artifact
+    value: c7_listing.json
+  - key: has_uploaded_path
+    value:
+      filename: c7_listing.json
+      pattern: '"uploaded_path"\s*:\s*"personal/'
+  - key: has_files
+    value:
+      filename: c7_listing.json
+      pattern: '"files"\s*:\s*\[\s*\{'
+  - key: has_size
+    value:
+      filename: c7_listing.json
+      pattern: '"size_bytes"\s*:\s*\d'
+  - key: turn_budget
+    value:
+      max: 8
+  scoring_checklist:
+  - id: artifact
+    criterion: c7_listing.json written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: has_uploaded_path
+    criterion: Upload path on personal storage recorded.
+    axis: correctness
+    verify: text_file_regex
+  - id: has_files
+    criterion: File listing populated.
+    axis: correctness
+    verify: text_file_regex
+  - id: has_size
+    criterion: File sizes in bytes reported.
+    axis: correctness
+    verify: text_file_regex
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+
+- id: BDD_kb_upload_search_008_20260715
+  capability: data_diagnosis
+  domain: agnostic
+  scope: platform
+  intent: Test agent handles filenames with spaces when uploading to knowledge base.
+  human_prompt_seed: |
+    把这篇文献传到知识库里去，然后搜一下里面有没有提到 bandgap 的数据。
+    搜索结果保存到 `c8_kb_search.json`，格式：
+    ```json
+    {"kb_id": ..., "upload_success": true/false, "filename": "...", "search_results": [{"text": "...", "score": ...}]}
+    ```
+  tags:
+  - bohr_data
+  data_files:
+  - key: pdf_perovskite
+    path: "data/bohr_cli/Fabrication and characterization of Nano  H2dabco  K ClO4 3  molecular Perovskite by ball milling.pdf"
+    description: PDF with spaces in filename - tests path escaping.
+  reference_answers:
+  - key: artifact
+    value: c8_kb_search.json
+  - key: upload_success
+    value:
+      filename: c8_kb_search.json
+      pattern: '"upload_success"\s*:\s*true'
+  - key: has_kb_id
+    value:
+      filename: c8_kb_search.json
+      pattern: '"kb_id"\s*:\s*\d+'
+  - key: has_search_results
+    value:
+      filename: c8_kb_search.json
+      pattern: '"search_results"\s*:\s*\['
+  - key: has_filename_with_spaces
+    value:
+      filename: c8_kb_search.json
+      pattern: Fabrication.*characterization|H2dabco
+      flags: i
+  - key: turn_budget
+    value:
+      max: 12
+  scoring_checklist:
+  - id: artifact
+    criterion: c8_kb_search.json written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: upload_success
+    criterion: PDF uploaded successfully despite spaces in filename.
+    axis: correctness
+    verify: text_file_regex
+  - id: has_kb_id
+    criterion: Knowledge base ID recorded.
+    axis: correctness
+    verify: text_file_regex
+  - id: has_search_results
+    criterion: Search results array present.
+    axis: correctness
+    verify: text_file_regex
+  - id: has_filename_with_spaces
+    criterion: Filename with spaces correctly handled and recorded.
+    axis: correctness
+    verify: text_file_regex
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget

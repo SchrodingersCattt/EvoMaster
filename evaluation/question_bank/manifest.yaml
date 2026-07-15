@@ -214,6 +214,22 @@ banks:
   capability: execution_contract
   domain: alloy
   questions: 1
+- path: platform/bohr_sa_agnostic.yaml
+  capability: scientific_analysis
+  domain: agnostic
+  questions: 12
+- path: platform/bohr_wo_agnostic.yaml
+  capability: workflow_orchestration
+  domain: agnostic
+  questions: 17
+- path: platform/bohr_dd_agnostic.yaml
+  capability: data_diagnosis
+  domain: agnostic
+  questions: 8
+- path: platform/bohr_ec_agnostic.yaml
+  capability: execution_contract
+  domain: agnostic
+  questions: 9
 - path: input_generation/ig_semiconductor_abacus.yaml
   capability: input_generation
   domain: semiconductor
