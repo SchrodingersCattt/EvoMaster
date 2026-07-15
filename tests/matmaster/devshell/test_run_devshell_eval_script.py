@@ -9,8 +9,51 @@ import sys
 from pathlib import Path
 from typing import Any
 
+import pytest
+
 REPO_ROOT = Path(__file__).resolve().parents[3]
 SCRIPT = REPO_ROOT / "evaluation" / "scripts" / "devshell" / "run_devshell_eval.py"
+
+
+def test_bohrium_prod_env_override_is_scoped(tmp_path) -> None:
+    mod = importlib.import_module("evaluation.scripts.devshell.run_devshell_eval")
+    (tmp_path / ".env.prod").write_text(
+        "\n".join(
+            (
+                "BOHRIUM_ACCESS_KEY=prod-ak",
+                "BOHRIUM_PROJECT_ID=123",
+                "BOHRIUM_USER_ID=456",
+                "MYSQL_PASSWORD=must-not-be-loaded",
+            )
+        ),
+        encoding="utf-8",
+    )
+    env = {
+        "SERVICE_ENV": "test",
+        "BOHRIUM_ACCESS_KEY": "test-ak",
+        "BOHRIUM_ORG_ID": "test-org",
+        "BOHRIUM_USE_SANDBOX": "1",
+        "MYSQL_PASSWORD": "test-db-password",
+    }
+
+    mod._apply_bohrium_env_override(env, repo_root=tmp_path, environment="prod")
+
+    assert env["SERVICE_ENV"] == "test"
+    assert env["BOHRIUM_ACCESS_KEY"] == "prod-ak"
+    assert env["BOHRIUM_PROJECT_ID"] == "123"
+    assert env["BOHRIUM_USER_ID"] == "456"
+    assert "BOHRIUM_ORG_ID" not in env
+    assert env["BOHRIUM_BASE_URL"] == "https://openapi.dp.tech"
+    assert env["BOHRIUM_USE_SANDBOX"] == "1"
+    assert env["MYSQL_PASSWORD"] == "test-db-password"
+
+
+def test_bohrium_env_override_requires_access_key(tmp_path) -> None:
+    mod = importlib.import_module("evaluation.scripts.devshell.run_devshell_eval")
+    (tmp_path / ".env.prod").write_text("BOHRIUM_PROJECT_ID=123\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="BOHRIUM_ACCESS_KEY"):
+        mod._apply_bohrium_env_override({}, repo_root=tmp_path, environment="prod")
 
 
 def test_devshell_eval_dry_run_limit_one() -> None:

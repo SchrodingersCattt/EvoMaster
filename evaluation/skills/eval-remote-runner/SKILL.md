@@ -36,6 +36,7 @@ All commands below use placeholders `$HOST`, `$PORT`, `$USER` — replace with a
 - **Never kill a running eval** — always check `ps` before launching.
 - **`flock -n /tmp/eval.lock`** — ensures mutual exclusion (already in launch command).
 - **`--eval-ingest-pending-only`** — MANDATORY on every run. Without it, scoring has no pending files to evaluate.
+- Bohr CLI runs MUST include **`--bohrium-env prod`** so tasks use the production AK and endpoint without changing eval-ingest routing or Bohrium interface type.
 - `exit_code == 0` ≠ criteria passed. Only `score_devshell_tasks.py` determines pass/fail.
 
 ## Workflow
@@ -70,8 +71,9 @@ ssh -p $PORT $USER@$HOST "cd /root/matmaster-evo && \
 | `--jobs N` | Parallel workers. Default 16, dial back if 429s — see `references/monitoring_scripts.md` |
 | `--limit N` | Cap total tasks (for testing) |
 | `--no-clean-results` | Keep prior results dir |
+| `--bohrium-env prod` | Inject only production `BOHRIUM_*` credentials from `.env.prod` into task subprocesses; keep eval routing on `SERVICE_ENV` |
 
-Bohr CLI 专项评测使用 `--slices '@bohr-cli' --model 'matmaster/DeepSeek-v4-Flash'`。
+Bohr CLI 专项评测使用 `--slices '@bohr-cli' --model 'matmaster/DeepSeek-v4-Flash' --bohrium-env prod`。该参数只向 `mm-devshell` 子进程注入 `.env.prod` 中的 Bohrium 身份凭据并使用生产 Base URL，不改变 `BOHRIUM_USE_SANDBOX` 所选择的接口类型；不要让题目或 agent 自行读取 `.env.prod`。
 
 > **Per-call LLM usage is always reported** to tools-server (populates `llm_usage`, `billing_mode=eval`: record + price, no credit debit; per-call cost back-filled into ingest `extra.per_call_usage`). No flag needed; requires `MATMASTER_TOOLS_SERVER` reachable (defaults to `matmaster-tools-server.<env>.bohrium.com`).
 

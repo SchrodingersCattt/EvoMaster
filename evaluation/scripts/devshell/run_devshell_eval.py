@@ -83,6 +83,45 @@ def _run_devshell_task(*args: Any, **kwargs: Any) -> tuple[int, int, dict[str, A
     return _impl(*args, **kwargs)
 
 
+_BOHRIUM_IDENTITY_ENV_KEYS = (
+    "BOHRIUM_ACCESS_KEY",
+    "BOHRIUM_PROJECT_ID",
+    "BOHRIUM_USER_ID",
+    "BOHRIUM_USER_NO",
+    "BOHRIUM_ORG_ID",
+)
+
+
+def _apply_bohrium_env_override(
+    env: dict[str, str], *, repo_root: Path, environment: str
+) -> None:
+    """Overlay only Bohrium credentials without switching the service environment."""
+    from dotenv import dotenv_values
+
+    env_file = repo_root / f".env.{environment}"
+    if not env_file.is_file():
+        raise ValueError(f"Bohrium environment file not found: {env_file}")
+    values = dotenv_values(env_file)
+    access_key = str(values.get("BOHRIUM_ACCESS_KEY") or "").strip()
+    if not access_key:
+        raise ValueError(f"BOHRIUM_ACCESS_KEY is missing from {env_file}")
+
+    for key in _BOHRIUM_IDENTITY_ENV_KEYS:
+        value = values.get(key)
+        if value is None or not str(value).strip():
+            env.pop(key, None)
+        else:
+            env[key] = str(value)
+
+    explicit_base_url = str(values.get("BOHRIUM_BASE_URL") or "").strip()
+    if explicit_base_url:
+        env["BOHRIUM_BASE_URL"] = explicit_base_url
+    elif environment == "prod":
+        env["BOHRIUM_BASE_URL"] = "https://openapi.dp.tech"
+    else:
+        env["BOHRIUM_BASE_URL"] = f"https://openapi.{environment}.dp.tech"
+
+
 def main() -> int:
     # Load .env files so OSS / SERVICE_ENV / etc. are available to post-processing
     # (same logic as matmaster.devshell.cli)
@@ -109,6 +148,18 @@ def main() -> int:
         default_fallback_model_route=DEFAULT_DEVSHELL_FALLBACK_MODEL_ROUTE,
     )
     args = parser.parse_args()
+
+    child_env = os.environ.copy()
+    if args.bohrium_env is not None:
+        try:
+            _apply_bohrium_env_override(
+                child_env,
+                repo_root=REPO_ROOT,
+                environment=args.bohrium_env,
+            )
+        except ValueError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
 
     if args.no_eval_ingest and args.eval_ingest_pending_only:
         print(
@@ -266,6 +317,8 @@ def main() -> int:
     fb = (args.fallback_model or "").strip()
     if fb:
         manifest["fallback_model"] = fb
+    if args.bohrium_env is not None:
+        manifest["bohrium_env"] = args.bohrium_env
     if ingest_url:
         manifest["eval_ingest_url"] = ingest_url
         manifest["eval_ingest_run_id"] = eval_ingest_run_id
@@ -307,7 +360,7 @@ def main() -> int:
 
     any_failed = False
     ingest_failed = False
-    env = os.environ.copy()
+    env = child_env
     # Child stdout is a pipe (not a TTY) → CPython uses block buffering; streaming
     # from DevStreamHook would not appear until buffer fills unless unbuffered.
     env.setdefault("PYTHONUNBUFFERED", "1")
