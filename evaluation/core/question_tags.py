@@ -47,4 +47,4 @@ class QuestionTag(StrEnum):
     char_electrochem = 'char_electrochem'
     char_battery_cycling = 'char_battery_cycling'
     # Bohrium CLI (bohr-cli skill)
-    bohr_cli = 'bohr_cli'
+    bohr_cli = 'bohr-cli'

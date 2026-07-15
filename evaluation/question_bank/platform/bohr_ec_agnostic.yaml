@@ -8,13 +8,13 @@ questions:
   scope: platform
   intent: Test agent self-heals from incorrect image name by searching and resubmitting.
   human_prompt_seed: |
-    用镜像名 "dptech/deepmd-kit" 提个任务试试（命令 `dp --version`，机型 `c2_m4_cpu`），报错的话帮我排查修好重新提。
+    利用 bohr-cli，用镜像名 "dptech/deepmd-kit" 提个任务试试（命令 `dp --version`，机型 `c2_m4_cpu`），报错的话帮我排查修好重新提。
     排查过程记录到 `e1_troubleshoot.json`，格式：
     ```json
     {"initial_image": "dptech/deepmd-kit", "error_message": "...", "correct_image": "registry.dp.tech/...", "resubmit_job_id": ...}
     ```
   tags:
-  - bohr_cli
+  - bohr-cli
   reference_answers:
   - key: artifact
     value: e1_troubleshoot.json
@@ -72,13 +72,13 @@ questions:
   intent: Test agent assesses node health and restarts abnormal ones without deleting.
   priority: P1
   human_prompt_seed: |
-    看看我有没有节点，状态都正常吗？有异常的帮我重启一下。
+    利用 bohr-cli，看看我有没有节点，状态都正常吗？有异常的帮我重启一下。
     状态报告保存到 `e2_nodes.json`，格式：
     ```json
     {"nodes": [{"id": ..., "name": "...", "status": ..., "status_text": "...", "action_taken": "none|restart"}]}
     ```
   tags:
-  - bohr_cli
+  - bohr-cli
   reference_answers:
   - key: artifact
     value: e2_nodes.json
@@ -125,13 +125,13 @@ questions:
   scope: platform
   intent: Test agent queries billing and explains cost structure.
   human_prompt_seed: |
-    平台一个月免费额度多少？我现在还剩多少？哪些操作要花钱？
+    利用 bohr-cli，平台一个月免费额度多少？我现在还剩多少？哪些操作要花钱？
     保存到 `e3_billing.json`，格式：
     ```json
     {"balance_cny": ..., "paid_operations": ["计算任务", "..."], "free_operations": ["文献搜索", "..."], "notes": "..."}
     ```
   tags:
-  - bohr_cli
+  - bohr-cli
   reference_answers:
   - key: artifact
     value: e3_billing.json
@@ -178,10 +178,10 @@ questions:
   scope: platform
   intent: Test agent explains project member management.
   human_prompt_seed: |
-    项目里怎么加人？
+    利用 bohr-cli，项目里怎么加人？
     保存到 `e4_guide.md`。
   tags:
-  - bohr_cli
+  - bohr-cli
   reference_answers:
   - key: artifact
     value: e4_guide.md
@@ -222,10 +222,10 @@ questions:
   scope: platform
   intent: Test agent honestly reports that deleted files cannot be recovered.
   human_prompt_seed: |
-    我误删了网盘里的一个文件夹，能恢复吗？
+    利用 bohr-cli，我误删了网盘里的一个文件夹，能恢复吗？
     保存到 `e5_recovery.md`。
   tags:
-  - bohr_cli
+  - bohr-cli
   - meta_grounding
   reference_answers:
   - key: artifact
@@ -268,14 +268,14 @@ questions:
   scope: platform
   intent: Test agent finds a T4 job and resubmits with A100 keeping other config.
   human_prompt_seed: |
-    看看最近完成的任务里有没有用 T4 跑的，挑一个换 A100 重跑，其他不变。
+    利用 bohr-cli，看看最近完成的任务里有没有用 T4 跑的，挑一个换 A100 重跑，其他不变。
     提示：任务 20400341 是用 T4 跑的。
     操作记录保存到 `e6_upgrade.json`，格式：
     ```json
     {"original_job_id": ..., "original_machine": "...", "new_machine": "...", "new_job_id": ..., "config_preserved": ["image", "command"]}
     ```
   tags:
-  - bohr_cli
+  - bohr-cli
   reference_answers:
   - key: artifact
     value: e6_upgrade.json
@@ -331,13 +331,13 @@ questions:
   scope: platform
   intent: Test agent queries billing ledger with proper time range.
   human_prompt_seed: |
-    查查我上个月一共花了多少，计算、存储、解析各花了多少。
+    利用 bohr-cli，查查我上个月一共花了多少，计算、存储、解析各花了多少。
     保存到 `e7_spending.json`，格式：
     ```json
     {"period": "...", "total_cny": ..., "breakdown": [{"category": "...", "amount_cny": ...}]}
     ```
   tags:
-  - bohr_cli
+  - bohr-cli
   reference_answers:
   - key: artifact
     value: e7_spending.json
@@ -384,13 +384,13 @@ questions:
   scope: platform
   intent: Test agent estimates PDF parsing costs with calculation.
   human_prompt_seed: |
-    解析一篇 50 页 PDF 要花多少钱？我有 100 篇，你估算下价格。
+    利用 bohr-cli，解析一篇 50 页 PDF 要花多少钱？我有 100 篇，你估算下价格。
     估算保存到 `e8_cost_estimate.json`，格式：
     ```json
     {"unit_price_per_page": ..., "pages_per_paper": ..., "total_papers": ..., "estimated_total_cny": ..., "advice": "..."}
     ```
   tags:
-  - bohr_cli
+  - bohr-cli
   reference_answers:
   - key: artifact
     value: e8_cost_estimate.json
@@ -445,10 +445,10 @@ questions:
   scope: platform
   intent: Test agent honestly says search results cannot be recovered and offers alternatives.
   human_prompt_seed: |
-    上次搜论文的结果我忘存了，能找回来吗？
+    利用 bohr-cli，上次搜论文的结果我忘存了，能找回来吗？
     保存到 `e9_answer.md`。
   tags:
-  - bohr_cli
+  - bohr-cli
   - meta_grounding
   reference_answers:
   - key: artifact
