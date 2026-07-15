@@ -82,6 +82,113 @@ def check_json_file_schema(
     return True, f'{filename} is valid JSON matching the configured schema'
 
 
+def check_bohr_job_stop_record(
+    workspace_dir: str | Path,
+    *,
+    filename: str,
+    image: str,
+    machine_type: str,
+    command: str,
+    job_name_prefix: str,
+) -> tuple[bool, str]:
+    """Validate a Bohr job-stop record without prescribing its JSON layout."""
+    if not all((filename, image, machine_type, command, job_name_prefix)):
+        return False, 'bohr_job_stop_record: incomplete verifier configuration'
+
+    root = Path(workspace_dir)
+    fpath = _resolve_file(root, filename)
+    if fpath is None:
+        return False, f'{filename} not found in workspace'
+    try:
+        data = json.loads(fpath.read_text(encoding='utf-8'))
+    except ValueError as exc:
+        return False, f'{filename} is not valid JSON: {exc}'
+
+    def _normalise_key(value: object) -> str:
+        return re.sub(r'[^a-z0-9]', '', str(value).lower())
+
+    def _walk(value: object):
+        yield value
+        if isinstance(value, dict):
+            for child in value.values():
+                yield from _walk(child)
+        elif isinstance(value, list):
+            for child in value:
+                yield from _walk(child)
+
+    def _positive_id(value: object) -> bool:
+        if isinstance(value, bool):
+            return False
+        if isinstance(value, int):
+            return value > 0
+        return isinstance(value, str) and value.isdigit() and int(value) > 0
+
+    strings = [value.strip() for value in _walk(data) if isinstance(value, str)]
+    missing_values = [
+        label
+        for label, expected in (
+            ('image', image),
+            ('machine type', machine_type),
+            ('command', command),
+        )
+        if expected not in strings
+    ]
+    if missing_values:
+        return False, f'{filename}: missing {", ".join(missing_values)} evidence'
+    if not any(value.startswith(job_name_prefix) for value in strings):
+        return False, f'{filename}: no job name starts with {job_name_prefix!r}'
+
+    mappings = [value for value in _walk(data) if isinstance(value, dict)]
+    has_job_id = any(
+        _positive_id(value)
+        and 'group' not in _normalise_key(key)
+        and (
+            _normalise_key(key).endswith('jobid')
+            or _normalise_key(key).endswith('taskid')
+        )
+        for mapping in mappings
+        for key, value in mapping.items()
+    )
+    if not has_job_id:
+        return False, f'{filename}: no positive job/task ID evidence'
+
+    raw_status_keys = {'status', 'statuscode'}
+    web_status_keys = {'webstatus', 'webstatuscode'}
+    status_records = 0
+    raw_statuses: list[int] = []
+    web_statuses: list[int] = []
+    for mapping in mappings:
+        record_has_status = False
+        for key, value in mapping.items():
+            if isinstance(value, bool) or not isinstance(value, int):
+                continue
+            normalised = _normalise_key(key)
+            if normalised in raw_status_keys:
+                raw_statuses.append(value)
+                record_has_status = True
+            elif normalised in web_status_keys:
+                web_statuses.append(value)
+                record_has_status = True
+        status_records += int(record_has_status)
+
+    if status_records < 2:
+        return False, f'{filename}: fewer than two status query records'
+    if not any(status in {0, 1, 3} for status in raw_statuses):
+        return False, f'{filename}: no active raw status evidence'
+    if 5 not in web_statuses:
+        return False, f'{filename}: no stopped webStatus evidence'
+    if not any(
+        re.search(r'\b(?:bohr\s+job\s+)?terminate\b', value, re.I) for value in strings
+    ):
+        return False, f'{filename}: no graceful terminate action evidence'
+
+    return (
+        True,
+        f'{filename}: job identity, configuration, status history, and graceful stop '
+        'are recorded',
+    )
+
+
 def check_json_file_numeric_range(
     workspace_dir: str | Path,
     *,

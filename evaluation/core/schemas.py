@@ -98,6 +98,7 @@ VerifyLiteral = Literal[
     "answer_json_numeric",
     # JSON file checks
     "json_file_schema",
+    "bohr_job_stop_record",
     "json_file_key_values",
     "json_file_numeric_range",
     "json_file_artifacts",
@@ -367,6 +368,7 @@ class QuestionItem(BaseModel):
             "text_file_regex",
             "answer_json_numeric",
             "json_file_schema",
+            "bohr_job_stop_record",
             "json_file_numeric_range",
             "json_file_artifacts",
             "stru_file_check",
@@ -417,6 +419,37 @@ class QuestionItem(BaseModel):
                     f"json_file_schema reference '{item.id}' has an invalid "
                     f"JSON Schema: {exc.message}"
                 ) from exc
+        for item in self.scoring_checklist:
+            if item.verify != "bohr_job_stop_record":
+                continue
+            value = refs_by_key[item.id].value
+            if not isinstance(value, dict):
+                raise ValueError(
+                    f"bohr_job_stop_record reference '{item.id}' must be an object"
+                )
+            expected_keys = {
+                "filename",
+                "image",
+                "machine_type",
+                "command",
+                "job_name_prefix",
+            }
+            unknown_keys = set(value) - expected_keys
+            if unknown_keys:
+                raise ValueError(
+                    f"bohr_job_stop_record reference '{item.id}' has unsupported "
+                    f"keys: {sorted(unknown_keys)}"
+                )
+            missing_keys = [
+                key
+                for key in sorted(expected_keys)
+                if not isinstance(value.get(key), str) or not value[key]
+            ]
+            if missing_keys:
+                raise ValueError(
+                    f"bohr_job_stop_record reference '{item.id}' requires non-empty "
+                    f"string values for: {missing_keys}"
+                )
         for item in self.scoring_checklist:
             if item.verify != "tool_args_regex":
                 continue

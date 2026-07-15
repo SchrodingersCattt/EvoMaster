@@ -680,99 +680,33 @@ questions:
     axis: efficiency
     verify: turn_budget
 
-- id: BWO_stop_running_009_20260715_v2
+- id: BWO_stop_running_009_20260715_v3
   capability: workflow_orchestration
   domain: agnostic
   scope: platform
   intent: Test agent gracefully terminates only a self-submitted active job.
   human_prompt_seed: |
-    利用 bohr-cli，帮我提交一个临时 CPU 任务来复现问题：镜像使用 `registry.dp.tech/dptech/ubuntu:22.04-py3.10-cuda12.1`，机型 `c2_m4_cpu`，命令为 `echo "b9 started" > b9_started.txt && sleep 600`，任务名以 `b9-stop-running-` 开头并带上唯一后缀。
-    任务提交后先确认一下状态；它还没结束时我发现输入有误，请把刚提交的这个任务停掉，别影响其他任务，处理后再查询确认结果。将实际任务 ID、任务名、镜像、机型、命令、每次状态查询结果、停止动作和最终状态保存到工作区根目录的 `b9_actions.json`；状态保留 bohr-cli 返回的整数状态码。
+    利用 Bohr-CLI，帮我提交一个临时 CPU 任务来复现问题：镜像使用 `registry.dp.tech/dptech/ubuntu:22.04-py3.10-cuda12.1`，机型 `c2_m4_cpu`，命令为 `echo "b9 started" > b9_started.txt && sleep 600`，任务名以 `b9-stop-running-` 开头并带上唯一后缀。
+    任务提交后先确认一下状态；它还没结束时我发现输入有误，请把刚提交的这个任务停掉，别影响其他任务，处理后再查询确认结果。将实际任务 ID、任务名、镜像、机型、命令、每次状态查询结果、停止动作和最终状态保存到工作区根目录的 `b9_actions.json`；状态保留 Bohr-CLI 返回的整数状态码。
   tags:
   - bohr-cli
   reference_answers:
   - key: artifact
     value: b9_actions.json
     workspace_resolve: root
-  - key: stop_schema
+  - key: stop_record
     value:
       filename: b9_actions.json
-      schema:
-        type: object
-        required:
-        - job_id
-        - job_name
-        - image
-        - machine_type
-        - command
-        - polls
-        - action
-        - final_status
-        properties:
-          job_id:
-            type: integer
-            minimum: 1
-          job_name:
-            type: string
-            pattern: ^b9-stop-running-.+
-          image:
-            const: registry.dp.tech/dptech/ubuntu:22.04-py3.10-cuda12.1
-          machine_type:
-            const: c2_m4_cpu
-          command:
-            const: echo "b9 started" > b9_started.txt && sleep 600
-          polls:
-            type: array
-            minItems: 2
-            items:
-              type: object
-              required:
-              - time
-              - status
-              properties:
-                time:
-                  type: string
-                  minLength: 1
-                status:
-                  type: integer
-                  enum:
-                  - -1
-                  - 0
-                  - 1
-                  - 2
-                  - 3
-                  - 4
-                  - 5
-              additionalProperties: false
-            allOf:
-            - contains:
-                type: object
-                required:
-                - status
-                properties:
-                  status:
-                    enum:
-                    - 0
-                    - 1
-                    - 3
-            - contains:
-                type: object
-                required:
-                - status
-                properties:
-                  status:
-                    const: 5
-          action:
-            const: terminate
-          final_status:
-            const: 5
-        additionalProperties: false
+      image: registry.dp.tech/dptech/ubuntu:22.04-py3.10-cuda12.1
+      machine_type: c2_m4_cpu
+      command: echo "b9 started" > b9_started.txt && sleep 600
+      job_name_prefix: b9-stop-running-
     workspace_resolve: root
   - key: submitted_via_cli
     tool_name: Bash
     tool_arg: command
     value:
-      pattern: '(?:^|[\n;&|]\s*)(?:(?:env|sudo)(?:\s+[^\s;&|]+)*\s+)?(?:[^\s;&|]+/)?bohr\s+job\s+submit\b(?=[^\n]*\bsleep\s+600\b)'
+      pattern: '(?:^|[\n;&|]\s*)(?:(?:env|sudo)(?:\s+[^\s;&|]+)*\s+)?(?:[^\s;&|]+/)?bohr\s+job\s+submit\b(?=(?:(?:\\\r?\n)|[^\n])*--command(?:=|\s+)(?:''[^''\n]*\bsleep\s+600\b[^''\n]*''|"(?:\\.|[^"\\\n])*\bsleep\s+600\b(?:\\.|[^"\\\n])*"))'
       min_matches: 1
   - key: polled_via_cli
     tool_name: Bash
@@ -784,14 +718,14 @@ questions:
     tool_name: Bash
     tool_arg: command
     value:
-      pattern: '(?:^|[\n;&|]\s*)(?:(?:env|sudo)(?:\s+[^\s;&|]+)*\s+)?(?:[^\s;&|]+/)?bohr\s+job\s+(?:terminate|kill)\b'
+      pattern: '(?:^|[\n;&|]\s*)(?:(?:env|sudo)(?:\s+[^\s;&|]+)*\s+)?(?:[^\s;&|]+/)?bohr\s+(?:job\s+(?:terminate|kill|\+cancel)|job_group\s+terminate)\b'
       min_matches: 1
       max_matches: 1
   - key: terminated_via_cli
     tool_name: Bash
     tool_arg: command
     value:
-      pattern: '(?:^|[\n;&|]\s*)(?:(?:env|sudo)(?:\s+[^\s;&|]+)*\s+)?(?:[^\s;&|]+/)?bohr\s+job\s+terminate\b'
+      pattern: '(?:^|[\n;&|]\s*)(?:(?:env|sudo)(?:\s+[^\s;&|]+)*\s+)?(?:[^\s;&|]+/)?bohr\s+job\s+terminate\b(?=[^\n;&|]*(?:--job_id(?:=|\s+)|\s+)[1-9]\d*\b)'
       min_matches: 1
   - key: turn_budget
     value:
@@ -801,10 +735,10 @@ questions:
     criterion: b9_actions.json written to workspace.
     axis: correctness
     verify: artifact_exists
-  - id: stop_schema
-    criterion: The record identifies one self-submitted job, captures active and stopped states, uses terminate, and ends at status 5.
+  - id: stop_record
+    criterion: The record identifies the self-submitted job and its configuration, preserves separate raw and web status evidence, and confirms a graceful stop.
     axis: correctness
-    verify: json_file_schema
+    verify: bohr_job_stop_record
   - id: submitted_via_cli
     criterion: The disposable sleep job was submitted through bohr-cli.
     axis: grounding
@@ -814,7 +748,7 @@ questions:
     axis: grounding
     verify: tool_args_regex
   - id: one_control_action_via_cli
-    criterion: Exactly one terminate-or-kill control command was issued, preventing fallback to kill or changes to other jobs.
+    criterion: Exactly one job-control command was issued, preventing fallback to force-kill or changes to a job group.
     axis: grounding
     verify: tool_args_regex
   - id: terminated_via_cli

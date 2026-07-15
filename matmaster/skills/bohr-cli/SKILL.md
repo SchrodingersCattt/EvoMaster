@@ -31,18 +31,25 @@ bohr auth status --verify
 
 ```bash
 bohr job list [-n 20] [-r] [-f] [-i] [-j <group_id>] [--quiet]
-bohr job describe -i <bohr_id>        # 单任务详情
+bohr machine list -c <cpu|gpu> -s job --json  # 作业场景可用机型
+bohr job describe -i <bohr_job_id>    # 单任务详情
 bohr job describe -j <group_id>       # 组内任务列表
 bohr job submit -i job.json [--input_directory ./input]
 bohr job submit --project_id <pid> --image_address <img> --command <cmd> --machine_type <type>
 bohr job log -j <id> [--out ./logs]
 bohr job download -j <id> [--out ./results]
-bohr job terminate <id>               # 优雅停止，保留结果
-bohr job kill <id>                    # 强制终止，不保证结果
-bohr job delete <id>                  # 删除记录（不可恢复）
+bohr job terminate <job_id>           # 优雅停止，保留结果
+bohr job kill <job_id>                # 强制终止，不保证结果
+bohr job delete <job_id>              # 删除记录（不可恢复）
 ```
 
-状态码：-1=Failed, 0=Pending, 1=Running, 2=Finished, 3=Scheduling, 4=Stopping, 5=Stopped
+提交和查询结果可能同时包含三类 ID，不要混用：
+
+- `bohrJobId` 用于 `bohr job describe -i`
+- `jobId` 用于 `bohr job terminate`、`kill` 和 `delete`
+- `jobGroupId` 用于 `bohr job_group` 子命令
+
+`job describe` 可能同时返回 `status` 和 `webStatus`，两者是不同的状态字段，必须按原字段分别保留。停止后 `status=6` 可能只是结果回收中的过渡态；继续查询，直到 `webStatus=5` 或状态文本、`errorInfo` 明确表明任务已停止，不要把两套状态码混为一套。
 
 submit 配置文件格式：
 ```json
@@ -60,8 +67,8 @@ submit 配置文件格式：
 bohr job_group create -n "name" --project_id <pid>
 bohr job_group list [-n 50] [-j <id>]
 bohr job_group download -j <id> [-n 10] [--out ./]
-bohr job_group terminate <id>
-bohr job_group delete <id>
+bohr job_group terminate <job_group_id>
+bohr job_group delete <job_group_id>
 ```
 
 ## 开发机 (node)
