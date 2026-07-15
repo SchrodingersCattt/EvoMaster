@@ -410,10 +410,17 @@ def test_bwo_lit_db_v3_accepts_text_or_structured_batch_strategy() -> None:
     )
 
 
-def test_bwo_param_sweep_v2_requires_complete_grouped_sweep() -> None:
+def test_bwo_param_sweep_v3_requires_complete_grouped_sweep() -> None:
     questions = flatten_banks(load_question_banks(QUESTION_BANK_DIR))
-    question = next(q for q in questions if q.id == "BWO_param_sweep_003_20260715_v2")
-    assert all(q.id != "BWO_param_sweep_003_20260715" for q in questions)
+    question = next(q for q in questions if q.id == "BWO_param_sweep_003_20260715_v3")
+    assert all(
+        q.id
+        not in {
+            "BWO_param_sweep_003_20260715",
+            "BWO_param_sweep_003_20260715_v2",
+        }
+        for q in questions
+    )
 
     schema_ref = next(
         ref for ref in question.reference_answers if ref.key == "sweep_schema"
@@ -428,6 +435,18 @@ def test_bwo_param_sweep_v2_requires_complete_grouped_sweep() -> None:
         ],
     }
     validator.validate(valid)
+    validator.validate(
+        {
+            "group_id": "9876",
+            "jobs": [
+                {
+                    "temperature_K": temperature,
+                    "job_id": str(1000 + index),
+                }
+                for index, temperature in enumerate(range(300, 1001, 100))
+            ],
+        }
+    )
     with pytest.raises(ValidationError):
         validator.validate(
             {
@@ -440,6 +459,20 @@ def test_bwo_param_sweep_v2_requires_complete_grouped_sweep() -> None:
         )
     with pytest.raises(ValidationError):
         validator.validate({**valid, "job_group_id": 0})
+    with pytest.raises(ValidationError):
+        validator.validate({"jobs": valid["jobs"]})
+    with pytest.raises(ValidationError):
+        validator.validate({**valid, "job_group_id": "0"})
+    with pytest.raises(ValidationError):
+        validator.validate(
+            {
+                **valid,
+                "jobs": [
+                    {**valid["jobs"][0], "job_id": "job-1000"},
+                    *valid["jobs"][1:],
+                ],
+            }
+        )
 
     group_ref = next(
         ref for ref in question.reference_answers if ref.key == "group_created_via_cli"
@@ -453,14 +486,62 @@ def test_bwo_param_sweep_v2_requires_complete_grouped_sweep() -> None:
         for ref in question.reference_answers
         if ref.key == "group_jobs_submitted_via_cli"
     )
-    assert re.search(
-        submit_ref.value["pattern"],
-        'bohr job submit -i job.json -g "$GROUP_ID" -o json',
+    direct_record = BinaryEvaluator().evaluate(
+        question=question,
+        answer="done",
+        tool_calls=[
+            {
+                "tool_name": "Bash",
+                "tool_args": {
+                    "command": 'bohr job submit -i job.json -g "$GROUP_ID" -o json'
+                },
+            }
+        ],
     )
-    assert not re.search(
-        submit_ref.value["pattern"],
-        'bohr job submit -i job.json -o json',
+    assert direct_record.criteria_results["group_jobs_submitted_via_cli"].passed
+
+    scripted_calls = [
+        {
+            "tool_name": "Write",
+            "tool_args": {
+                "file_path": "/workspace/submit_sweep.py",
+                "content": (
+                    'subprocess.run(["bohr", "job", "submit", "-i", path, '
+                    '"--job_group_id", str(group_id)], check=True)'
+                ),
+            },
+        },
+        {
+            "tool_name": "Bash",
+            "tool_args": {"command": "python3 /workspace/submit_sweep.py"},
+        },
+    ]
+    scripted_record = BinaryEvaluator().evaluate(
+        question=question,
+        answer="done",
+        tool_calls=scripted_calls,
     )
+    assert scripted_record.criteria_results["group_jobs_submitted_via_cli"].passed
+
+    unexecuted_record = BinaryEvaluator().evaluate(
+        question=question,
+        answer="done",
+        tool_calls=scripted_calls[:1],
+    )
+    assert not unexecuted_record.criteria_results["group_jobs_submitted_via_cli"].passed
+
+    ungrouped_record = BinaryEvaluator().evaluate(
+        question=question,
+        answer="done",
+        tool_calls=[
+            {
+                "tool_name": "Bash",
+                "tool_args": {"command": "bohr job submit -i job.json -o json"},
+            }
+        ],
+    )
+    assert not ungrouped_record.criteria_results["group_jobs_submitted_via_cli"].passed
+    assert submit_ref.value["min_matches"] == 1
 
 
 def test_bwo_node_ssh_scp_v2_requires_real_lifecycle_and_cleanup() -> None:

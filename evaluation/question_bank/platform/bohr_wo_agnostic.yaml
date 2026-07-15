@@ -133,7 +133,7 @@ questions:
     axis: efficiency
     verify: turn_budget
 
-- id: BWO_param_sweep_003_20260715_v2
+- id: BWO_param_sweep_003_20260715_v3
   capability: workflow_orchestration
   domain: agnostic
   scope: platform
@@ -153,12 +153,25 @@ questions:
       schema:
         type: object
         required:
-        - job_group_id
         - jobs
+        anyOf:
+        - required:
+          - job_group_id
+        - required:
+          - group_id
         properties:
           job_group_id:
-            type: integer
-            minimum: 1
+            oneOf:
+            - type: integer
+              minimum: 1
+            - type: string
+              pattern: '^[1-9][0-9]*$'
+          group_id:
+            oneOf:
+            - type: integer
+              minimum: 1
+            - type: string
+              pattern: '^[1-9][0-9]*$'
           jobs:
             type: array
             minItems: 8
@@ -181,8 +194,11 @@ questions:
                   - 900
                   - 1000
                 job_id:
-                  type: integer
-                  minimum: 1
+                  oneOf:
+                  - type: integer
+                    minimum: 1
+                  - type: string
+                    pattern: '^[1-9][0-9]*$'
               additionalProperties: false
             allOf:
             - contains:
@@ -245,7 +261,8 @@ questions:
     tool_name: Bash
     tool_arg: command
     value:
-      pattern: '(?:^|[\n;&|]\s*)(?:(?:env|sudo)(?:\s+[^\s;&|]+)*\s+)?(?:[^\s;&|]+/)?bohr\s+job\s+submit\b(?=[^\n;&|]*(?:(?:--job_group_id)(?:\s+|=)|-g\s+)\S+)'
+      direct_pattern: '(?:^|[\n;&|]\s*)(?:(?:env|sudo)(?:\s+[^\s;&|]+)*\s+)?(?:[^\s;&|]+/)?bohr\s+job\s+submit\b(?=[^\n;&|]*(?:(?:--job_group_id|-g)(?:\s+|=))\S+)'
+      script_pattern: '(?:(?:^|[\n;&|]\s*)(?:(?:env|sudo)(?:\s+[^\s;&|]+)*\s+)?(?:[^\s;&|]+/)?bohr\s+job\s+submit\b(?=[^\n;&|]*(?:(?:--job_group_id|-g)(?:\s+|=))\S+)|["'']bohr["'']\s*,\s*["'']job["'']\s*,\s*["'']submit["''](?=[\s\S]{0,1000}?["''](?:--job_group_id|-g)["'']))'
       min_matches: 1
   - key: turn_budget
     value:
@@ -264,9 +281,9 @@ questions:
     axis: grounding
     verify: tool_args_regex
   - id: group_jobs_submitted_via_cli
-    criterion: Jobs were submitted through bohr-cli with a job-group argument.
+    criterion: Jobs were submitted through bohr-cli with a job-group argument, directly or through an executed helper script.
     axis: grounding
-    verify: tool_args_regex
+    verify: scripted_tool_args_regex
   - id: turn_budget
     criterion: Agent completes within turn budget.
     axis: efficiency
