@@ -262,64 +262,116 @@ questions:
     axis: efficiency
     verify: turn_budget
 
-- id: BEC_upgrade_machine_006_20260715
+- id: BEC_upgrade_machine_006_20260715_v2
   capability: execution_contract
   domain: agnostic
   scope: platform
-  intent: Test agent finds a T4 job and resubmits with A100 keeping other config.
+  intent: Test agent inspects a seed job and resubmits it on A100 while preserving its image and command.
   human_prompt_seed: |
-    利用 bohr-cli，看看最近完成的任务里有没有用 T4 跑的，挑一个换 A100 重跑，其他不变。
-    提示：任务 20400341 是用 T4 跑的。
-    操作记录保存到 `e6_upgrade.json`，格式：
+    利用 bohr-cli，我想把任务 `20400341` 换成 A100 重新提交。请先确认它原来的配置，保持镜像和运行命令不变。
+    提交成功后把操作记录保存到工作区根目录的 `e6_upgrade.json`，格式：
     ```json
-    {"original_job_id": ..., "original_machine": "...", "new_machine": "...", "new_job_id": ..., "config_preserved": ["image", "command"]}
+    {"original_job": {"bohr_id": ..., "job_id": ..., "machine": "...", "image": "...", "command": "..."}, "resubmitted_job": {"job_id": ..., "machine": "...", "image": "...", "command": "..."}}
     ```
   tags:
   - bohr-cli
   reference_answers:
   - key: artifact
     value: e6_upgrade.json
-  - key: has_original
+    workspace_resolve: root
+  - key: upgrade_schema
     value:
       filename: e6_upgrade.json
-      pattern: '"original_job_id"\s*:\s*\d+'
-  - key: old_is_t4
+      schema:
+        type: object
+        required:
+        - original_job
+        - resubmitted_job
+        properties:
+          original_job:
+            type: object
+            required:
+            - bohr_id
+            - job_id
+            - machine
+            - image
+            - command
+            properties:
+              bohr_id:
+                const: 20400341
+              job_id:
+                const: 23052040
+              machine:
+                type: string
+                pattern: (?i:T4)
+              image:
+                const: registry.dp.tech/dptech/dpmd-cu126-outisli:v20260712
+              command:
+                const: "echo 'T4 test for eval E6' > result.txt"
+            additionalProperties: false
+          resubmitted_job:
+            type: object
+            required:
+            - job_id
+            - machine
+            - image
+            - command
+            properties:
+              job_id:
+                type: integer
+                minimum: 1
+              machine:
+                type: string
+                pattern: (?i:A100)
+              image:
+                const: registry.dp.tech/dptech/dpmd-cu126-outisli:v20260712
+              command:
+                const: "echo 'T4 test for eval E6' > result.txt"
+            additionalProperties: false
+        additionalProperties: false
+    workspace_resolve: root
+  - key: original_job_queried_via_cli
+    tool_name: Bash
+    tool_arg: command
     value:
-      filename: e6_upgrade.json
-      pattern: '"original_machine"[^}]*[Tt]4'
-  - key: new_is_a100
+      pattern: '(?:^|[\n;&|]\s*)(?:(?:env|sudo)(?:\s+[^\s;&|]+)*\s+)?(?:[^\s;&|]+/)?bohr\s+job\s+describe\b(?=[^\n;&|]*(?:-i|--id)(?:\s+|=)20400341(?:\s|$))'
+      min_matches: 1
+  - key: a100_machines_queried_via_cli
+    tool_name: Bash
+    tool_arg: command
     value:
-      filename: e6_upgrade.json
-      pattern: '"new_machine"[^}]*[Aa]100'
-  - key: has_new_job
+      pattern: '(?:^|[\n;&|]\s*)(?:(?:env|sudo)(?:\s+[^\s;&|]+)*\s+)?(?:[^\s;&|]+/)?bohr\s+machine\s+list\b(?=[^\n]*(?:-c|--chooseType)(?:\s+|=)gpu(?:\s|$))(?=[^\n]*(?:-s|--scene)(?:\s+|=)job(?:\s|$))'
+      min_matches: 1
+  - key: job_resubmitted_via_cli
+    tool_name: Bash
+    tool_arg: command
     value:
-      filename: e6_upgrade.json
-      pattern: '"new_job_id"\s*:\s*\d+'
+      pattern: '(?:^|[\n;&|]\s*)(?:(?:env|sudo)(?:\s+[^\s;&|]+)*\s+)?(?:[^\s;&|]+/)?bohr\s+job\s+\+?submit\b(?=[^\n;&|]*(?:-t|--machine_type)(?:\s+|=)(?:"[^"\n]*(?i:A100)[^"\n]*"|''[^''\n]*(?i:A100)[^''\n]*''|[^\s;&|]*(?i:A100)[^\s;&|]*))(?=[^\n;&|]*registry\.dp\.tech/dptech/dpmd-cu126-outisli:v20260712)(?=[^\n;&|]*T4\s+test\s+for\s+eval\s+E6)'
+      min_matches: 1
   - key: turn_budget
     value:
-      max: 12
+      max: 14
   scoring_checklist:
   - id: artifact
-    criterion: e6_upgrade.json written to workspace.
+    criterion: e6_upgrade.json written to workspace root.
     axis: correctness
     verify: artifact_exists
-  - id: has_original
-    criterion: Original job identified.
+  - id: upgrade_schema
+    criterion: The record identifies the seed job and shows that its image and command were preserved in a positive-ID A100 resubmission.
     axis: correctness
-    verify: text_file_regex
-  - id: old_is_t4
-    criterion: Original machine was T4.
-    axis: correctness
-    verify: text_file_regex
-  - id: new_is_a100
-    criterion: New machine is A100.
-    axis: correctness
-    verify: text_file_regex
-  - id: has_new_job
-    criterion: New job successfully submitted (real ID).
-    axis: correctness
-    verify: text_file_regex
-    weight: 2.0
+    verify: json_file_schema
+  - id: original_job_queried_via_cli
+    criterion: The original job was inspected through bohr-cli using its bohrId.
+    axis: grounding
+    verify: tool_args_regex
+  - id: a100_machines_queried_via_cli
+    criterion: Current job-scene GPU machines were queried before selecting an A100 configuration.
+    axis: grounding
+    verify: tool_args_regex
+  - id: job_resubmitted_via_cli
+    criterion: A new A100 job was submitted through bohr-cli with the original image and command.
+    axis: grounding
+    verify: tool_args_regex
   - id: turn_budget
     criterion: Agent completes within turn budget.
     axis: efficiency

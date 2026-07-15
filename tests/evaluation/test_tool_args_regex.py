@@ -597,3 +597,86 @@ def test_bsa_tools_docking_v2_requires_search_and_tool_details() -> None:
     assert re.search(info_pattern, "bohr tools info owner_docking-tool -o json")
     assert re.search(info_pattern, 'bohr tools info "owner_docking_tool" -o json')
     assert not re.search(info_pattern, "bohr tools info 28189 -o json")
+
+
+def test_bec_upgrade_machine_v2_preserves_seed_job_config() -> None:
+    questions = flatten_banks(load_question_banks(QUESTION_BANK_DIR))
+    question = next(
+        q for q in questions if q.id == "BEC_upgrade_machine_006_20260715_v2"
+    )
+    assert all(q.id != "BEC_upgrade_machine_006_20260715" for q in questions)
+    assert question.tags == ["bohr-cli"]
+    assert "job describe" not in question.human_prompt_seed
+    assert "machine list" not in question.human_prompt_seed
+    assert "job submit" not in question.human_prompt_seed
+    assert "dpmd-cu126-outisli" not in question.human_prompt_seed
+    assert "T4 test for eval E6" not in question.human_prompt_seed
+    assert "T4" not in question.human_prompt_seed
+    assert "被中止" not in question.human_prompt_seed
+
+    schema_ref = next(
+        ref for ref in question.reference_answers if ref.key == "upgrade_schema"
+    )
+    schema = schema_ref.value["schema"]
+    validator = validator_for(schema)(schema)
+    valid = {
+        "original_job": {
+            "bohr_id": 20400341,
+            "job_id": 23052040,
+            "machine": "c16_m62_1 * NVIDIA T4",
+            "image": "registry.dp.tech/dptech/dpmd-cu126-outisli:v20260712",
+            "command": "echo 'T4 test for eval E6' > result.txt",
+        },
+        "resubmitted_job": {
+            "job_id": 23059999,
+            "machine": "c16_m60_1 * NVIDIA A100_80g",
+            "image": "registry.dp.tech/dptech/dpmd-cu126-outisli:v20260712",
+            "command": "echo 'T4 test for eval E6' > result.txt",
+        },
+    }
+    validator.validate(valid)
+    with pytest.raises(ValidationError):
+        validator.validate(
+            {
+                **valid,
+                "resubmitted_job": {
+                    **valid["resubmitted_job"],
+                    "machine": "c16_m62_1 * NVIDIA T4",
+                },
+            }
+        )
+    with pytest.raises(ValidationError):
+        validator.validate(
+            {
+                **valid,
+                "resubmitted_job": {
+                    **valid["resubmitted_job"],
+                    "command": "echo changed > result.txt",
+                },
+            }
+        )
+
+    refs_by_key = {ref.key: ref for ref in question.reference_answers}
+    describe_pattern = refs_by_key["original_job_queried_via_cli"].value["pattern"]
+    assert re.search(describe_pattern, "bohr job describe -i 20400341 -o json")
+    assert re.search(describe_pattern, "bohr job describe --id=20400341 --output json")
+    assert not re.search(describe_pattern, "bohr job describe -i 23052040 -o json")
+
+    machine_pattern = refs_by_key["a100_machines_queried_via_cli"].value["pattern"]
+    assert re.search(machine_pattern, "bohr machine list -c gpu -s job -o json")
+    assert not re.search(machine_pattern, "bohr machine list -c gpu -s node -o json")
+
+    submit_pattern = refs_by_key["job_resubmitted_via_cli"].value["pattern"]
+    valid_submit = (
+        "bohr job submit -n e6-upgrade "
+        "-m registry.dp.tech/dptech/dpmd-cu126-outisli:v20260712 "
+        "-t 'c16_m60_1 * NVIDIA A100_80g' "
+        '-c "echo \'T4 test for eval E6\' > result.txt"'
+    )
+    assert re.search(submit_pattern, valid_submit)
+    assert not re.search(submit_pattern, valid_submit.replace("A100", "T4"))
+    assert not re.search(submit_pattern, valid_submit.replace("v20260712", "v20260713"))
+    assert not re.search(
+        submit_pattern,
+        valid_submit.replace("T4 test for eval E6", "changed command"),
+    )
