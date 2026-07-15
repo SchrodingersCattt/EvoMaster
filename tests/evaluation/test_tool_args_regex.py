@@ -312,3 +312,57 @@ def test_bwo_node_ssh_scp_v2_requires_real_lifecycle_and_cleanup() -> None:
         refs_by_key["file_transferred_via_scp"].value["pattern"],
         "scp -P 22022 test root@node.example:/tmp/test",
     )
+
+
+def test_bwo_sandbox_ase_v2_requires_real_lifecycle_and_cleanup() -> None:
+    questions = flatten_banks(load_question_banks(QUESTION_BANK_DIR))
+    question = next(q for q in questions if q.id == "BWO_sandbox_ase_007_20260715_v2")
+    question_ids = {q.id for q in questions}
+    assert "BWO_sandbox_ase_007_20260715" not in question_ids
+    assert "BEC_no_history_009_20260715" not in question_ids
+    assert question.tags == ["bohr-cli"]
+    file_refs = {
+        ref.key: ref
+        for ref in question.reference_answers
+        if ref.key
+        in {
+            "xyz_artifact",
+            "log_artifact",
+            "xyz_has_atoms",
+            "xyz_three_atoms",
+            "log_has_energy",
+        }
+    }
+    assert all(ref.workspace_resolve == "root" for ref in file_refs.values())
+
+    script_path = QUESTION_BANK_DIR / question.data_files[0].path
+    compile(script_path.read_text(encoding="utf-8"), str(script_path), "exec")
+
+    commands_by_key = {
+        "sandbox_created_via_cli": "bohr sandbox create sac-cpu-small -o json",
+        "script_uploaded_via_cli": (
+            "bohr sandbox files write 123 /tmp/opt_water.py --source opt_water.py"
+        ),
+        "script_executed_via_cli": (
+            "bohr sandbox exec 123 --command 'python /tmp/opt_water.py'"
+        ),
+        "sandbox_deleted_via_cli": "bohr sandbox delete 123 --yes",
+    }
+    refs_by_key = {ref.key: ref for ref in question.reference_answers}
+    for key, command in commands_by_key.items():
+        assert re.search(refs_by_key[key].value["pattern"], command)
+
+    download_pattern = refs_by_key["results_downloaded_via_cli"].value["pattern"]
+    assert re.search(
+        download_pattern,
+        "bohr sandbox files read 123 /tmp/b7_water_optimized.xyz "
+        "--destination b7_water_optimized.xyz",
+    )
+    assert re.search(
+        download_pattern,
+        "bohr sandbox files read 123 /tmp/b7_log.txt --destination b7_log.txt",
+    )
+    assert not re.search(
+        refs_by_key["sandbox_created_via_cli"].value["pattern"],
+        "bohr sandbox create ch4-deepmd -o json",
+    )

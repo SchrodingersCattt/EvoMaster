@@ -422,39 +422,78 @@ questions:
     axis: efficiency
     verify: turn_budget
 
-- id: BWO_sandbox_ase_007_20260715
+- id: BWO_sandbox_ase_007_20260715_v2
   capability: workflow_orchestration
   domain: agnostic
   scope: platform
-  intent: Test full sandbox lifecycle - create, upload, execute, download, delete.
+  intent: Test the full bohr-cli sandbox lifecycle with a deterministic ASE workload.
   human_prompt_seed: |
-    利用 bohr-cli，跑一段 ASE 脚本优化水分子结构，优化完的 xyz 拿出来。最好开个沙箱，别污染本地环境。
-    把优化后的水分子坐标保存到 `b7_water_optimized.xyz`，把运行日志保存到 `b7_log.txt`。
+    利用 bohr-cli，在 `sac-cpu-small` 沙箱里运行已经准备好的 `opt_water.py`，完成水分子结构优化，并把结果取回工作区。沙箱里如果缺少 ASE，请通过清华 PyPI 镜像 `https://pypi.tuna.tsinghua.edu.cn/simple` 安装 `ase==3.26.0`。
+    把优化后的水分子坐标保存到工作区根目录的 `b7_water_optimized.xyz`，运行日志保存到 `b7_log.txt`。结果取回后删除沙箱，避免继续占用资源。
   tags:
   - bohr-cli
+  data_files:
+  - key: optimization_script
+    path: data/bohr_cli/opt_water.py
+    description: ASE script that optimizes a water molecule and writes the requested artifacts.
   reference_answers:
   - key: xyz_artifact
     value: b7_water_optimized.xyz
+    workspace_resolve: root
   - key: log_artifact
     value: b7_log.txt
+    workspace_resolve: root
   - key: xyz_has_atoms
     value:
       filename: b7_water_optimized.xyz
       tokens:
       - O
       - H
+    workspace_resolve: root
   - key: xyz_three_atoms
     value:
       filename: b7_water_optimized.xyz
       pattern: (?m)^\s*3\s*$
+    workspace_resolve: root
   - key: log_has_energy
     value:
       filename: b7_log.txt
       pattern: '[Ee]nergy|eV|converge|BFGS|FIRE'
       flags: i
+    workspace_resolve: root
+  - key: sandbox_created_via_cli
+    tool_name: Bash
+    tool_arg: command
+    value:
+      pattern: '(?:^|[\n;&|]\s*)(?:(?:env|sudo)(?:\s+[^\s;&|]+)*\s+)?(?:[^\s;&|]+/)?bohr\s+sandbox\s+create\s+sac-cpu-small\b'
+      min_matches: 1
+  - key: script_uploaded_via_cli
+    tool_name: Bash
+    tool_arg: command
+    value:
+      pattern: '(?:^|[\n;&|]\s*)(?:(?:env|sudo)(?:\s+[^\s;&|]+)*\s+)?(?:[^\s;&|]+/)?bohr\s+sandbox\s+files\s+write\b(?=[^\n]*\bopt_water\.py\b)'
+      min_matches: 1
+  - key: script_executed_via_cli
+    tool_name: Bash
+    tool_arg: command
+    value:
+      pattern: '(?:^|[\n;&|]\s*)(?:(?:env|sudo)(?:\s+[^\s;&|]+)*\s+)?(?:[^\s;&|]+/)?bohr\s+sandbox\s+exec\b(?=[^\n]*\bopt_water\.py\b)'
+      min_matches: 1
+  - key: results_downloaded_via_cli
+    tool_name: Bash
+    tool_arg: command
+    value:
+      pattern: '(?:^|[\n;&|]\s*)(?:(?:env|sudo)(?:\s+[^\s;&|]+)*\s+)?(?:[^\s;&|]+/)?bohr\s+sandbox\s+files\s+read\b(?=[^\n]*(?:b7_water_optimized\.xyz|b7_log\.txt)\b)'
+      min_matches: 2
+  - key: sandbox_deleted_via_cli
+    tool_name: Bash
+    tool_arg: command
+    value:
+      pattern: '(?:^|[\n;&|]\s*)(?:(?:env|sudo)(?:\s+[^\s;&|]+)*\s+)?(?:[^\s;&|]+/)?bohr\s+sandbox\s+delete\b'
+      min_matches: 1
   - key: turn_budget
     value:
-      max: 15
+      max: 30
   scoring_checklist:
   - id: xyz_artifact
     criterion: b7_water_optimized.xyz written to workspace.
@@ -476,6 +515,26 @@ questions:
     criterion: Log shows energy/convergence information.
     axis: correctness
     verify: text_file_regex
+  - id: sandbox_created_via_cli
+    criterion: A sac-cpu-small sandbox was created through bohr-cli.
+    axis: grounding
+    verify: tool_args_regex
+  - id: script_uploaded_via_cli
+    criterion: The provided optimization script was uploaded to the sandbox through bohr-cli.
+    axis: grounding
+    verify: tool_args_regex
+  - id: script_executed_via_cli
+    criterion: The optimization script was executed in the sandbox through bohr-cli.
+    axis: grounding
+    verify: tool_args_regex
+  - id: results_downloaded_via_cli
+    criterion: Both the optimized structure and log were downloaded through bohr-cli.
+    axis: grounding
+    verify: tool_args_regex
+  - id: sandbox_deleted_via_cli
+    criterion: The sandbox was deleted through bohr-cli after the results were retrieved.
+    axis: grounding
+    verify: tool_args_regex
   - id: turn_budget
     criterion: Agent completes within turn budget.
     axis: efficiency
