@@ -710,14 +710,30 @@ def test_bwo_stop_running_v2_is_isolated_and_uses_terminate() -> None:
     )
 
 
-def test_bwo_gpu_compare_v2_uses_live_job_inventory() -> None:
+def test_bwo_gpu_compare_v3_uses_fixed_output_contract() -> None:
     questions = flatten_banks(load_question_banks(QUESTION_BANK_DIR))
-    question = next(q for q in questions if q.id == "BWO_gpu_compare_004_20260715_v2")
-    assert all(q.id != "BWO_gpu_compare_004_20260715" for q in questions)
+    question = next(q for q in questions if q.id == "BWO_gpu_compare_004_20260715_v3")
+    assert all(
+        q.id
+        not in {
+            "BWO_gpu_compare_004_20260715",
+            "BWO_gpu_compare_004_20260715_v2",
+        }
+        for q in questions
+    )
     assert question.tags == ["bohr-cli"]
-    assert "job 场景" not in question.human_prompt_seed
-    assert "单卡 NVIDIA" not in question.human_prompt_seed
+    assert "用于提交计算任务" in question.human_prompt_seed
     assert "machine list" not in question.human_prompt_seed
+    for field in (
+        "workload",
+        "available_machines",
+        "recommendation",
+        "sku_id",
+        "gpu_memory_gb",
+        "price_cny_per_hour",
+        "has_stock",
+    ):
+        assert f"`{field}`" in question.human_prompt_seed
 
     schema_ref = next(
         ref for ref in question.reference_answers if ref.key == "comparison_schema"
@@ -728,32 +744,19 @@ def test_bwo_gpu_compare_v2_uses_live_job_inventory() -> None:
         "workload": {"framework": "DeepMD", "atom_count": 500},
         "available_machines": [
             {
-                "sku_id": 740,
-                "machine_type": "1 * NVIDIA T4_16g",
-                "gpu_model": "NVIDIA T4",
+                "sku_id": sku_id,
+                "machine_type": machine_type,
+                "gpu_model": gpu_model,
                 "gpu_count": 1,
-                "gpu_memory_gb": 16,
-                "price_cny_per_hour": 2.5,
+                "gpu_memory_gb": memory,
+                "price_cny_per_hour": price,
                 "has_stock": True,
-            },
-            {
-                "sku_id": 738,
-                "machine_type": "1 * NVIDIA V100_32g",
-                "gpu_model": "NVIDIA V100",
-                "gpu_count": 1,
-                "gpu_memory_gb": 32,
-                "price_cny_per_hour": 4.5,
-                "has_stock": True,
-            },
-            {
-                "sku_id": 4675,
-                "machine_type": "1 * NVIDIA A100_80g",
-                "gpu_model": "NVIDIA A100",
-                "gpu_count": 1,
-                "gpu_memory_gb": 80,
-                "price_cny_per_hour": 10,
-                "has_stock": True,
-            },
+            }
+            for sku_id, machine_type, gpu_model, memory, price in (
+                (740, "1 * NVIDIA T4_16g", "NVIDIA T4", 16, 2.5),
+                (738, "1 * NVIDIA V100_32g", "NVIDIA V100", 32, 4.5),
+                (4675, "1 * NVIDIA A100_80g", "NVIDIA A100", 80, 10),
+            )
         ],
         "recommendation": {
             "machine_type": "1 * NVIDIA V100_32g",
@@ -783,6 +786,14 @@ def test_bwo_gpu_compare_v2_uses_live_job_inventory() -> None:
                     *valid["available_machines"][:2],
                     {**valid["available_machines"][2], "has_stock": False},
                 ],
+            }
+        )
+    with pytest.raises(ValidationError):
+        validator.validate(
+            {
+                "workload": valid["workload"],
+                "candidate_machines": valid["available_machines"],
+                "recommendation": valid["recommendation"],
             }
         )
 

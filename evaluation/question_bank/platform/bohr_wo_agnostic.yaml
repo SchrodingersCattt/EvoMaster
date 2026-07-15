@@ -289,14 +289,14 @@ questions:
     axis: efficiency
     verify: turn_budget
 
-- id: BWO_gpu_compare_004_20260715_v2
+- id: BWO_gpu_compare_004_20260715_v3
   capability: workflow_orchestration
   domain: agnostic
   scope: platform
   intent: Test agent queries available GPU machines and makes a grounded recommendation without creating resources.
   human_prompt_seed: |
-    利用 bohr-cli，帮我看看现在可用的 GPU 机型。我准备训练一个 500 原子体系的 DeepMD 模型，请比较一下显存和价格，推荐一个性价比合适的配置。只查询，不要创建资源。
-    把对比结果和推荐理由保存到工作区根目录的 `b4_gpu_comparison.json`，候选机型记录 SKU、机型名、GPU 型号与数量、显存、每小时价格和库存状态。
+    利用 Bohr-CLI，帮我看看现在用于提交计算任务的可用 GPU 机型。我准备训练一个 500 原子体系的 DeepMD 模型，请比较一下显存和价格，推荐一个性价比合适的配置。只查询，不要创建资源。
+    把对比结果和推荐理由保存到工作区根目录的 `b4_gpu_comparison.json`。JSON 顶层使用 `workload`、`available_machines` 和 `recommendation`；`workload` 包含 `framework` 和 `atom_count`，每个候选机型包含 `sku_id`、`machine_type`、`gpu_model`、`gpu_count`、`gpu_memory_gb`、`price_cny_per_hour` 和 `has_stock`，`recommendation` 包含 `machine_type` 和 `reason`。
   tags:
   - bohr-cli
   reference_answers:
