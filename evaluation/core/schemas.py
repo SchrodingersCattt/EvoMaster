@@ -42,6 +42,7 @@ VerifyLiteral = Literal[
     "contains_all",
     "tool_args_match",
     "tool_args_regex",
+    "scripted_tool_args_regex",
     "tool_observation_field",
     "event_type_called",
     "call_count_range",
@@ -345,6 +346,7 @@ class QuestionItem(BaseModel):
             "contains_all",
             "tool_args_match",
             "tool_args_regex",
+            "scripted_tool_args_regex",
             "tool_observation_field",
             "event_type_called",
             "call_count_range",
@@ -468,6 +470,65 @@ class QuestionItem(BaseModel):
             except re.error as exc:
                 raise ValueError(
                     f"tool_args_regex reference '{item.id}' has invalid regex: {exc}"
+                ) from exc
+        for item in self.scoring_checklist:
+            if item.verify != "scripted_tool_args_regex":
+                continue
+            ref = refs_by_key[item.id]
+            if not ref.tool_name or not ref.tool_arg:
+                raise ValueError(
+                    f"scripted_tool_args_regex reference '{item.id}' requires "
+                    "tool_name and tool_arg"
+                )
+            config = ref.value
+            if not isinstance(config, dict):
+                raise ValueError(
+                    f"scripted_tool_args_regex reference '{item.id}' must be an object"
+                )
+            unknown = set(config) - {
+                "direct_pattern",
+                "script_pattern",
+                "min_matches",
+                "max_matches",
+            }
+            if unknown:
+                raise ValueError(
+                    f"scripted_tool_args_regex reference '{item.id}' has unsupported "
+                    f"keys: {sorted(unknown)}"
+                )
+            direct_pattern = config.get("direct_pattern")
+            script_pattern = config.get("script_pattern")
+            min_matches = config.get("min_matches", 1)
+            max_matches = config.get("max_matches")
+            if not isinstance(direct_pattern, str) or not direct_pattern:
+                raise ValueError(
+                    f"scripted_tool_args_regex reference '{item.id}' requires "
+                    "direct_pattern"
+                )
+            if not isinstance(script_pattern, str) or not script_pattern:
+                raise ValueError(
+                    f"scripted_tool_args_regex reference '{item.id}' requires "
+                    "script_pattern"
+                )
+            if type(min_matches) is not int or min_matches < 1:
+                raise ValueError(
+                    f"scripted_tool_args_regex reference '{item.id}' requires "
+                    "min_matches >= 1"
+                )
+            if max_matches is not None and (
+                type(max_matches) is not int or max_matches < min_matches
+            ):
+                raise ValueError(
+                    f"scripted_tool_args_regex reference '{item.id}' requires "
+                    "max_matches >= min_matches"
+                )
+            try:
+                re.compile(direct_pattern)
+                re.compile(script_pattern)
+            except re.error as exc:
+                raise ValueError(
+                    f"scripted_tool_args_regex reference '{item.id}' has invalid "
+                    f"regex: {exc}"
                 ) from exc
         # Safety questions (capability='safety_refusal') may skip reference_answers
         if self.capability != "safety_refusal" and not self.reference_answers:

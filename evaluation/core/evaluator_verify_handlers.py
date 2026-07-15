@@ -11,6 +11,7 @@ at module bottom; do not import this file from anywhere else.
 """
 
 import re
+from pathlib import PurePath
 
 from evaluation.validators.dpgen_dargs import check_dpgen_dargs
 from evaluation.validators.gpumd_run_in import check_gpumd_run_in
@@ -175,6 +176,98 @@ def _h_tool_args_regex(ctx):
         passed,
         f"regex matches={count}, expected={expected}, "
         f"matching tool calls inspected={calls_inspected}",
+    )
+
+
+_SCRIPT_EXECUTOR_TEMPLATE = (
+    r"(?:^|[\n;&|]\s*)(?:[^\s;&|]+/)?"
+    r"(?:python(?:3(?:\.\d+)*)?|bash|sh)\s+"
+    r"(?:[^\s;&|]+/)?{script}(?=$|[\s;&|])"
+)
+_INLINE_SCRIPT_EXECUTOR_RE = re.compile(
+    r"(?:^|[\n;&|]\s*)(?:[^\s;&|]+/)?" r"(?:python(?:3(?:\.\d+)*)?|bash|sh)\s+[^\s;&|]+"
+)
+
+
+@_R("scripted_tool_args_regex")
+def _h_scripted_tool_args_regex(ctx):
+    """Accept direct commands or a written script that is subsequently executed.
+
+    Repeated work performed inside a helper script is intentionally counted as one
+    grounded execution path.  Output artifacts remain responsible for proving the
+    number and semantics of the repeated operations.
+    """
+    ref = ctx["ref"]
+    if not ref.tool_name or not ref.tool_arg:
+        return False, "scripted_tool_args_regex requires tool_name and tool_arg"
+    config = ref.value
+    if not isinstance(config, dict):
+        return False, "scripted_tool_args_regex value must be an object"
+    try:
+        direct_regex = re.compile(str(config.get("direct_pattern")))
+        script_regex = re.compile(str(config.get("script_pattern")))
+        minimum = int(config.get("min_matches", 1))
+        raw_maximum = config.get("max_matches")
+        maximum = int(raw_maximum) if raw_maximum is not None else None
+    except (re.error, TypeError, ValueError) as exc:
+        return False, f"invalid scripted_tool_args_regex configuration: {exc}"
+
+    names = {name.strip() for name in ref.tool_name.split("|") if name.strip()}
+    tool_calls = ctx["tool_calls"]
+    direct_matches = 0
+    inline_scripts = 0
+    executor_calls: list[tuple[int, str]] = []
+    written_scripts: list[tuple[int, str, str]] = []
+
+    for index, call in enumerate(tool_calls):
+        tool_name = call.get("tool_name")
+        args = call.get("tool_args", {})
+        if not isinstance(args, dict):
+            continue
+        if tool_name in names:
+            command = args.get(ref.tool_arg)
+            if not isinstance(command, str):
+                continue
+            executor_calls.append((index, command))
+            # Here-doc bodies are data until an interpreter executes them.  Do not
+            # count command-looking text inside them as a direct invocation.
+            if "<<" not in command:
+                direct_matches += sum(1 for _ in direct_regex.finditer(command))
+            if script_regex.search(command) and _INLINE_SCRIPT_EXECUTOR_RE.search(
+                command
+            ):
+                inline_scripts += 1
+        elif tool_name == "Write":
+            path = args.get("file_path")
+            content = args.get("content")
+            if (
+                isinstance(path, str)
+                and isinstance(content, str)
+                and script_regex.search(content)
+            ):
+                written_scripts.append((index, path, content))
+
+    linked_scripts = 0
+    for write_index, path, _content in written_scripts:
+        basename = PurePath(path.replace("\\", "/")).name
+        if not basename:
+            continue
+        executor_regex = re.compile(
+            _SCRIPT_EXECUTOR_TEMPLATE.replace("{script}", re.escape(basename))
+        )
+        if any(
+            call_index > write_index and executor_regex.search(command)
+            for call_index, command in executor_calls
+        ):
+            linked_scripts += 1
+
+    count = direct_matches + inline_scripts + linked_scripts
+    passed = count >= minimum and (maximum is None or count <= maximum)
+    expected = f">={minimum}" if maximum is None else f"[{minimum},{maximum}]"
+    return (
+        passed,
+        f"grounded paths={count}, expected={expected}, direct={direct_matches}, "
+        f"linked_scripts={linked_scripts}, inline_scripts={inline_scripts}",
     )
 
 

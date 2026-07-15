@@ -51,6 +51,39 @@ def _tool_regex_question(*, min_matches: int = 2) -> QuestionItem:
     )
 
 
+def _scripted_tool_regex_question() -> QuestionItem:
+    return QuestionItem(
+        id="scripted_tool_regex_test",
+        capability="workflow_orchestration",
+        domain="agnostic",
+        intent="Verify direct or scripted CLI polling.",
+        human_prompt_seed="Poll the job.",
+        reference_answers=[
+            ReferenceAnswer(
+                key="polled",
+                tool_name="Bash",
+                tool_arg="command",
+                value={
+                    "direct_pattern": BOHR_COMMAND_PATTERN,
+                    "script_pattern": (
+                        r'["\']bohr["\']\s*,\s*["\']job["\']\s*,\s*'
+                        r'["\']describe["\']'
+                    ),
+                    "min_matches": 1,
+                },
+            )
+        ],
+        scoring_checklist=[
+            ScoringCheckItem(
+                id="polled",
+                criterion="Job was polled through the CLI.",
+                axis="grounding",
+                verify="scripted_tool_args_regex",
+            )
+        ],
+    )
+
+
 def test_tool_args_regex_counts_matches_across_calls_without_leaking_args() -> None:
     question = _tool_regex_question()
     record = BinaryEvaluator().evaluate(
@@ -94,6 +127,139 @@ def test_tool_args_regex_fails_below_minimum() -> None:
     assert "expected=>=2" in result.reason
 
 
+def test_scripted_tool_args_regex_accepts_written_and_executed_script() -> None:
+    record = BinaryEvaluator().evaluate(
+        question=_scripted_tool_regex_question(),
+        answer="done",
+        tool_calls=[
+            {
+                "tool_name": "Write",
+                "tool_args": {
+                    "file_path": "/workspace/poll_job.py",
+                    "content": (
+                        'subprocess.run(["bohr", "job", "describe", "-i", job_id])'
+                    ),
+                },
+            },
+            {
+                "tool_name": "Bash",
+                "tool_args": {"command": "cd /workspace && python3 poll_job.py"},
+            },
+        ],
+    )
+
+    result = record.criteria_results["polled"]
+    assert result.passed is True
+    assert "linked_scripts=1" in result.reason
+
+
+def test_scripted_tool_args_regex_accepts_direct_command() -> None:
+    record = BinaryEvaluator().evaluate(
+        question=_scripted_tool_regex_question(),
+        answer="done",
+        tool_calls=[
+            {
+                "tool_name": "Bash",
+                "tool_args": {"command": "bohr job describe -i 20400713"},
+            }
+        ],
+    )
+
+    result = record.criteria_results["polled"]
+    assert result.passed is True
+    assert "direct=1" in result.reason
+
+
+def test_scripted_tool_args_regex_rejects_unexecuted_script() -> None:
+    record = BinaryEvaluator().evaluate(
+        question=_scripted_tool_regex_question(),
+        answer="done",
+        tool_calls=[
+            {
+                "tool_name": "Write",
+                "tool_args": {
+                    "file_path": "/workspace/poll_job.py",
+                    "content": (
+                        'subprocess.run(["bohr", "job", "describe", "-i", job_id])'
+                    ),
+                },
+            }
+        ],
+    )
+
+    result = record.criteria_results["polled"]
+    assert result.passed is False
+    assert "linked_scripts=0" in result.reason
+
+
+def test_scripted_tool_args_regex_accepts_inline_script_execution() -> None:
+    record = BinaryEvaluator().evaluate(
+        question=_scripted_tool_regex_question(),
+        answer="done",
+        tool_calls=[
+            {
+                "tool_name": "Bash",
+                "tool_args": {
+                    "command": (
+                        "cat > poll_job.py <<'PY'\n"
+                        'subprocess.run(["bohr", "job", "describe", "-i", job_id])\n'
+                        "PY\npython3 poll_job.py"
+                    )
+                },
+            }
+        ],
+    )
+
+    result = record.criteria_results["polled"]
+    assert result.passed is True
+    assert "inline_scripts=1" in result.reason
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        {"script_pattern": "bohr"},
+        {"direct_pattern": "bohr"},
+        {
+            "direct_pattern": "bohr",
+            "script_pattern": "describe",
+            "min_matches": 0,
+        },
+        {
+            "direct_pattern": "bohr",
+            "script_pattern": "describe",
+            "unknown": True,
+        },
+    ],
+)
+def test_scripted_tool_args_regex_reference_is_validated(value: object) -> None:
+    with pytest.raises(
+        PydanticValidationError, match="scripted_tool_args_regex reference"
+    ):
+        QuestionItem(
+            id="invalid_scripted_tool_regex",
+            capability="workflow_orchestration",
+            domain="agnostic",
+            intent="Invalid verifier config.",
+            human_prompt_seed="test",
+            reference_answers=[
+                ReferenceAnswer(
+                    key="polled",
+                    tool_name="Bash",
+                    tool_arg="command",
+                    value=value,
+                )
+            ],
+            scoring_checklist=[
+                ScoringCheckItem(
+                    id="polled",
+                    criterion="Poll.",
+                    verify="scripted_tool_args_regex",
+                )
+            ],
+        )
+
+
 @pytest.mark.parametrize(
     "value",
     [
@@ -129,11 +295,16 @@ def test_tool_args_regex_reference_is_validated(value: object) -> None:
         )
 
 
-def test_bwo_monitor_v3_schema_requires_real_lifecycle() -> None:
+def test_bwo_monitor_v4_schema_requires_real_lifecycle() -> None:
     questions = flatten_banks(load_question_banks(QUESTION_BANK_DIR))
-    question = next(q for q in questions if q.id == "BWO_monitor_D6_20260715_v3")
+    question = next(q for q in questions if q.id == "BWO_monitor_D6_20260715_v4")
     assert all(
-        q.id not in {"BWO_monitor_D6_20260715", "BWO_monitor_D6_20260715_v2"}
+        q.id
+        not in {
+            "BWO_monitor_D6_20260715",
+            "BWO_monitor_D6_20260715_v2",
+            "BWO_monitor_D6_20260715_v3",
+        }
         for q in questions
     )
     schema_ref = next(
@@ -154,6 +325,9 @@ def test_bwo_monitor_v3_schema_requires_real_lifecycle() -> None:
         "log_saved": True,
     }
     validator.validate(valid)
+    validator.validate({**valid, "job_id": "20400713"})
+    validator.validate({**valid, "final_status": "Finished"})
+    validator.validate({**valid, "final_status": "2"})
 
     with pytest.raises(ValidationError):
         validator.validate(
@@ -163,7 +337,9 @@ def test_bwo_monitor_v3_schema_requires_real_lifecycle() -> None:
             }
         )
     with pytest.raises(ValidationError):
-        validator.validate({**valid, "final_status": "Finished"})
+        validator.validate({**valid, "job_id": "job-20400713"})
+    with pytest.raises(ValidationError):
+        validator.validate({**valid, "final_status": "Running"})
     with pytest.raises(ValidationError):
         validator.validate({**valid, "log_saved": False})
 

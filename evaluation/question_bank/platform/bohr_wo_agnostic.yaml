@@ -1155,7 +1155,7 @@ questions:
     axis: efficiency
     verify: turn_budget
 
-- id: BWO_monitor_D6_20260715_v3
+- id: BWO_monitor_D6_20260715_v4
   capability: workflow_orchestration
   domain: agnostic
   scope: platform
@@ -1184,8 +1184,11 @@ questions:
         - log_saved
         properties:
           job_id:
-            type: integer
-            minimum: 1
+            oneOf:
+            - type: integer
+              minimum: 1
+            - type: string
+              pattern: '^[1-9][0-9]*$'
           image:
             const: registry.dp.tech/dptech/ubuntu:22.04-py3.10-cuda12.1
           machine_type:
@@ -1237,7 +1240,10 @@ questions:
                   status:
                     const: 2
           final_status:
-            const: 2
+            oneOf:
+            - const: 2
+            - type: string
+              pattern: '^(?:2|[Ff]inished|[Cc]ompleted|[Ss]ucceeded|[Ss]uccess)$'
           log_saved:
             const: true
         additionalProperties: false
@@ -1254,8 +1260,9 @@ questions:
     tool_name: Bash
     tool_arg: command
     value:
-      pattern: '(?:^|[\n;&|]\s*)(?:(?:env|sudo)(?:\s+[^\s;&|]+)*\s+)?(?:[^\s;&|]+/)?bohr\s+job\s+describe\b'
-      min_matches: 2
+      direct_pattern: '(?:^|[\n;&|]\s*)(?:(?:env|sudo)(?:\s+[^\s;&|]+)*\s+)?(?:[^\s;&|]+/)?bohr\s+job\s+describe\b'
+      script_pattern: '(?:(?:^|[\n;&|]\s*)(?:(?:env|sudo)(?:\s+[^\s;&|]+)*\s+)?(?:[^\s;&|]+/)?bohr\s+job\s+describe\b|["'']bohr["'']\s*,\s*["'']job["'']\s*,\s*["'']describe["''])'
+      min_matches: 1
   - key: log_retrieved_via_cli
     tool_name: Bash
     tool_arg: command
@@ -1283,9 +1290,9 @@ questions:
     axis: grounding
     verify: tool_args_regex
   - id: polled_via_cli
-    criterion: Job status was polled through bohr-cli at least twice.
+    criterion: Job status was polled through bohr-cli, directly or through an executed helper script; the monitoring record proves repeated polls.
     axis: grounding
-    verify: tool_args_regex
+    verify: scripted_tool_args_regex
   - id: log_retrieved_via_cli
     criterion: Job log or results were retrieved through bohr-cli.
     axis: grounding
