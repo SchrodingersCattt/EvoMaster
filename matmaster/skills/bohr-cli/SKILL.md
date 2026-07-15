@@ -1,6 +1,6 @@
 ---
 name: bohr-cli
-description: "Use Bohrium CLI (bohr) for platform operations: job/node/sandbox management, file/dataset operations, paper search, scholar search, AI mentor, wiki, knowledge base, PDF parsing, billing. Use when: user asks about Bohrium platform tasks, computing resources, literature search via bohr tools, data management on Bohrium storage, cost queries, or any operation that maps to the `bohr` command-line tool."
+description: "Use Bohrium CLI (bohr) for platform operations: job/node/sandbox management, file/dataset ops, paper/scholar search, AI mentor, wiki, knowledge base, PDF parsing, billing queries."
 ---
 
 # bohr-cli — Bohrium 平台命令行工具

@@ -226,6 +226,7 @@ questions:
     保存到 `e5_recovery.md`。
   tags:
   - bohr-cli
+  - meta_grounding
   reference_answers:
   - key: artifact
     value: e5_recovery.md
@@ -268,6 +269,7 @@ questions:
   intent: Test agent finds a T4 job and resubmits with A100 keeping other config.
   human_prompt_seed: |
     利用 bohr-cli，看看最近完成的任务里有没有用 T4 跑的，挑一个换 A100 重跑，其他不变。
+    提示：任务 20400341 是用 T4 跑的。
     操作记录保存到 `e6_upgrade.json`，格式：
     ```json
     {"original_job_id": ..., "original_machine": "...", "new_machine": "...", "new_job_id": ..., "config_preserved": ["image", "command"]}
@@ -447,6 +449,7 @@ questions:
     保存到 `e9_answer.md`。
   tags:
   - bohr-cli
+  - meta_grounding
   reference_answers:
   - key: artifact
     value: e9_answer.md
