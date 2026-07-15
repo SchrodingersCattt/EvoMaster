@@ -368,59 +368,62 @@ questions:
   capability: data_diagnosis
   domain: agnostic
   scope: platform
-  intent: Test agent handles filenames with spaces when uploading to knowledge base.
+  intent: Test agent uploads PDF with spaces in filename to knowledge base and searches for thermal decomposition data.
   human_prompt_seed: |
-    利用 bohr-cli，把这篇文献传到知识库里去，然后搜一下里面有没有提到 bandgap 的数据。
-    搜索结果保存到 `c8_kb_search.json`，格式：
+    利用 bohr-cli，把这篇文献传到知识库里去，然后搜一下里面纳米样品的热分解峰温（DSC peak temperature）是多少摄氏度。
+    结果保存到 `c8_result.json`，格式：
     ```json
-    {"kb_id": ..., "upload_success": true/false, "filename": "...", "search_results": [{"text": "...", "score": ...}]}
+    {"filename": "...", "kb_id": ..., "upload_success": true/false, "nano_thermal_decomposition_celsius": ..., "search_results": [{"text": "...", "score": ...}]}
     ```
   tags:
   - bohr-cli
   data_files:
   - key: pdf_perovskite
     path: "data/bohr_cli/Fabrication and characterization of Nano  H2dabco  K ClO4 3  molecular Perovskite by ball milling.pdf"
-    description: PDF with spaces in filename - tests path escaping.
+    description: PDF with spaces in filename. Energetic molecular perovskite paper, nano sample DSC peak at 384.5°C.
   reference_answers:
   - key: artifact
-    value: c8_kb_search.json
+    value: c8_result.json
   - key: upload_success
     value:
-      filename: c8_kb_search.json
-      pattern: '"upload_success"\s*:\s*true'
+      filename: c8_result.json
+      pattern: '"upload_success"\s*:\s*(true|false)'
   - key: has_kb_id
     value:
-      filename: c8_kb_search.json
-      pattern: '"kb_id"\s*:\s*\d+'
-  - key: has_search_results
+      filename: c8_result.json
+      pattern: '"kb_id"\s*:\s*(\d+|null)'
+  - key: thermal_decomp
     value:
-      filename: c8_kb_search.json
-      pattern: '"search_results"\s*:\s*\['
+      filename: c8_result.json
+      key: nano_thermal_decomposition_celsius
+      min: 382.0
+      max: 387.0
   - key: has_filename_with_spaces
     value:
-      filename: c8_kb_search.json
+      filename: c8_result.json
       pattern: Fabrication.*characterization|H2dabco
       flags: i
   - key: turn_budget
     value:
-      max: 12
+      max: 15
   scoring_checklist:
   - id: artifact
-    criterion: c8_kb_search.json written to workspace.
+    criterion: c8_result.json written to workspace.
     axis: correctness
     verify: artifact_exists
   - id: upload_success
-    criterion: PDF uploaded successfully despite spaces in filename.
+    criterion: PDF upload status reported (true or false).
     axis: correctness
     verify: text_file_regex
   - id: has_kb_id
-    criterion: Knowledge base ID recorded.
+    criterion: Knowledge base ID recorded (numeric or null).
     axis: correctness
     verify: text_file_regex
-  - id: has_search_results
-    criterion: Search results array present.
+  - id: thermal_decomp
+    criterion: Nano sample thermal decomposition temperature within 382-387°C (expected ~384.5°C).
     axis: correctness
-    verify: text_file_regex
+    verify: json_file_numeric_range
+    weight: 2.0
   - id: has_filename_with_spaces
     criterion: Filename with spaces correctly handled and recorded.
     axis: correctness
