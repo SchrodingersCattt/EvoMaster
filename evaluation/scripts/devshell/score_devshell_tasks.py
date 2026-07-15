@@ -151,7 +151,6 @@ def _load_latest_events_log(log_dir: Path) -> Path | None:
 
 def _normalize_tool_name(tool_name: str) -> str:
     mapping = {
-        "bash": "execute_bash",
         "edit_file": "str_replace_editor",
     }
     return mapping.get(tool_name, tool_name)
@@ -186,7 +185,7 @@ def _required_execution_checks(
 
     bash_commands: list[str] = []
     for call in evidence.tool_calls:
-        if call.tool_name not in {"Bash", "bash", "execute_bash"}:
+        if call.tool_name != "Bash":
             continue
         command = call.args.get("command") or call.args.get("cmd")
         if isinstance(command, str):

@@ -78,7 +78,7 @@ def _write_events(
                 json.dumps(
                     {
                         "type": "tool_call",
-                        "tool": "bash",
+                        "tool": "Bash",
                         "call_id": "tc-1",
                         "args": {"command": bash_command},
                     },
@@ -87,7 +87,7 @@ def _write_events(
                 json.dumps(
                     {
                         "type": "tool_result",
-                        "tool": "bash",
+                        "tool": "Bash",
                         "call_id": "tc-1",
                         "content": '{"status":"success","job_id":"42"}',
                     },
@@ -174,7 +174,7 @@ class TestBuildEvidence:
         )
 
         tool_names = [tc.tool_name for tc in evidence.tool_calls]
-        assert "execute_bash" in tool_names
+        assert "Bash" in tool_names
         assert "mat_sg_build_bulk_structure_by_template" in tool_names
         assert any(
             evt.event_type.value == "calculation_execution" for evt in evidence.events
@@ -199,9 +199,7 @@ class TestBuildEvidence:
             log_dir=_log_dir(tmp_run_dir),
         )
 
-        bash_call = next(
-            tc for tc in evidence.tool_calls if tc.tool_name == "execute_bash"
-        )
+        bash_call = next(tc for tc in evidence.tool_calls if tc.tool_name == "Bash")
         assert '"job_id":"42"' in bash_call.observation_excerpt
 
 

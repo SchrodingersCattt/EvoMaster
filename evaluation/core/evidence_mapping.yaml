@@ -52,37 +52,37 @@ mappings:
     detail: "MCP space-group structure builder operation"
 
   # -------------------------------------------------------------------------
-  # MLIPs calculations (execute_bash + scripts; or built-in Bohrium tool)
+  # MLIPs calculations (Bash + scripts; or built-in Bohrium tool)
   # -------------------------------------------------------------------------
-  - pattern: "execute_bash"
+  - pattern: "Bash"
     when_args_contains:
       command: "optimize_structure.py"
     event_type: "calculation_execution"
     source_type: "bash_script"
     detail: "Submitted MLIPs structure optimisation via Bohrium job"
 
-  - pattern: "execute_bash"
+  - pattern: "Bash"
     when_args_contains:
       command: "run_molecular_dynamics.py"
     event_type: "calculation_execution"
     source_type: "bash_script"
     detail: "Submitted MLIPs molecular dynamics via Bohrium job"
 
-  - pattern: "execute_bash"
+  - pattern: "Bash"
     when_args_contains:
       command: "calculate_phonon.py"
     event_type: "calculation_execution"
     source_type: "bash_script"
     detail: "Submitted MLIPs phonon calculation via Bohrium job"
 
-  - pattern: "execute_bash"
+  - pattern: "Bash"
     when_args_contains:
       command: "calculate_elastic.py"
     event_type: "calculation_execution"
     source_type: "bash_script"
     detail: "Submitted MLIPs elastic constants calculation via Bohrium job"
 
-  - pattern: "execute_bash"
+  - pattern: "Bash"
     when_args_contains:
       command: "run_neb.py"
     event_type: "calculation_execution"
@@ -102,7 +102,7 @@ mappings:
   # -------------------------------------------------------------------------
   # GROMACS MD simulations (bash / remote gmx)
   # -------------------------------------------------------------------------
-  - pattern: "execute_bash"
+  - pattern: "Bash"
     when_args_contains:
       command: "gromacs"
     event_type: "calculation_execution"
@@ -159,7 +159,7 @@ mappings:
   # -------------------------------------------------------------------------
 
   # Python + ASE → scientific_library
-  - pattern: "execute_bash"
+  - pattern: "Bash"
     when_args_contains:
       command: "ase"
     event_type: "script_execution"
@@ -167,7 +167,7 @@ mappings:
     detail: "Bash: ASE python script"
 
   # Python + pymatgen → scientific_library
-  - pattern: "execute_bash"
+  - pattern: "Bash"
     when_args_contains:
       command: "pymatgen"
     event_type: "script_execution"
@@ -175,7 +175,7 @@ mappings:
     detail: "Bash: pymatgen python script"
 
   # Python + phonopy → scientific_library
-  - pattern: "execute_bash"
+  - pattern: "Bash"
     when_args_contains:
       command: "phonopy"
     event_type: "script_execution"
@@ -183,7 +183,7 @@ mappings:
     detail: "Bash: phonopy script"
 
   # Python + VESTA / CIF manipulation → scientific_library
-  - pattern: "execute_bash"
+  - pattern: "Bash"
     when_args_contains:
       command: "vesta"
     event_type: "script_execution"
@@ -191,7 +191,7 @@ mappings:
     detail: "Bash: VESTA/CIF script"
 
   # Generic python → script_execution (source unknown until LLM judge)
-  - pattern: "execute_bash"
+  - pattern: "Bash"
     when_args_contains:
       command: "python"
     event_type: "script_execution"
@@ -199,7 +199,7 @@ mappings:
     detail: "Bash: generic python script"
 
   # Generic bash
-  - pattern: "execute_bash"
+  - pattern: "Bash"
     event_type: "script_execution"
     source_type: "bash_script"
     detail: "Bash command execution"

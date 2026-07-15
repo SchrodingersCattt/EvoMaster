@@ -31,7 +31,7 @@ def _tool_regex_question(*, min_matches: int = 2) -> QuestionItem:
         reference_answers=[
             ReferenceAnswer(
                 key="polled",
-                tool_name="Bash|execute_bash",
+                tool_name="Bash",
                 tool_arg="command",
                 value={
                     "pattern": BOHR_COMMAND_PATTERN,
@@ -57,7 +57,7 @@ def test_tool_args_regex_counts_matches_across_calls_without_leaking_args() -> N
         answer="done",
         tool_calls=[
             {
-                "tool_name": "execute_bash",
+                "tool_name": "Bash",
                 "tool_args": {
                     "command": "env BOHRIUM_ACCESS_KEY=secret bohr job describe -i 1"
                 },
@@ -81,7 +81,7 @@ def test_tool_args_regex_fails_below_minimum() -> None:
         answer="done",
         tool_calls=[
             {
-                "tool_name": "execute_bash",
+                "tool_name": "Bash",
                 "tool_args": {"command": "bohr job describe -i 1"},
             }
         ],
@@ -113,7 +113,7 @@ def test_tool_args_regex_reference_is_validated(value: object) -> None:
             reference_answers=[
                 ReferenceAnswer(
                     key="polled",
-                    tool_name="execute_bash",
+                    tool_name="Bash",
                     tool_arg="command",
                     value=value,
                 )

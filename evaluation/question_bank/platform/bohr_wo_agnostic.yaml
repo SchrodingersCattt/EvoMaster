@@ -928,19 +928,19 @@ questions:
     value: d6_job.log
     workspace_resolve: root
   - key: submitted_via_cli
-    tool_name: Bash|execute_bash
+    tool_name: Bash
     tool_arg: command
     value:
       pattern: '(?:^|[\n;&|]\s*)(?:(?:env|sudo)(?:\s+[^\s;&|]+)*\s+)?(?:[^\s;&|]+/)?bohr\s+job\s+submit\b'
       min_matches: 1
   - key: polled_via_cli
-    tool_name: Bash|execute_bash
+    tool_name: Bash
     tool_arg: command
     value:
       pattern: '(?:^|[\n;&|]\s*)(?:(?:env|sudo)(?:\s+[^\s;&|]+)*\s+)?(?:[^\s;&|]+/)?bohr\s+job\s+describe\b'
       min_matches: 2
   - key: log_retrieved_via_cli
-    tool_name: Bash|execute_bash
+    tool_name: Bash
     tool_arg: command
     value:
       pattern: '(?:^|[\n;&|]\s*)(?:(?:env|sudo)(?:\s+[^\s;&|]+)*\s+)?(?:[^\s;&|]+/)?bohr\s+job\s+(?:log|download)\b'
