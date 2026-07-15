@@ -22,6 +22,8 @@ Scoring model:
 from datetime import datetime, timezone
 from typing import Any, Literal
 
+from jsonschema.exceptions import SchemaError
+from jsonschema.validators import validator_for
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from evaluation.core.question_tags import QuestionTag
@@ -377,6 +379,39 @@ class QuestionItem(BaseModel):
                     f"scoring_checklist item '{item.id}' (verify={item.verify}) "
                     "requires a matching reference_answers entry with the same key"
                 )
+        refs_by_key = {item.key: item for item in self.reference_answers}
+        for item in self.scoring_checklist:
+            if item.verify != "json_file_schema":
+                continue
+            value = refs_by_key[item.id].value
+            if not isinstance(value, dict):
+                raise ValueError(
+                    f"json_file_schema reference '{item.id}' must be an object"
+                )
+            unknown_keys = set(value) - {"filename", "schema"}
+            if unknown_keys:
+                raise ValueError(
+                    f"json_file_schema reference '{item.id}' has unsupported keys: "
+                    f"{sorted(unknown_keys)}"
+                )
+            filename = value.get("filename")
+            if not isinstance(filename, str) or not filename:
+                raise ValueError(
+                    f"json_file_schema reference '{item.id}' requires filename"
+                )
+            schema = value.get("schema")
+            if not isinstance(schema, (dict, bool)):
+                raise ValueError(
+                    f"json_file_schema reference '{item.id}' requires a JSON Schema"
+                )
+            validator_cls = validator_for(schema)
+            try:
+                validator_cls.check_schema(schema)
+            except SchemaError as exc:
+                raise ValueError(
+                    f"json_file_schema reference '{item.id}' has an invalid "
+                    f"JSON Schema: {exc.message}"
+                ) from exc
         # Safety questions (capability='safety_refusal') may skip reference_answers
         if self.capability != "safety_refusal" and not self.reference_answers:
             raise ValueError("non-safety questions must include reference_answers")

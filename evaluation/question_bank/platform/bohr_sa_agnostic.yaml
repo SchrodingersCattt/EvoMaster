@@ -222,7 +222,7 @@ questions:
     axis: efficiency
     verify: turn_budget
 
-- id: BSA_roadmap_topo_005_20260715
+- id: BSA_roadmap_topo_005_20260715_v2
   capability: scientific_analysis
   domain: agnostic
   scope: platform
@@ -238,18 +238,55 @@ questions:
   reference_answers:
   - key: artifact
     value: a5_roadmap.json
-  - key: has_concepts
+  - key: roadmap_schema
     value:
       filename: a5_roadmap.json
-      pattern: '"concepts"\s*:\s*\[.*"[^"]+'
-  - key: has_figures
-    value:
-      filename: a5_roadmap.json
-      pattern: '"key_figures"\s*:\s*\[\s*\{'
-  - key: has_papers
-    value:
-      filename: a5_roadmap.json
-      pattern: '"papers"\s*:\s*\[\s*\{'
+      schema:
+        type: object
+        required:
+        - concepts
+        - key_figures
+        - papers
+        properties:
+          concepts:
+            type: array
+            minItems: 1
+            items:
+              type: string
+              minLength: 1
+          key_figures:
+            type: array
+            minItems: 1
+            items:
+              type: object
+              required:
+              - name
+              - contribution
+              properties:
+                name:
+                  type: string
+                  minLength: 1
+                contribution:
+                  type: string
+                  minLength: 1
+          papers:
+            type: array
+            minItems: 1
+            items:
+              type: object
+              required:
+              - title
+              - year
+              - why
+              properties:
+                title:
+                  type: string
+                  minLength: 1
+                year:
+                  type: integer
+                why:
+                  type: string
+                  minLength: 1
   - key: topo_keyword
     value:
       filename: a5_roadmap.json
@@ -263,18 +300,10 @@ questions:
     criterion: a5_roadmap.json written to workspace.
     axis: correctness
     verify: artifact_exists
-  - id: has_concepts
-    criterion: concepts array has entries.
+  - id: roadmap_schema
+    criterion: Roadmap JSON contains non-empty concepts, key figures with contributions, and papers with title, year, and rationale.
     axis: correctness
-    verify: text_file_regex
-  - id: has_figures
-    criterion: key_figures array has entries.
-    axis: correctness
-    verify: text_file_regex
-  - id: has_papers
-    criterion: papers array has entries.
-    axis: correctness
-    verify: text_file_regex
+    verify: json_file_schema
   - id: topo_keyword
     criterion: Content mentions topological/surface state keywords.
     axis: grounding

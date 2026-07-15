@@ -9,6 +9,9 @@ import json
 import re
 from pathlib import Path
 
+from jsonschema.exceptions import SchemaError
+from jsonschema.validators import validator_for
+
 
 def _resolve_file(workspace: Path, name: str) -> Path | None:
     """Try direct child first, then recursive glob."""
@@ -38,11 +41,13 @@ def check_json_file_schema(
     workspace_dir: str | Path,
     *,
     filename: str,
-    required_keys: list[str] | None = None,
+    schema: dict[str, object] | bool | None,
 ) -> tuple[bool, str]:
-    """Check that a JSON file is valid and contains required keys."""
+    """Validate a JSON file against a standard JSON Schema."""
     if not filename:
         return False, 'json_file_schema: no filename provided'
+    if not isinstance(schema, (dict, bool)):
+        return False, 'json_file_schema: no valid schema provided'
     root = Path(workspace_dir)
     fpath = _resolve_file(root, filename)
     if fpath is None:
@@ -51,13 +56,30 @@ def check_json_file_schema(
         data = json.loads(fpath.read_text(encoding='utf-8'))
     except ValueError as exc:
         return False, f'{filename} is not valid JSON: {exc}'
-    if not isinstance(data, dict):
-        return False, f'{filename} top-level is {type(data).__name__}, expected object'
-    keys = required_keys or []
-    missing = [k for k in keys if k not in data]
-    if missing:
-        return False, f'{filename} missing keys: {missing}'
-    return True, f'{filename} valid JSON with all {len(keys)} required keys'
+
+    validator_cls = validator_for(schema)
+    try:
+        validator_cls.check_schema(schema)
+    except SchemaError as exc:
+        return False, f'json_file_schema: invalid schema: {exc.message}'
+
+    errors = sorted(
+        validator_cls(schema).iter_errors(data),
+        key=lambda error: tuple(str(part) for part in error.absolute_path),
+    )
+    if errors:
+        shown: list[str] = []
+        for error in errors[:5]:
+            path = '$'
+            for part in error.absolute_path:
+                if isinstance(part, int):
+                    path += f'[{part}]'
+                else:
+                    path += f'.{part}'
+            shown.append(f'{path}: {error.message}')
+        suffix = f'; {len(errors) - 5} more error(s)' if len(errors) > 5 else ''
+        return False, f'{filename} failed JSON Schema: {"; ".join(shown)}{suffix}'
+    return True, f'{filename} is valid JSON matching the configured schema'
 
 
 def check_json_file_numeric_range(

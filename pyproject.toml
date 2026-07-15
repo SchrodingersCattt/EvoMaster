@@ -9,6 +9,7 @@ dependencies = [
     "matmaster-bohrium-transfer",
     "pydantic",
     "PyYAML",
+    "jsonschema>=4.26.0,<5",
     "openai",
     "anthropic",
     "google-genai",

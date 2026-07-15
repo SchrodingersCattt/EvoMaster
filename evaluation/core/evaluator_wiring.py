@@ -125,7 +125,7 @@ def check_json_file_schema(
     return _check_json_file_schema(
         evidence.workspace_dir,
         filename=cfg.get("filename", ""),
-        required_keys=cfg.get("required_keys", []),
+        schema=cfg.get("schema"),
     )
 
 

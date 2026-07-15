@@ -8557,12 +8557,14 @@ questions:
   - key: summary_schema
     value:
       filename: particle_size_summary.json
-      required_keys:
-      - n_particles
-      - scale_nm_per_px
-      - mean_nm
-      - median_nm
-      - d90_nm
+      schema:
+        type: object
+        required:
+        - n_particles
+        - scale_nm_per_px
+        - mean_nm
+        - median_nm
+        - d90_nm
   - key: n_particles
     value:
       filename: particle_size_summary.json
