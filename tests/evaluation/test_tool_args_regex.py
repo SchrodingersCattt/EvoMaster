@@ -830,42 +830,10 @@ def test_bec_upgrade_machine_v4_preserves_seed_job_config_without_leaking_ids() 
         assert leaked_term not in prompt
 
     checklist_by_id = {item.id: item for item in question.scoring_checklist}
-    assert checklist_by_id["upgrade_record"].verify == "bohr_job_upgrade_record"
+    assert checklist_by_id["upgrade_execution"].verify == (
+        "bohr_job_upgrade_execution"
+    )
 
     refs_by_key = {ref.key: ref for ref in question.reference_answers}
-    describe_pattern = refs_by_key["original_job_queried_via_cli"].value["pattern"]
-    assert re.search(describe_pattern, "bohr job describe -i 20400341 -o json")
-    assert re.search(describe_pattern, "bohr job describe --id=20400341 --output json")
-    assert not re.search(describe_pattern, "bohr job describe -i 23052040 -o json")
-
-    machine_pattern = refs_by_key["a100_machines_queried_via_cli"].value["pattern"]
-    assert re.search(machine_pattern, "bohr machine list -c gpu -s job -o json")
-    assert not re.search(machine_pattern, "bohr machine list -c gpu -s node -o json")
-
-    submit_pattern = refs_by_key["job_resubmitted_via_cli"].value["pattern"]
-    valid_submit = (
-        "bohr job submit -n e6-upgrade "
-        "-m registry.dp.tech/dptech/dpmd-cu126-outisli:v20260712 "
-        "-t 'c16_m60_1 * NVIDIA A100_80g' "
-        '-c "echo \'T4 test for eval E6\' > result.txt"'
-    )
-    assert re.search(submit_pattern, valid_submit)
-    assert re.search(submit_pattern, "bohr job submit -i job_a100.json -o json")
-    assert re.search(submit_pattern, "bohr job submit --input=job_a100.json -o json")
-    assert re.search(
-        submit_pattern,
-        "cat > job_a100.json << 'EOF'\n{}\nEOF\n"
-        "bohr job submit -i job_a100.json -o json",
-    )
-    assert re.search(
-        submit_pattern,
-        "cd /tmp/e6 && bohr job submit -i job_a100.json -o json",
-    )
-    assert not re.search(submit_pattern, "bohr job submit --help")
-    assert not re.search(submit_pattern, "bohr job submit -i")
-    assert not re.search(submit_pattern, valid_submit.replace("A100", "T4"))
-    assert not re.search(submit_pattern, valid_submit.replace("v20260712", "v20260713"))
-    assert not re.search(
-        submit_pattern,
-        valid_submit.replace("T4 test for eval E6", "changed command"),
-    )
+    assert set(refs_by_key) == {"artifact", "upgrade_execution", "turn_budget"}
+    assert refs_by_key["upgrade_execution"].value["seed_id"] == 20400341

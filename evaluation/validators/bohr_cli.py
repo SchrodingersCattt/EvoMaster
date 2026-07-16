@@ -10,6 +10,7 @@ from pathlib import Path
 from evaluation.core.evidence import BohrCliReceiptRecord
 from evaluation.validators.json_file import (
     check_bohr_job_stop_record,
+    check_bohr_job_upgrade_record,
     check_bohr_parameter_sweep_record,
 )
 
@@ -86,15 +87,25 @@ def _artifact_job_ids(data: dict) -> set[int]:
         for raw_key, raw_value in node.items():
             if _normalise_key(raw_key) not in {
                 'id',
+                'ids',
+                'identifier',
+                'identifiers',
                 'jobid',
+                'jobids',
                 'bohrid',
+                'bohrids',
                 'bohrjobid',
+                'bohrjobids',
                 'platformjobid',
+                'platformjobids',
+                'taskid',
+                'taskids',
             }:
                 continue
-            identifier = _positive_int(raw_value)
-            if identifier is not None:
-                identifiers.add(identifier)
+            for candidate in _walk_json(raw_value):
+                identifier = _positive_int(candidate)
+                if identifier is not None:
+                    identifiers.add(identifier)
     return identifiers
 
 
@@ -234,6 +245,117 @@ def _receipt_argv_ids(receipt: BohrCliReceiptRecord) -> set[int]:
         if match:
             identifiers.add(int(match.group(1)))
     return identifiers
+
+
+def _receipt_flag_value(
+    receipt: BohrCliReceiptRecord, names: set[str]
+) -> str | None:
+    for index, argument in enumerate(receipt.argv):
+        key, separator, value = argument.partition('=')
+        if key in names and separator:
+            return value
+        if argument in names and index + 1 < len(receipt.argv):
+            return receipt.argv[index + 1]
+    return None
+
+
+def _is_job_gpu_machine_query(receipt: BohrCliReceiptRecord) -> bool:
+    if not _successful_mutation(receipt, 'machine.list'):
+        return False
+    choose_type = _receipt_flag_value(
+        receipt,
+        {'-c', '--chooseType', '--choose-type', '--choose_type'},
+    )
+    scene = _receipt_flag_value(receipt, {'-s', '--scene'})
+    return (
+        isinstance(choose_type, str)
+        and choose_type.casefold() == 'gpu'
+        and isinstance(scene, str)
+        and scene.casefold() == 'job'
+    )
+
+
+def check_bohr_job_upgrade_execution(
+    workspace_dir: str | Path,
+    *,
+    filename: str,
+    seed_id: int,
+    source_machine_pattern: str,
+    target_machine_pattern: str,
+    image: str,
+    command: str,
+    receipts: list[BohrCliReceiptRecord],
+) -> tuple[bool, str]:
+    """Validate one source-inspect, machine-query, A100-submit lifecycle."""
+    record_ok, record_reason = check_bohr_job_upgrade_record(
+        workspace_dir,
+        filename=filename,
+        seed_id=seed_id,
+        source_machine_pattern=source_machine_pattern,
+        target_machine_pattern=target_machine_pattern,
+        image=image,
+        command=command,
+    )
+    if not record_ok:
+        return False, record_reason
+
+    indexed_receipts = list(enumerate(receipts))
+    submits = [
+        (index, receipt)
+        for index, receipt in indexed_receipts
+        if _successful_mutation(receipt, 'job.submit')
+    ]
+    if len(submits) != 1:
+        return False, f'expected 1 successful job submission, recorded {len(submits)}'
+
+    submit_index, submit = submits[0]
+    if not submit.captured_json or not submit.ids.job_ids:
+        return False, 'job submission has no parsed job identifier'
+    if submit.request.image_address != image:
+        return False, 'job submission does not preserve the source image'
+    if not _shell_commands_equivalent(submit.request.command, command):
+        return False, 'job submission does not preserve the source command'
+    machine_type = submit.request.machine_type
+    if not isinstance(machine_type, str) or not re.search(
+        target_machine_pattern, machine_type
+    ):
+        return False, 'job submission does not use an A100 machine type'
+
+    source_queries = [
+        receipt
+        for index, receipt in indexed_receipts
+        if index < submit_index
+        and _successful_mutation(receipt, 'job.describe')
+        and seed_id in receipt.request.bohr_job_ids
+    ]
+    if not source_queries:
+        return False, 'source job was not successfully queried before submission'
+
+    machine_queries = [
+        receipt
+        for index, receipt in indexed_receipts
+        if index < submit_index and _is_job_gpu_machine_query(receipt)
+    ]
+    if not machine_queries:
+        return False, 'job-scene GPU machines were not queried before submission'
+
+    artifact, artifact_error = _load_json_object(Path(workspace_dir), filename)
+    if artifact_error:
+        return False, artifact_error
+    artifact_ids = _artifact_job_ids(artifact)
+    submitted_ids = set(submit.ids.job_ids)
+    if seed_id not in artifact_ids:
+        return False, f'{filename}: source job identifier does not match CLI request'
+    if not submitted_ids.intersection(artifact_ids):
+        return False, f'{filename}: resubmitted job identifier does not match CLI response'
+    if seed_id in submitted_ids:
+        return False, 'job submission response reuses the source job identifier'
+
+    return (
+        True,
+        'source job and GPU machines were queried before one matching A100 '
+        'resubmission, and the CLI identifiers were recorded',
+    )
 
 
 def check_bohr_job_stop_execution(

@@ -101,6 +101,7 @@ VerifyLiteral = Literal[
     "bohr_gpu_comparison_record",
     "bohr_job_monitor_execution",
     "bohr_job_stop_execution",
+    "bohr_job_upgrade_execution",
     "bohr_parameter_sweep_execution",
     "bohr_parameter_sweep_record",
     "bohr_job_stop_record",
@@ -377,6 +378,7 @@ class QuestionItem(BaseModel):
             "bohr_gpu_comparison_record",
             "bohr_job_monitor_execution",
             "bohr_job_stop_execution",
+            "bohr_job_upgrade_execution",
             "bohr_parameter_sweep_record",
             "bohr_job_stop_record",
             "bohr_job_upgrade_record",
@@ -556,12 +558,15 @@ class QuestionItem(BaseModel):
                     f"string values for: {missing_keys}"
                 )
         for item in self.scoring_checklist:
-            if item.verify != "bohr_job_upgrade_record":
+            if item.verify not in {
+                "bohr_job_upgrade_execution",
+                "bohr_job_upgrade_record",
+            }:
                 continue
             value = refs_by_key[item.id].value
             if not isinstance(value, dict):
                 raise ValueError(
-                    f"bohr_job_upgrade_record reference '{item.id}' must be an object"
+                    f"{item.verify} reference '{item.id}' must be an object"
                 )
             expected_keys = {
                 "filename",
@@ -574,7 +579,7 @@ class QuestionItem(BaseModel):
             unknown_keys = set(value) - expected_keys
             if unknown_keys:
                 raise ValueError(
-                    f"bohr_job_upgrade_record reference '{item.id}' has unsupported "
+                    f"{item.verify} reference '{item.id}' has unsupported "
                     f"keys: {sorted(unknown_keys)}"
                 )
             string_keys = expected_keys - {"seed_id"}
@@ -589,7 +594,7 @@ class QuestionItem(BaseModel):
                 or value["seed_id"] <= 0
             ):
                 raise ValueError(
-                    f"bohr_job_upgrade_record reference '{item.id}' requires a positive "
+                    f"{item.verify} reference '{item.id}' requires a positive "
                     f"seed_id and non-empty strings for: {sorted(string_keys)}"
                 )
             for key in ("source_machine_pattern", "target_machine_pattern"):
@@ -597,7 +602,7 @@ class QuestionItem(BaseModel):
                     re.compile(value[key])
                 except re.error as exc:
                     raise ValueError(
-                        f"bohr_job_upgrade_record reference '{item.id}' has invalid "
+                        f"{item.verify} reference '{item.id}' has invalid "
                         f"{key}: {exc}"
                     ) from exc
         for item in self.scoring_checklist:
