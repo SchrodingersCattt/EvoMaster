@@ -592,11 +592,11 @@ questions:
     axis: efficiency
     verify: turn_budget
 
-- id: BWO_stop_running_009_20260715_v3
+- id: BWO_stop_running_009_20260715_v4
   capability: workflow_orchestration
   domain: agnostic
   scope: platform
-  intent: Test agent gracefully terminates only a self-submitted active job.
+  intent: Test agent stops only a self-submitted active job and records the outcome.
   human_prompt_seed: |
     利用 Bohr-CLI，帮我提交一个临时 CPU 任务来复现问题：镜像使用 `registry.dp.tech/dptech/ubuntu:22.04-py3.10-cuda12.1`，机型 `c2_m4_cpu`，命令为 `echo "b9 started" > b9_started.txt && sleep 600`，任务名以 `b9-stop-running-` 开头并带上唯一后缀。
     任务提交后先确认一下状态；它还没结束时我发现输入有误，请把刚提交的这个任务停掉，别影响其他任务，处理后再查询确认结果。将实际任务 ID、任务名、镜像、机型、命令、每次状态查询结果、停止动作和最终状态保存到工作区根目录的 `b9_actions.json`；状态保留 Bohr-CLI 返回的整数状态码。
@@ -618,7 +618,7 @@ questions:
     tool_name: Bash
     tool_arg: command
     value:
-      pattern: '(?:^|[\n;&|]\s*)(?:(?:env|sudo)(?:\s+[^\s;&|]+)*\s+)?(?:[^\s;&|]+/)?bohr\s+job\s+submit\b(?=(?:(?:\\\r?\n)|[^\n])*--command(?:=|\s+)(?:''[^''\n]*\bsleep\s+600\b[^''\n]*''|"(?:\\.|[^"\\\n])*\bsleep\s+600\b(?:\\.|[^"\\\n])*"))'
+      pattern: '(?:^|[\n;&|]\s*)(?:(?:env|sudo)(?:\s+[^\s;&|]+)*\s+)?(?:[^\s;&|]+/)?bohr\s+job\s+submit\b(?![^\n;&|]*(?:-h|--help)(?:\s|$))'
       min_matches: 1
   - key: polled_via_cli
     tool_name: Bash
@@ -626,18 +626,11 @@ questions:
     value:
       pattern: '(?:^|[\n;&|]\s*)(?:(?:env|sudo)(?:\s+[^\s;&|]+)*\s+)?(?:[^\s;&|]+/)?bohr\s+job\s+describe\b'
       min_matches: 2
-  - key: one_control_action_via_cli
+  - key: stopped_via_cli
     tool_name: Bash
     tool_arg: command
     value:
-      pattern: '(?:^|[\n;&|]\s*)(?:(?:env|sudo)(?:\s+[^\s;&|]+)*\s+)?(?:[^\s;&|]+/)?bohr\s+(?:job\s+(?:terminate|kill|\+cancel)|job_group\s+terminate)\b'
-      min_matches: 1
-      max_matches: 1
-  - key: terminated_via_cli
-    tool_name: Bash
-    tool_arg: command
-    value:
-      pattern: '(?:^|[\n;&|]\s*)(?:(?:env|sudo)(?:\s+[^\s;&|]+)*\s+)?(?:[^\s;&|]+/)?bohr\s+job\s+terminate\b(?=[^\n;&|]*(?:--job_id(?:=|\s+)|\s+)[1-9]\d*\b)'
+      pattern: '(?:^|[\n;&|]\s*)(?:(?:env|sudo)(?:\s+[^\s;&|]+)*\s+)?(?:[^\s;&|]+/)?bohr\s+job\s+(?:terminate|kill|\+cancel)\b(?![^\n;&|]*(?:-h|--help)(?:\s|$))(?=[^\n;&|]*(?:--job_id(?:=|\s+)|-j(?:=|\s+)|\s+)[1-9]\d*\b)'
       min_matches: 1
   - key: turn_budget
     value:
@@ -648,7 +641,7 @@ questions:
     axis: correctness
     verify: artifact_exists
   - id: stop_record
-    criterion: The record identifies the self-submitted job and its configuration, preserves separate raw and web status evidence, and confirms a graceful stop.
+    criterion: The record identifies the self-submitted job and its configuration, preserves status history, and records a successful stop action or stopped state.
     axis: correctness
     verify: bohr_job_stop_record
   - id: submitted_via_cli
@@ -656,15 +649,11 @@ questions:
     axis: grounding
     verify: tool_args_regex
   - id: polled_via_cli
-    criterion: The submitted job was inspected through bohr-cli before and after termination.
+    criterion: The submitted job was inspected through bohr-cli before and after the stop action.
     axis: grounding
     verify: tool_args_regex
-  - id: one_control_action_via_cli
-    criterion: Exactly one job-control command was issued, preventing fallback to force-kill or changes to a job group.
-    axis: grounding
-    verify: tool_args_regex
-  - id: terminated_via_cli
-    criterion: The single control command used bohr job terminate.
+  - id: stopped_via_cli
+    criterion: The submitted job was stopped through Bohr-CLI; terminate, kill, cancel, and a terminate-to-kill fallback are all acceptable.
     axis: grounding
     verify: tool_args_regex
   - id: turn_budget

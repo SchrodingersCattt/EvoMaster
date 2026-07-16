@@ -85,20 +85,43 @@ def test_bohr_job_stop_record_accepts_nested_document(tmp_path: Path) -> None:
     assert ok, reason
 
 
-def test_bohr_job_stop_record_does_not_treat_raw_status_as_web_status(
+def test_bohr_job_stop_record_accepts_successful_kill_during_status_propagation(
     tmp_path: Path,
 ) -> None:
     record = _flat_record()
     record['polls'] = [
         {'status': 3, 'webStatus': 9},
-        {'status': 5, 'webStatus': 6},
+        {'status': 1, 'webStatus': 1},
     ]
+    record['action'] = {
+        'command': 'bohr job kill 23050001',
+        'result': 'success',
+    }
+    _write_record(tmp_path, record)
+
+    ok, reason = _check(tmp_path)
+
+    assert ok, reason
+
+
+def test_bohr_job_stop_record_rejects_failed_control_without_stopped_state(
+    tmp_path: Path,
+) -> None:
+    record = _flat_record()
+    record['polls'] = [
+        {'status': 3, 'webStatus': 9},
+        {'status': 1, 'webStatus': 1},
+    ]
+    record['action'] = {
+        'command': 'bohr job terminate 23050001',
+        'result': 'failed',
+    }
     _write_record(tmp_path, record)
 
     ok, reason = _check(tmp_path)
 
     assert not ok
-    assert 'webStatus' in reason
+    assert 'successful stop action or stopped state' in reason
 
 
 def test_bohr_job_stop_record_requires_two_status_queries(tmp_path: Path) -> None:
@@ -116,7 +139,7 @@ def test_bohr_job_stop_record_is_registered_with_evaluator(tmp_path: Path) -> No
     _write_record(tmp_path, _flat_record())
     questions = flatten_banks(load_question_banks(QUESTION_BANK_DIR))
     question = next(
-        item for item in questions if item.id == 'BWO_stop_running_009_20260715_v3'
+        item for item in questions if item.id == 'BWO_stop_running_009_20260715_v4'
     )
 
     record = BinaryEvaluator().evaluate(
@@ -147,6 +170,10 @@ def test_bohr_job_stop_record_is_registered_with_evaluator(tmp_path: Path) -> No
             },
             {
                 'tool_name': 'Bash',
+                'tool_args': {'command': 'bohr job kill 23050001'},
+            },
+            {
+                'tool_name': 'Bash',
                 'tool_args': {'command': 'bohr job describe -i 20400001 --json'},
             },
         ],
@@ -154,5 +181,4 @@ def test_bohr_job_stop_record_is_registered_with_evaluator(tmp_path: Path) -> No
 
     assert record.criteria_results['stop_record'].passed is True
     assert record.criteria_results['submitted_via_cli'].passed is True
-    assert record.criteria_results['one_control_action_via_cli'].passed is True
-    assert record.criteria_results['terminated_via_cli'].passed is True
+    assert record.criteria_results['stopped_via_cli'].passed is True

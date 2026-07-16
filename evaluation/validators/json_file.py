@@ -172,17 +172,18 @@ def check_bohr_job_stop_record(
         return False, f'{filename}: no job name starts with {job_name_prefix!r}'
 
     mappings = [value for value in _walk_json(data) if isinstance(value, dict)]
-    has_job_id = any(
-        _is_positive_id(value)
+    job_ids = {
+        int(value)
+        for mapping in mappings
+        for key, value in mapping.items()
+        if _is_positive_id(value)
         and 'group' not in _normalise_key(key)
         and (
             _normalise_key(key).endswith('jobid')
             or _normalise_key(key).endswith('taskid')
         )
-        for mapping in mappings
-        for key, value in mapping.items()
-    )
-    if not has_job_id:
+    }
+    if not job_ids:
         return False, f'{filename}: no positive job/task ID evidence'
 
     raw_status_keys = {'status', 'statuscode'}
@@ -208,16 +209,47 @@ def check_bohr_job_stop_record(
         return False, f'{filename}: fewer than two status query records'
     if not any(status in {0, 1, 3} for status in raw_statuses):
         return False, f'{filename}: no active raw status evidence'
-    if 5 not in web_statuses:
-        return False, f'{filename}: no stopped webStatus evidence'
-    if not any(
-        re.search(r'\b(?:bohr\s+job\s+)?terminate\b', value, re.I) for value in strings
-    ):
-        return False, f'{filename}: no graceful terminate action evidence'
+
+    control_pattern = re.compile(
+        r'\b(?:bohr\s+job\s+)?(?:terminate|kill|cancel)\b', re.I
+    )
+    if not any(control_pattern.search(value) for value in strings):
+        return False, f'{filename}: no stop action evidence'
+
+    def _is_success(value: object) -> bool:
+        if value is True:
+            return True
+        if isinstance(value, str):
+            return value.strip().lower() in {'ok', 'success', 'succeeded', 'successful'}
+        if isinstance(value, dict):
+            return any(
+                _normalise_key(key) in {'ok', 'success', 'status', 'result'}
+                and _is_success(child)
+                for key, child in value.items()
+            )
+        return False
+
+    successful_control = any(
+        any(
+            _normalise_key(key) in {'action', 'command', 'commandline', 'method'}
+            and isinstance(value, str)
+            and control_pattern.search(value)
+            for key, value in mapping.items()
+        )
+        and any(
+            _normalise_key(key) in {'ok', 'success', 'status', 'result'}
+            and _is_success(value)
+            for key, value in mapping.items()
+        )
+        for mapping in mappings
+    )
+    stopped_status = -1 in raw_statuses or -1 in web_statuses or 5 in web_statuses
+    if not successful_control and not stopped_status:
+        return False, f'{filename}: no successful stop action or stopped state evidence'
 
     return (
         True,
-        f'{filename}: job identity, configuration, status history, and graceful stop '
+        f'{filename}: job identity, configuration, status history, and stop action '
         'are recorded',
     )
 

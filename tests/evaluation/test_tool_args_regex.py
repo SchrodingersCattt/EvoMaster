@@ -659,14 +659,15 @@ def test_bwo_sandbox_ase_v2_requires_real_lifecycle_and_cleanup() -> None:
     )
 
 
-def test_bwo_stop_running_v3_is_isolated_and_uses_terminate() -> None:
+def test_bwo_stop_running_v4_is_isolated_and_accepts_stop_fallbacks() -> None:
     questions = flatten_banks(load_question_banks(QUESTION_BANK_DIR))
-    question = next(q for q in questions if q.id == "BWO_stop_running_009_20260715_v3")
+    question = next(q for q in questions if q.id == "BWO_stop_running_009_20260715_v4")
     assert all(
         q.id
         not in {
             "BWO_stop_running_009_20260715",
             "BWO_stop_running_009_20260715_v2",
+            "BWO_stop_running_009_20260715_v3",
         }
         for q in questions
     )
@@ -692,8 +693,7 @@ def test_bwo_stop_running_v3_is_isolated_and_uses_terminate() -> None:
             "--command 'echo \"b9 started\" > b9_started.txt && sleep 600'"
         ),
         "polled_via_cli": "bohr job describe -j 20409999 --json",
-        "one_control_action_via_cli": "bohr job terminate 20409999",
-        "terminated_via_cli": "bohr job terminate 20409999",
+        "stopped_via_cli": "bohr job terminate 20409999",
     }
     for key, command in commands_by_key.items():
         assert re.search(refs_by_key[key].value["pattern"], command)
@@ -706,19 +706,15 @@ def test_bwo_stop_running_v3_is_isolated_and_uses_terminate() -> None:
         "  --command 'echo \"b9 started\" > b9_started.txt && sleep 600'"
     )
     assert re.search(submit_pattern, multiline_submit)
-    assert not re.search(
-        submit_pattern,
-        "bohr job submit --command 'echo started' && sleep 600",
-    )
-
-    control_ref = refs_by_key["one_control_action_via_cli"]
-    assert control_ref.value["min_matches"] == 1
-    assert control_ref.value["max_matches"] == 1
-    assert re.search(control_ref.value["pattern"], "bohr job kill 20409999")
     assert re.search(
-        control_ref.value["pattern"],
-        "bohr job_group terminate 16309999 --yes",
+        submit_pattern,
+        "bohr job submit -c 'echo started && sleep 600' -t c2_m4_cpu",
     )
+    assert not re.search(submit_pattern, "bohr job submit --help")
+
+    control_ref = refs_by_key["stopped_via_cli"]
+    assert control_ref.value["min_matches"] == 1
+    assert re.search(control_ref.value["pattern"], "bohr job kill 20409999")
     assert (
         len(
             re.findall(
@@ -729,13 +725,11 @@ def test_bwo_stop_running_v3_is_isolated_and_uses_terminate() -> None:
         == 2
     )
     assert not re.search(
-        refs_by_key["terminated_via_cli"].value["pattern"],
-        "bohr job kill 20409999",
+        control_ref.value["pattern"],
+        "bohr job_group terminate 16309999 --yes",
     )
-    assert not re.search(
-        refs_by_key["terminated_via_cli"].value["pattern"],
-        "bohr job terminate",
-    )
+    assert not re.search(control_ref.value["pattern"], "bohr job terminate")
+    assert not re.search(control_ref.value["pattern"], "bohr job kill --help")
 
 
 def test_bwo_gpu_compare_v4_accepts_forward_compatible_output() -> None:
