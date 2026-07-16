@@ -694,7 +694,9 @@ class Exp:
         exec_wd = Path(env.execution_workdir)
         has_session = env.session is not None
         bohrium_allow_local_paths = env.metadata.source == "devshell"
-        bohrium_workdir = exec_wd if env.session_type == "ssh" else env.workdir
+        bohrium_workdir = (
+            exec_wd if env.session_type in {"ssh", "bohrium-deferred"} else env.workdir
+        )
         search_path_roots = tuple(
             root.root
             for root in path_access_roots

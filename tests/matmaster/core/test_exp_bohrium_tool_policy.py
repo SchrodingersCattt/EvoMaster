@@ -78,6 +78,21 @@ def test_bohrium_tool_uses_remote_workdir_for_ssh(tmp_path: Path) -> None:
     assert tool._workdir == Path("/share/session")
 
 
+def test_bohrium_tool_uses_remote_workdir_for_deferred_session(
+    tmp_path: Path,
+) -> None:
+    tool = _build_bohrium_tool(
+        _make_ctx(
+            workdir=tmp_path,
+            execution_workdir="/share/session",
+            session_type="bohrium-deferred",
+        )
+    )
+
+    assert tool._allow_local_paths is False
+    assert tool._workdir == Path("/share/session")
+
+
 def test_bohrium_tool_receives_run_max_runtime_default(tmp_path: Path) -> None:
     tool = _build_bohrium_tool(_make_ctx(workdir=tmp_path, max_runtime_seconds=7200))
 
