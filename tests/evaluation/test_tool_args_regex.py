@@ -906,16 +906,17 @@ def test_bsa_tools_docking_v2_requires_search_and_tool_details() -> None:
     assert not re.search(info_pattern, "bohr tools info 28189 -o json")
 
 
-def test_bec_upgrade_machine_v3_preserves_seed_job_config_without_leaking_ids() -> None:
+def test_bec_upgrade_machine_v4_preserves_seed_job_config_without_leaking_ids() -> None:
     questions = flatten_banks(load_question_banks(QUESTION_BANK_DIR))
     question = next(
-        q for q in questions if q.id == "BEC_upgrade_machine_006_20260715_v3"
+        q for q in questions if q.id == "BEC_upgrade_machine_006_20260715_v4"
     )
     assert all(
         q.id
         not in {
             "BEC_upgrade_machine_006_20260715",
             "BEC_upgrade_machine_006_20260715_v2",
+            "BEC_upgrade_machine_006_20260715_v3",
         }
         for q in questions
     )
@@ -957,6 +958,19 @@ def test_bec_upgrade_machine_v3_preserves_seed_job_config_without_leaking_ids() 
         '-c "echo \'T4 test for eval E6\' > result.txt"'
     )
     assert re.search(submit_pattern, valid_submit)
+    assert re.search(submit_pattern, "bohr job submit -i job_a100.json -o json")
+    assert re.search(submit_pattern, "bohr job submit --input=job_a100.json -o json")
+    assert re.search(
+        submit_pattern,
+        "cat > job_a100.json << 'EOF'\n{}\nEOF\n"
+        "bohr job submit -i job_a100.json -o json",
+    )
+    assert re.search(
+        submit_pattern,
+        "cd /tmp/e6 && bohr job submit -i job_a100.json -o json",
+    )
+    assert not re.search(submit_pattern, "bohr job submit --help")
+    assert not re.search(submit_pattern, "bohr job submit -i")
     assert not re.search(submit_pattern, valid_submit.replace("A100", "T4"))
     assert not re.search(submit_pattern, valid_submit.replace("v20260712", "v20260713"))
     assert not re.search(

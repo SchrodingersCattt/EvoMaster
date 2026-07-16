@@ -85,6 +85,20 @@ def test_bohr_job_upgrade_record_accepts_nested_document(tmp_path: Path) -> None
     assert ok, reason
 
 
+def test_bohr_job_upgrade_record_accepts_pending_a100_submission(
+    tmp_path: Path,
+) -> None:
+    record = _flat_record()
+    target = record['resubmitted_job']
+    assert isinstance(target, dict)
+    target['status'] = 'Pending'
+    _write_record(tmp_path, record)
+
+    ok, reason = _check(tmp_path)
+
+    assert ok, reason
+
+
 def test_bohr_job_upgrade_record_requires_distinct_new_identifier(
     tmp_path: Path,
 ) -> None:
@@ -135,7 +149,7 @@ def test_bohr_job_upgrade_record_is_registered_with_evaluator(tmp_path: Path) ->
     _write_record(tmp_path, _flat_record())
     questions = flatten_banks(load_question_banks(QUESTION_BANK_DIR))
     question = next(
-        item for item in questions if item.id == 'BEC_upgrade_machine_006_20260715_v3'
+        item for item in questions if item.id == 'BEC_upgrade_machine_006_20260715_v4'
     )
 
     valid_submit = (

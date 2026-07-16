@@ -262,7 +262,7 @@ questions:
     axis: efficiency
     verify: turn_budget
 
-- id: BEC_upgrade_machine_006_20260715_v3
+- id: BEC_upgrade_machine_006_20260715_v4
   capability: execution_contract
   domain: agnostic
   scope: platform
@@ -301,7 +301,7 @@ questions:
     tool_name: Bash
     tool_arg: command
     value:
-      pattern: '(?:^|[\n;&|]\s*)(?:(?:env|sudo)(?:\s+[^\s;&|]+)*\s+)?(?:[^\s;&|]+/)?bohr\s+job\s+\+?submit\b(?=[^\n;&|]*(?:-t|--machine_type)(?:\s+|=)(?:"[^"\n]*(?i:A100)[^"\n]*"|''[^''\n]*(?i:A100)[^''\n]*''|[^\s;&|]*(?i:A100)[^\s;&|]*))(?=[^\n;&|]*registry\.dp\.tech/dptech/dpmd-cu126-outisli:v20260712)(?=[^\n;&|]*T4\s+test\s+for\s+eval\s+E6)'
+      pattern: '(?:^|[\n;&|]\s*)(?:(?:env|sudo)(?:\s+[^\s;&|]+)*\s+)?(?:[^\s;&|]+/)?bohr\s+job\s+\+?submit\b(?![^\n;&|]*(?:-h|--help)(?:\s|$))(?:(?=[^\n;&|]*(?:-i|--input)(?:\s+|=)[^\s;&|]+)|(?=[^\n;&|]*(?:-t|--machine_type)(?:\s+|=)(?:"[^"\n]*(?i:A100)[^"\n]*"|''[^''\n]*(?i:A100)[^''\n]*''|[^\s;&|]*(?i:A100)[^\s;&|]*))(?=[^\n;&|]*registry\.dp\.tech/dptech/dpmd-cu126-outisli:v20260712)(?=[^\n;&|]*T4\s+test\s+for\s+eval\s+E6))'
       min_matches: 1
   - key: turn_budget
     value:
