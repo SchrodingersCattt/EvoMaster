@@ -10,6 +10,9 @@ from evaluation.validators.budget import check_duration_budget as _check_duratio
 from evaluation.validators.budget import check_token_budget as _check_token_budget
 from evaluation.validators.budget import check_turn_budget as _check_turn_budget
 from evaluation.validators.json_file import (
+    check_bohr_gpu_comparison_record as _check_bohr_gpu_comparison_record,
+)
+from evaluation.validators.json_file import (
     check_bohr_job_stop_record as _check_bohr_job_stop_record,
 )
 from evaluation.validators.json_file import (
@@ -148,6 +151,18 @@ def check_bohr_job_stop_record(
         machine_type=cfg.get("machine_type", ""),
         command=cfg.get("command", ""),
         job_name_prefix=cfg.get("job_name_prefix", ""),
+    )
+
+
+def check_bohr_gpu_comparison_record(
+    *, evidence: EvidenceBundle | None, ref: ReferenceAnswer
+) -> tuple[bool, str]:
+    if evidence is None or not evidence.workspace_dir:
+        return False, "no workspace root"
+    cfg = ref.value if isinstance(ref.value, dict) else {}
+    return _check_bohr_gpu_comparison_record(
+        evidence.workspace_dir,
+        filename=cfg.get("filename", ""),
     )
 
 

@@ -289,7 +289,7 @@ questions:
     axis: efficiency
     verify: turn_budget
 
-- id: BWO_gpu_compare_004_20260715_v3
+- id: BWO_gpu_compare_004_20260715_v4
   capability: workflow_orchestration
   domain: agnostic
   scope: platform
@@ -320,10 +320,10 @@ questions:
             - atom_count
             properties:
               framework:
-                const: DeepMD
+                type: string
+                pattern: ^[Dd][Ee][Ee][Pp][Mm][Dd](?:[-_ ]?[Kk][Ii][Tt])?$
               atom_count:
                 const: 500
-            additionalProperties: false
           available_machines:
             type: array
             minItems: 3
@@ -358,8 +358,14 @@ questions:
                   type: number
                   exclusiveMinimum: 0
                 has_stock:
+                  type: boolean
+            contains:
+              type: object
+              required:
+              - has_stock
+              properties:
+                has_stock:
                   const: true
-              additionalProperties: false
           recommendation:
             type: object
             required:
@@ -372,8 +378,10 @@ questions:
               reason:
                 type: string
                 minLength: 20
-            additionalProperties: false
-        additionalProperties: false
+    workspace_resolve: root
+  - key: recommendation_in_stock
+    value:
+      filename: b4_gpu_comparison.json
     workspace_resolve: root
   - key: machines_queried_via_cli
     tool_name: Bash
@@ -393,6 +401,10 @@ questions:
     criterion: The result records the 500-atom DeepMD workload, multiple in-stock GPU machines with memory and price, and a reasoned recommendation.
     axis: correctness
     verify: json_file_schema
+  - id: recommendation_in_stock
+    criterion: The recommended machine is one of the listed in-stock candidates.
+    axis: correctness
+    verify: bohr_gpu_comparison_record
   - id: machines_queried_via_cli
     criterion: Job-scene GPU machine inventory was queried through bohr-cli.
     axis: grounding

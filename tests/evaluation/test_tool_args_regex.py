@@ -729,14 +729,15 @@ def test_bwo_stop_running_v3_is_isolated_and_uses_terminate() -> None:
     )
 
 
-def test_bwo_gpu_compare_v3_uses_fixed_output_contract() -> None:
+def test_bwo_gpu_compare_v4_accepts_forward_compatible_output() -> None:
     questions = flatten_banks(load_question_banks(QUESTION_BANK_DIR))
-    question = next(q for q in questions if q.id == "BWO_gpu_compare_004_20260715_v3")
+    question = next(q for q in questions if q.id == "BWO_gpu_compare_004_20260715_v4")
     assert all(
         q.id
         not in {
             "BWO_gpu_compare_004_20260715",
             "BWO_gpu_compare_004_20260715_v2",
+            "BWO_gpu_compare_004_20260715_v3",
         }
         for q in questions
     )
@@ -760,7 +761,11 @@ def test_bwo_gpu_compare_v3_uses_fixed_output_contract() -> None:
     schema = schema_ref.value["schema"]
     validator = validator_for(schema)(schema)
     valid = {
-        "workload": {"framework": "DeepMD", "atom_count": 500},
+        "workload": {
+            "framework": "DeepMD-kit",
+            "atom_count": 500,
+            "note": "single-GPU training",
+        },
         "available_machines": [
             {
                 "sku_id": sku_id,
@@ -769,17 +774,19 @@ def test_bwo_gpu_compare_v3_uses_fixed_output_contract() -> None:
                 "gpu_count": 1,
                 "gpu_memory_gb": memory,
                 "price_cny_per_hour": price,
-                "has_stock": True,
+                "has_stock": has_stock,
+                "tags": ["promotion"] if sku_id == 740 else [],
             }
-            for sku_id, machine_type, gpu_model, memory, price in (
-                (740, "1 * NVIDIA T4_16g", "NVIDIA T4", 16, 2.5),
-                (738, "1 * NVIDIA V100_32g", "NVIDIA V100", 32, 4.5),
-                (4675, "1 * NVIDIA A100_80g", "NVIDIA A100", 80, 10),
+            for sku_id, machine_type, gpu_model, memory, price, has_stock in (
+                (740, "1 * NVIDIA T4_16g", "NVIDIA T4", 16, 2.5, False),
+                (738, "1 * NVIDIA V100_32g", "NVIDIA V100", 32, 4.5, True),
+                (4675, "1 * NVIDIA A100_80g", "NVIDIA A100", 80, 10, True),
             )
         ],
         "recommendation": {
             "machine_type": "1 * NVIDIA V100_32g",
             "reason": "Balances memory capacity, training throughput, and hourly cost.",
+            "sku_id": 738,
         },
     }
     validator.validate(valid)
@@ -802,8 +809,8 @@ def test_bwo_gpu_compare_v3_uses_fixed_output_contract() -> None:
             {
                 **valid,
                 "available_machines": [
-                    *valid["available_machines"][:2],
-                    {**valid["available_machines"][2], "has_stock": False},
+                    {**machine, "has_stock": False}
+                    for machine in valid["available_machines"]
                 ],
             }
         )

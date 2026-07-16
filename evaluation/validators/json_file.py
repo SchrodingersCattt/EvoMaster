@@ -273,6 +273,56 @@ def check_bohr_job_upgrade_record(
     )
 
 
+def check_bohr_gpu_comparison_record(
+    workspace_dir: str | Path,
+    *,
+    filename: str,
+) -> tuple[bool, str]:
+    """Check that a recommended Bohr machine is an in-stock listed candidate."""
+    if not filename:
+        return False, 'bohr_gpu_comparison_record: no filename provided'
+
+    root = Path(workspace_dir)
+    fpath = _resolve_file(root, filename)
+    if fpath is None:
+        return False, f'{filename} not found in workspace'
+    try:
+        data = json.loads(fpath.read_text(encoding='utf-8'))
+    except ValueError as exc:
+        return False, f'{filename} is not valid JSON: {exc}'
+
+    if not isinstance(data, dict):
+        return False, f'{filename}: top-level value must be an object'
+    candidates = data.get('available_machines')
+    recommendation = data.get('recommendation')
+    if not isinstance(candidates, list) or not isinstance(recommendation, dict):
+        return False, f'{filename}: missing candidate list or recommendation object'
+
+    selected = recommendation.get('machine_type')
+    if not isinstance(selected, str) or not selected.strip():
+        return False, f'{filename}: recommendation has no machine_type'
+
+    def _normalise_machine_type(value: object) -> str:
+        if not isinstance(value, str):
+            return ''
+        return re.sub(r'\s+', ' ', value).strip().casefold()
+
+    selected_normalised = _normalise_machine_type(selected)
+    matches = [
+        candidate
+        for candidate in candidates
+        if isinstance(candidate, dict)
+        and _normalise_machine_type(candidate.get('machine_type'))
+        == selected_normalised
+    ]
+    if not matches:
+        return False, f'{filename}: recommended machine is not in available_machines'
+    if not any(candidate.get('has_stock') is True for candidate in matches):
+        return False, f'{filename}: recommended machine is not marked in stock'
+
+    return True, f'{filename}: recommended machine is a listed in-stock candidate'
+
+
 def check_json_file_numeric_range(
     workspace_dir: str | Path,
     *,
