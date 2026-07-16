@@ -2,13 +2,21 @@
 
 from __future__ import annotations
 
-from typing import Any
+from collections.abc import Callable
+from typing import Any, TypeVar
 
 from matmaster.bohrium.runtime import attach_runtime, get_runtime
+from matmaster.sessions.ssh import SSHConnectionError
+from matmaster.types.bohrium_node_runtime import (
+    BohriumNodeRuntimeError,
+    BohriumNodeUnavailableError,
+)
 from matmaster.types.cancellation import CancellationToken
 from matmaster.types.runtime_ports import BohriumNodeAcquirer, BohriumNodeBinding
 from matmaster.types.session import SessionFileStat
 from matmaster.types.topology import SessionCapabilities
+
+_T = TypeVar("_T")
 
 
 class _DeferredSessionConfig:
@@ -75,6 +83,17 @@ class DeferredBohriumSession:
         cancel_token: CancellationToken | None = None,
     ) -> BohriumNodeBinding:
         binding = self._binding
+        if (
+            binding is not None
+            and getattr(self._acquirer, "unavailable_for_run", False) is True
+        ):
+            # Re-enter the coordinator only after it reports a terminal state;
+            # this preserves the cached binding fast path while fencing direct
+            # session access that bypasses FullToolRunner.
+            self._acquirer.ensure_ready_sync(
+                reason=reason,
+                cancel_token=cancel_token or self._cancel_token,
+            )
         if binding is None:
             binding = self._acquirer.ensure_ready_sync(
                 reason=reason,
@@ -98,40 +117,115 @@ class DeferredBohriumSession:
     def _session(self, reason: str) -> Any:
         return self._ensure_binding(reason).session
 
+    def _invoke(self, reason: str, operation: Callable[[Any], _T]) -> _T:
+        binding = self._ensure_binding(reason)
+        session = binding.session
+        generation = getattr(session, "connection_generation", None)
+        recovery_method = getattr(type(session), "recover_connection_once", None)
+        if (
+            getattr(session, "connection_active", None) is False
+            and callable(recovery_method)
+            and isinstance(generation, int)
+        ):
+            runtime_error = self._acquirer.handle_connection_failure_sync(
+                reason=reason,
+                error=ConnectionError("SSH transport was inactive before execution"),
+                recover=lambda: recovery_method(
+                    session,
+                    expected_generation=generation,
+                ),
+            )
+            if isinstance(runtime_error, BohriumNodeUnavailableError):
+                raise runtime_error
+
+        try:
+            return operation(session)
+        except BohriumNodeRuntimeError:
+            raise
+        except Exception as exc:
+            classifier = getattr(type(session), "is_connection_error", None)
+            is_connection_error = isinstance(exc, SSHConnectionError)
+            if callable(classifier):
+                is_connection_error = bool(classifier(session, exc))
+            if not is_connection_error:
+                raise
+
+            recover: Callable[[], None] | None = None
+            if (
+                not bool(getattr(exc, "recovery_attempted", False))
+                and callable(recovery_method)
+                and isinstance(generation, int)
+            ):
+
+                def recover_existing_binding() -> None:
+                    recovery_method(
+                        session,
+                        expected_generation=generation,
+                    )
+
+                recover = recover_existing_binding
+
+            runtime_error = self._acquirer.handle_connection_failure_sync(
+                reason=reason,
+                error=exc,
+                recover=recover,
+            )
+            raise runtime_error from exc
+
     def exec_bash(
         self,
         command: str,
         timeout: int | None = None,
         cancel_token: CancellationToken | None = None,
     ) -> dict[str, Any]:
-        session = self._ensure_binding("session.exec_bash", cancel_token).session
-        return session.exec_bash(
-            command,
-            timeout=timeout,
-            cancel_token=cancel_token,
+        return self._invoke(
+            "session.exec_bash",
+            lambda session: session.exec_bash(
+                command,
+                timeout=timeout,
+                cancel_token=cancel_token,
+            ),
         )
 
     def read_file(self, path: str, encoding: str = "utf-8") -> str:
-        return self._session("session.read_file").read_file(path, encoding=encoding)
+        return self._invoke(
+            "session.read_file",
+            lambda session: session.read_file(path, encoding=encoding),
+        )
 
     def write_file(self, path: str, content: str, encoding: str = "utf-8") -> None:
-        self._session("session.write_file").write_file(
-            path,
-            content,
-            encoding=encoding,
+        self._invoke(
+            "session.write_file",
+            lambda session: session.write_file(
+                path,
+                content,
+                encoding=encoding,
+            ),
         )
 
     def path_exists(self, path: str) -> bool:
-        return self._session("session.path_exists").path_exists(path)
+        return self._invoke(
+            "session.path_exists",
+            lambda session: session.path_exists(path),
+        )
 
     def is_file(self, path: str) -> bool:
-        return self._session("session.is_file").is_file(path)
+        return self._invoke(
+            "session.is_file",
+            lambda session: session.is_file(path),
+        )
 
     def stat_file(self, path: str) -> SessionFileStat:
-        return self._session("session.stat_file").stat_file(path)
+        return self._invoke(
+            "session.stat_file",
+            lambda session: session.stat_file(path),
+        )
 
     def download(self, path: str, timeout: int | None = None) -> bytes:
-        return self._session("session.download").download(path, timeout=timeout)
+        return self._invoke(
+            "session.download",
+            lambda session: session.download(path, timeout=timeout),
+        )
 
     def upload_directory(
         self,
@@ -139,13 +233,27 @@ class DeferredBohriumSession:
         remote_dir: str,
         exclude: set[str] | None = None,
     ) -> None:
-        self._session("session.upload_directory").upload_directory(
-            local_dir,
-            remote_dir,
-            exclude=exclude,
+        self._invoke(
+            "session.upload_directory",
+            lambda session: session.upload_directory(
+                local_dir,
+                remote_dir,
+                exclude=exclude,
+            ),
         )
 
     def __getattr__(self, name: str) -> Any:
         if name.startswith("_"):
             raise AttributeError(name)
-        return getattr(self._session(f"session.{name}"), name)
+        reason = f"session.{name}"
+        attr = getattr(self._session(reason), name)
+        if not callable(attr):
+            return attr
+
+        def guarded(*args: Any, **kwargs: Any) -> Any:
+            return self._invoke(
+                reason,
+                lambda session: getattr(session, name)(*args, **kwargs),
+            )
+
+        return guarded

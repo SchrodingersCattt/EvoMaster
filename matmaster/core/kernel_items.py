@@ -44,6 +44,8 @@ class _KernelState:
     llm_model_route: str | None = None
     cached_tool_definitions: list[dict[str, Any]] | None = None
     last_catalog_version: int = -1
+    terminal_failure_counts: dict[str, int] = dc_field(default_factory=dict)
+    forced_stop_message: str | None = None
     pipeline: IncrementalMessagePipeline = dc_field(
         default_factory=IncrementalMessagePipeline
     )

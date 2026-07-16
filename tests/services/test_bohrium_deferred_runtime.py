@@ -9,6 +9,10 @@ import pytest
 
 from matmaster.bohrium.types import BohriumRuntimeSnapshot
 from matmaster.types.bohrium_node_approval import BohriumNodeStartDecision
+from matmaster.types.bohrium_node_runtime import (
+    BohriumNodeConnectionInterruptedError,
+    BohriumNodeUnavailableError,
+)
 from matmaster.types.runtime_ports import BohriumNodeBinding
 from src.services.bohrium_deferred_runtime import BohriumNodeRuntimeCoordinator
 
@@ -68,6 +72,90 @@ def test_failed_acquire_is_cached_for_the_run() -> None:
         coordinator.ensure_ready_sync(reason="tool:Read")
 
     assert calls == 1
+
+
+def test_runtime_connection_recovery_has_one_attempt_for_the_run() -> None:
+    expected = _binding()
+    recover = MagicMock()
+    coordinator = BohriumNodeRuntimeCoordinator(
+        lambda _cancelled, _policy, _idle_timeout: expected
+    )
+    coordinator.ensure_ready_sync(reason="tool:Bash")
+
+    transient = coordinator.handle_connection_failure_sync(
+        reason="session.exec_bash",
+        error=ConnectionResetError("connection reset"),
+        recover=recover,
+    )
+
+    assert isinstance(transient, BohriumNodeConnectionInterruptedError)
+    assert coordinator.unavailable_for_run is False
+    recover.assert_called_once_with()
+
+    terminal = coordinator.handle_connection_failure_sync(
+        reason="session.read_file",
+        error=ConnectionResetError("connection reset again"),
+        recover=MagicMock(),
+    )
+
+    assert isinstance(terminal, BohriumNodeUnavailableError)
+    assert coordinator.unavailable_for_run is True
+    assert coordinator.unavailable_error is terminal
+    with pytest.raises(BohriumNodeUnavailableError) as caught:
+        coordinator.ensure_ready_sync(reason="tool:Read")
+    assert caught.value is terminal
+
+
+def test_exhausted_ssh_recovery_opens_circuit_without_another_attempt() -> None:
+    expected = _binding()
+    coordinator = BohriumNodeRuntimeCoordinator(
+        lambda _cancelled, _policy, _idle_timeout: expected
+    )
+    coordinator.ensure_ready_sync(reason="tool:Bash")
+
+    terminal = coordinator.handle_connection_failure_sync(
+        reason="session.exec_bash",
+        error=ConnectionError("one reconnect already failed"),
+        recover=None,
+    )
+
+    assert isinstance(terminal, BohriumNodeUnavailableError)
+    assert terminal.retryable is False
+    assert terminal.failure_scope == "run"
+
+
+def test_concurrent_connection_failures_share_one_recovery() -> None:
+    expected = _binding()
+    recovery_started = threading.Event()
+    release_recovery = threading.Event()
+    recovery_calls = 0
+    coordinator = BohriumNodeRuntimeCoordinator(
+        lambda _cancelled, _policy, _idle_timeout: expected
+    )
+    coordinator.ensure_ready_sync(reason="tool:Bash")
+
+    def recover() -> None:
+        nonlocal recovery_calls
+        recovery_calls += 1
+        recovery_started.set()
+        release_recovery.wait(timeout=2)
+
+    def report() -> object:
+        return coordinator.handle_connection_failure_sync(
+            reason="session.exec_bash",
+            error=ConnectionResetError("connection reset"),
+            recover=recover,
+        )
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        first = pool.submit(report)
+        assert recovery_started.wait(timeout=1)
+        second = pool.submit(report)
+        release_recovery.set()
+
+    assert isinstance(first.result(), BohriumNodeConnectionInterruptedError)
+    assert isinstance(second.result(), BohriumNodeConnectionInterruptedError)
+    assert recovery_calls == 1
 
 
 @pytest.mark.asyncio

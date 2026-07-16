@@ -6,7 +6,7 @@ that core runtime components invoke directly.
 
 from __future__ import annotations
 
-from collections.abc import Awaitable
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any, Literal, NotRequired, Protocol, TypedDict, runtime_checkable
 
@@ -17,6 +17,7 @@ from matmaster.context.ports import (
     SessionEventQuery,
     WorkspaceJobsPort,
 )
+from matmaster.types.bohrium_node_runtime import BohriumNodeRuntimeError
 from matmaster.types.cancellation import CancellationToken
 from matmaster.types.events import BusEvent
 from matmaster.types.figures import FigureUploadConfig
@@ -163,6 +164,16 @@ class BohriumNodeAcquirer(Protocol):
     setup fails, the run is closing, or cancellation is observed. ``close``
     fences new acquisitions; provider release remains owned by the service
     layer's normal run cleanup.
+
+    ``handle_connection_failure_sync`` is called by ``DeferredBohriumSession``
+    only after a remote operation has been classified as a transport failure.
+    It single-flights at most one same-Node recovery for the run and returns the
+    typed error that the caller must raise: retryable when reconnection succeeds,
+    or run-terminal when the circuit opens. The optional ``recover`` callback
+    must reconnect the existing binding and must never allocate a replacement
+    Node. ``unavailable_for_run`` and ``unavailable_error`` are read by
+    ``FullToolRunner`` after execution to block or normalize Node-dependent
+    calls even when an individual tool caught the original exception.
     """
 
     async def ensure_ready(
@@ -178,6 +189,20 @@ class BohriumNodeAcquirer(Protocol):
         reason: str,
         cancel_token: CancellationToken | None = None,
     ) -> BohriumNodeBinding: ...
+
+    @property
+    def unavailable_for_run(self) -> bool: ...
+
+    @property
+    def unavailable_error(self) -> BohriumNodeRuntimeError | None: ...
+
+    def handle_connection_failure_sync(
+        self,
+        *,
+        reason: str,
+        error: BaseException,
+        recover: Callable[[], None] | None,
+    ) -> BohriumNodeRuntimeError: ...
 
     async def close(self) -> None: ...
 

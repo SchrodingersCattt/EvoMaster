@@ -43,6 +43,7 @@ from matmaster.core.submit_review_support import (
 from matmaster.core.tool_scheduler import SchedulerTicket, ToolScheduler
 from matmaster.tools.tool_catalog import ToolCatalog
 from matmaster.tools.tool_result import ToolResult, normalize_tool_result
+from matmaster.types.bohrium_node_runtime import BohriumNodeRuntimeError
 from matmaster.types.cancellation import CancellationToken
 from matmaster.types.messages import ToolCallData
 from matmaster.types.runtime_ports import BohriumNodeAcquirer
@@ -143,6 +144,82 @@ class FullToolRunner:
     @property
     def state(self) -> ToolRunnerState:
         return self._state
+
+    def filter_model_tool_definitions(
+        self,
+        definitions: list[dict[str, Any]] | None,
+    ) -> list[dict[str, Any]] | None:
+        """Hide Node-only capabilities after the run-level circuit opens."""
+        if definitions is None or self._bohrium_node_acquirer is None:
+            return definitions
+        if (
+            getattr(self._bohrium_node_acquirer, "unavailable_for_run", False)
+            is not True
+        ):
+            return definitions
+
+        filtered: list[dict[str, Any]] = []
+        for definition in definitions:
+            function = definition.get("function") or {}
+            tool_name = function.get("name")
+            instance = self._catalog.get_tool(tool_name) if tool_name else None
+            if instance is None:
+                filtered.append(definition)
+                continue
+
+            parameters = function.get("parameters") or {}
+            action_schema = (parameters.get("properties") or {}).get("action") or {}
+            actions = action_schema.get("enum")
+            if isinstance(actions, list):
+                allowed_actions = [
+                    action
+                    for action in actions
+                    if not self._requires_bohrium_node(
+                        instance,
+                        {"action": action},
+                    )
+                ]
+                if not allowed_actions:
+                    continue
+                if allowed_actions != actions:
+                    patched = copy.deepcopy(definition)
+                    patched_function = patched["function"]
+                    patched_function["parameters"]["properties"]["action"][
+                        "enum"
+                    ] = allowed_actions
+                    patched_function["description"] = (
+                        patched_function.get("description", "")
+                        + "\n\nThe Bohrium Node is unavailable for this run. "
+                        "Only the actions still present in the schema may be used."
+                    )
+                    filtered.append(patched)
+                    continue
+
+            if self._requires_bohrium_node(instance, {}):
+                continue
+            filtered.append(definition)
+        return filtered
+
+    @staticmethod
+    def _bohrium_node_runtime_result(
+        error: BohriumNodeRuntimeError,
+    ) -> ToolResult:
+        return ToolResult(
+            status="error",
+            content=str(error),
+            meta={
+                "layer": "bohrium_node_runtime",
+                **error.tool_meta(),
+            },
+        )
+
+    def _current_bohrium_unavailable_error(
+        self,
+    ) -> BohriumNodeRuntimeError | None:
+        if self._bohrium_node_acquirer is None:
+            return None
+        error = getattr(self._bohrium_node_acquirer, "unavailable_error", None)
+        return error if isinstance(error, BohriumNodeRuntimeError) else None
 
     def _truncate_result(
         self, tr: ToolResult, max_chars: int, tool_call_id: str
@@ -679,11 +756,14 @@ class FullToolRunner:
                     batch_ctx.cancel_token is not None
                     and batch_ctx.cancel_token.is_cancelled
                 )
-                tr = ToolResult(
-                    status="cancelled" if cancelled else "error",
-                    content=("Run cancelled." if cancelled else str(exc)),
-                    meta={"layer": "bohrium_node_acquisition"},
-                )
+                if isinstance(exc, BohriumNodeRuntimeError) and not cancelled:
+                    tr = self._bohrium_node_runtime_result(exc)
+                else:
+                    tr = ToolResult(
+                        status="cancelled" if cancelled else "error",
+                        content=("Run cancelled." if cancelled else str(exc)),
+                        meta={"layer": "bohrium_node_acquisition"},
+                    )
                 results[idx] = (tc, tr)
                 if on_result:
                     await on_result(tc, tr)
@@ -716,6 +796,8 @@ class FullToolRunner:
             )
         except asyncio.CancelledError:
             tr = ToolResult(status="cancelled", content="Run cancelled.")
+        except BohriumNodeRuntimeError as error:
+            tr = self._bohrium_node_runtime_result(error)
         except Exception as e:
             tr = ToolResult.from_error(tc.name, e)
         finally:
@@ -724,6 +806,13 @@ class FullToolRunner:
 
         # Normalize
         tr = normalize_tool_result(tr)
+
+        # A Node-aware tool may catch the typed session exception internally.
+        # Preserve the coordinator's run-terminal semantics in that case.
+        if self._requires_bohrium_node(instance, effective_args):
+            unavailable_error = self._current_bohrium_unavailable_error()
+            if unavailable_error is not None:
+                tr = self._bohrium_node_runtime_result(unavailable_error)
 
         # Error-wrap: tag error content for LLM visibility
         if tr.status == "error" and not tr.content.lstrip().startswith("<error>\n"):

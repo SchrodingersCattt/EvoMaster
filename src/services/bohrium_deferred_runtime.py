@@ -11,6 +11,11 @@ from matmaster.types.bohrium_node_approval import (
     BohriumNodeStartApprovalGate,
     BohriumNodeStartRequest,
 )
+from matmaster.types.bohrium_node_runtime import (
+    BohriumNodeConnectionInterruptedError,
+    BohriumNodeRuntimeError,
+    BohriumNodeUnavailableError,
+)
 from matmaster.types.cancellation import CancellationToken
 from matmaster.types.runtime_ports import BohriumNodeBinding
 
@@ -19,7 +24,9 @@ class _AcquireState(str, Enum):
     COLD = "cold"
     STARTING = "starting"
     READY = "ready"
+    RECOVERING = "recovering"
     FAILED = "failed"
+    OPEN = "open"
     CLOSED = "closed"
 
 
@@ -53,6 +60,8 @@ class BohriumNodeRuntimeCoordinator:
         self._first_reason: str | None = None
         self._close_requested = False
         self._stop_event = threading.Event()
+        self._recovery_attempted = False
+        self._last_recovery_error: BohriumNodeRuntimeError | None = None
 
     @property
     def acquired(self) -> bool:
@@ -63,6 +72,18 @@ class BohriumNodeRuntimeCoordinator:
     def first_reason(self) -> str | None:
         with self._condition:
             return self._first_reason
+
+    @property
+    def unavailable_for_run(self) -> bool:
+        with self._condition:
+            return self._state in {_AcquireState.FAILED, _AcquireState.OPEN}
+
+    @property
+    def unavailable_error(self) -> BohriumNodeRuntimeError | None:
+        with self._condition:
+            if isinstance(self._error, BohriumNodeRuntimeError):
+                return self._error
+            return None
 
     async def ensure_ready(
         self,
@@ -85,6 +106,9 @@ class BohriumNodeRuntimeCoordinator:
                 if self._approval_complete:
                     return
                 if self._state is _AcquireState.FAILED:
+                    assert self._error is not None
+                    raise self._error
+                if self._state is _AcquireState.OPEN:
                     assert self._error is not None
                     raise self._error
                 if self._state is _AcquireState.CLOSED or self._close_requested:
@@ -154,6 +178,9 @@ class BohriumNodeRuntimeCoordinator:
                 if self._state is _AcquireState.FAILED:
                     assert self._error is not None
                     raise self._error
+                if self._state is _AcquireState.OPEN:
+                    assert self._error is not None
+                    raise self._error
                 if self._state is _AcquireState.CLOSED or self._close_requested:
                     raise RuntimeError("Bohrium Node acquisition is closed")
                 if self._state is _AcquireState.COLD:
@@ -197,6 +224,89 @@ class BohriumNodeRuntimeCoordinator:
                 raise RuntimeError("Bohrium Node acquisition completed after close")
             return binding
 
+    def handle_connection_failure_sync(
+        self,
+        *,
+        reason: str,
+        error: BaseException,
+        recover: Callable[[], None] | None,
+    ) -> BohriumNodeRuntimeError:
+        """Use the run's sole same-Node recovery attempt, then open the circuit."""
+        waited_for_recovery = False
+        with self._condition:
+            while self._state is _AcquireState.RECOVERING:
+                waited_for_recovery = True
+                self._condition.wait(timeout=0.1)
+
+            if self._state is _AcquireState.OPEN:
+                assert isinstance(self._error, BohriumNodeRuntimeError)
+                return self._error
+            if self._state in {_AcquireState.FAILED, _AcquireState.CLOSED}:
+                terminal = BohriumNodeUnavailableError.from_failure(
+                    error,
+                    reason=reason,
+                )
+                self._error = terminal
+                self._state = _AcquireState.OPEN
+                self._condition.notify_all()
+                return terminal
+            if waited_for_recovery and self._last_recovery_error is not None:
+                return self._last_recovery_error
+            if self._state is not _AcquireState.READY or self._binding is None:
+                terminal = BohriumNodeUnavailableError.from_failure(
+                    error,
+                    reason=reason,
+                )
+                self._error = terminal
+                self._state = _AcquireState.OPEN
+                self._condition.notify_all()
+                return terminal
+            if self._recovery_attempted or recover is None:
+                self._recovery_attempted = True
+                terminal = BohriumNodeUnavailableError.from_failure(
+                    error,
+                    reason=reason,
+                )
+                self._error = terminal
+                self._last_recovery_error = terminal
+                self._state = _AcquireState.OPEN
+                self._condition.notify_all()
+                return terminal
+
+            self._recovery_attempted = True
+            self._state = _AcquireState.RECOVERING
+
+        try:
+            recover()
+        except Exception as recovery_error:
+            terminal = BohriumNodeUnavailableError.from_failure(
+                recovery_error,
+                reason=reason,
+            )
+            with self._condition:
+                self._error = terminal
+                self._last_recovery_error = terminal
+                self._state = _AcquireState.OPEN
+                self._condition.notify_all()
+            return terminal
+
+        transient = BohriumNodeConnectionInterruptedError.create()
+        with self._condition:
+            if self._close_requested:
+                terminal = BohriumNodeUnavailableError.from_failure(
+                    error,
+                    reason=reason,
+                )
+                self._error = terminal
+                self._last_recovery_error = terminal
+                self._state = _AcquireState.CLOSED
+                self._condition.notify_all()
+                return terminal
+            self._last_recovery_error = transient
+            self._state = _AcquireState.READY
+            self._condition.notify_all()
+        return transient
+
     async def close(self) -> None:
         """Fence acquisition and wait for an in-flight provider setup to settle."""
         await asyncio.to_thread(self._close_sync)
@@ -205,9 +315,13 @@ class BohriumNodeRuntimeCoordinator:
         self._stop_event.set()
         with self._condition:
             self._close_requested = True
-            while self._state is _AcquireState.STARTING:
+            while self._state in {_AcquireState.STARTING, _AcquireState.RECOVERING}:
                 self._condition.wait(timeout=0.1)
-            if self._state in {_AcquireState.COLD, _AcquireState.FAILED}:
+            if self._state in {
+                _AcquireState.COLD,
+                _AcquireState.FAILED,
+                _AcquireState.OPEN,
+            }:
                 self._state = _AcquireState.CLOSED
             elif self._state is _AcquireState.READY:
                 self._state = _AcquireState.CLOSED

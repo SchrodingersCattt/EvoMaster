@@ -451,3 +451,21 @@ def test_open_raises_when_workspace_initialization_fails(ssh_config, mock_parami
     assert session._sftp_pool is None
     assert session._client is None
     mock_paramiko["client"].close.assert_called_once()
+
+
+def test_runtime_disconnect_uses_one_short_reconnect_attempt(
+    ssh_config,
+    mock_paramiko,
+):
+    from matmaster.sessions.ssh import SSHConnectionError, SSHSession
+
+    session = SSHSession(ssh_config)
+    session.open()
+    mock_paramiko["transport"].is_active.return_value = False
+    mock_paramiko["client"].connect.side_effect = ConnectionRefusedError("offline")
+
+    with pytest.raises(SSHConnectionError) as caught:
+        session.read_file("/workspace/a.txt")
+
+    assert caught.value.recovery_attempted is True
+    assert mock_paramiko["client"].connect.call_count == 2
