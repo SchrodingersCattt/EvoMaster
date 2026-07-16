@@ -133,13 +133,13 @@ questions:
     axis: efficiency
     verify: turn_budget
 
-- id: BWO_param_sweep_003_20260715_v4
+- id: BWO_param_sweep_003_20260715_v5
   capability: workflow_orchestration
   domain: agnostic
   scope: platform
   intent: Test agent can submit batch parameterized jobs with job group.
   human_prompt_seed: |
-    利用 bohr-cli，我要做参数扫描，温度 300K 到 1000K 每 100K 一个，同一个模板跑 8 个任务。
+    利用 Bohr-CLI，我要做参数扫描，温度 300K 到 1000K 每 100K 一个，同一个模板跑 8 个任务。
     用 `registry.dp.tech/dptech/ubuntu:22.04-py3.10-cuda12.1` 镜像，命令为 `echo "T=$TEMP" > result.txt`（把 $TEMP 替换为实际温度值），机型 `c2_m4_cpu`。
     把任务放在同一个任务组中，并将实际的任务组 ID 和每个温度对应的任务 ID 记录到 `b3_jobs.json`；每条任务记录包含 `temperature_K` 和 `job_id`。
   tags:
@@ -147,23 +147,9 @@ questions:
   reference_answers:
   - key: artifact
     value: b3_jobs.json
-  - key: sweep_record
+  - key: sweep_execution
     value:
       filename: b3_jobs.json
-  - key: group_created_via_cli
-    tool_name: Bash
-    tool_arg: command
-    value:
-      pattern: '(?:^|[\n;&|]\s*)(?:(?:env|sudo)(?:\s+[^\s;&|]+)*\s+)?(?:[^\s;&|]+/)?bohr\s+job_group\s+create\b'
-      min_matches: 1
-      max_matches: 1
-  - key: group_jobs_submitted_via_cli
-    tool_name: Bash
-    tool_arg: command
-    value:
-      direct_pattern: '(?:^|[\n;&|]\s*|\$\(\s*)(?:(?:env|sudo)(?:\s+[^\s;&|]+)*\s+)?(?:[^\s;&|]+/)?bohr\s+job\s+submit\b(?=[\s\S]{0,1200}?(?:(?:--job_group_id|-g)(?:\s+|=))\S+)'
-      script_pattern: '(?:(?:^|[\n;&|]\s*|\$\(\s*)(?:(?:env|sudo)(?:\s+[^\s;&|]+)*\s+)?(?:[^\s;&|]+/)?bohr\s+job\s+submit\b(?=[\s\S]{0,1200}?(?:(?:--job_group_id|-g)(?:\s+|=))\S+)|["'']bohr["'']\s*,\s*["'']job["'']\s*,\s*["'']submit["''](?=[\s\S]{0,1000}?["''](?:--job_group_id|-g)["'']))'
-      min_matches: 1
   - key: turn_budget
     value:
       max: 18
@@ -172,18 +158,10 @@ questions:
     criterion: b3_jobs.json written to workspace.
     axis: correctness
     verify: artifact_exists
-  - id: sweep_record
-    criterion: One positive job group ID and eight positive job IDs cover every 100 K step from 300 K through 1000 K.
-    axis: correctness
-    verify: bohr_parameter_sweep_record
-  - id: group_created_via_cli
-    criterion: The job group was created through bohr-cli exactly once.
+  - id: sweep_execution
+    criterion: The recorded grouped sweep matches the successful Bohr-CLI executions.
     axis: grounding
-    verify: tool_args_regex
-  - id: group_jobs_submitted_via_cli
-    criterion: Jobs were submitted through bohr-cli with a job-group argument, directly or through an executed helper script.
-    axis: grounding
-    verify: scripted_tool_args_regex
+    verify: bohr_parameter_sweep_execution
   - id: turn_budget
     criterion: Agent completes within turn budget.
     axis: efficiency

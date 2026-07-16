@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -198,14 +199,26 @@ def test_devshell_eval_bohr_cli_excludes_bohrium(tmp_path, monkeypatch) -> None:
     mod = importlib.import_module("evaluation.scripts.devshell.run_devshell_eval")
     out = (tmp_path / "bohr_cli_tools").resolve()
     captured: list[list[str | Path]] = []
+    captured_envs: list[dict[str, str]] = []
+    real_bin_dir = tmp_path / "real_bin"
+    real_bin_dir.mkdir()
+    real_bohr = real_bin_dir / "bohr"
+    real_bohr.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    real_bohr.chmod(0o755)
+    monkeypatch.setenv(
+        "PATH",
+        f'{real_bin_dir}{os.pathsep}{os.environ.get("PATH", "")}',
+    )
 
     def fake_run_devshell_task(
         *,
         cmd,
+        env,
         summary_file,
         **kwargs: Any,
     ):
         captured.append(list(cmd))
+        captured_envs.append(env)
         summary = {
             "status": "completed",
             "reason": "natural",
@@ -248,6 +261,12 @@ def test_devshell_eval_bohr_cli_excludes_bohrium(tmp_path, monkeypatch) -> None:
     manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
     assert manifest["eval_tooling"]["tools_builtin_excluded"] == ["Bohrium"]
     assert "Bohrium" not in manifest["eval_tooling"]["builtin_tool_names"]
+    assert manifest["bohr_cli_receipt_schema"] == "bohr_cli_receipt_v1"
+    assert captured_envs[0]["BOHR_EVAL_REAL_BIN"] == str(real_bohr)
+    assert captured_envs[0]["BOHR_EVAL_RECEIPT_PATH"].endswith(
+        "/bohr_cli_receipts.jsonl"
+    )
+    assert captured_envs[0]["PATH"].split(os.pathsep)[0] == str(out / "_eval_bin")
     row = json.loads((out / "raw_runs.jsonl").read_text(encoding="utf-8"))
     assert row["eval_tooling"] == manifest["eval_tooling"]
 

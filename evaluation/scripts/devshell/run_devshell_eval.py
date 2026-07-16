@@ -11,6 +11,8 @@ Aggregate output: ``raw_runs.jsonl`` + ``manifest.json`` + by default ``claude_r
 ``direct`` from ``matmaster/exps/direct.toml``). Questions tagged ``bohr-cli`` automatically exclude the
 builtin ``Bohrium`` tool so the skill must use the CLI through ``Bash``. The effective per-task snapshot is
 attached to each raw row and ingest item as ``eval_tooling`` / ``extra.eval_tooling`` for downstream analysis.
+Tagged tasks also place a transparent ``bohr`` audit launcher ahead of the real binary and write narrow
+process receipts to ``logs/<task_id>/bohr_cli_receipts.jsonl``.
 When ``logs/<task_id>/events_*.jsonl`` exists, ingest ``extra`` also includes ``events_timeline`` (ordered
 labels: tool names from ``tool_call``, ``response``, ``run_result``; ``tool_result`` lines are omitted).
 
@@ -135,6 +137,10 @@ def main() -> int:
         load_dotenv(env_file, override=True)
 
     sys.path.insert(0, str(REPO_ROOT))
+    from evaluation.scripts.devshell.bohr_cli_audit import (
+        RECEIPT_SCHEMA,
+        prepare_bohr_cli_audit_environment,
+    )
     from evaluation.scripts.devshell.eval_model_routes import (
         DEFAULT_DEVSHELL_FALLBACK_MODEL_ROUTE,
         DEFAULT_DEVSHELL_MODEL_ROUTE,
@@ -328,6 +334,11 @@ def main() -> int:
         "dry_run": False,
         "eval_tooling": eval_tooling_snapshot,
     }
+    has_bohr_cli_questions = any(
+        "bohr-cli" in {str(tag) for tag in item["question"].tags} for item in run_plan
+    )
+    if has_bohr_cli_questions:
+        manifest["bohr_cli_receipt_schema"] = RECEIPT_SCHEMA
     if len(eval_tooling_by_exclusions) > 1:
         manifest["eval_tooling_variants"] = list(eval_tooling_by_exclusions.values())
     fb = (args.fallback_model or "").strip()
@@ -383,6 +394,7 @@ def main() -> int:
     # Ensure subprocess finds matmaster_config / .env relative to cwd
     cwd = str(REPO_ROOT)
     prepared_tasks: list[dict[str, Any]] = []
+    bohr_audit_unavailable = False
     for item in run_plan:
         question = item["question"]
         mode: str = item["mode"]
@@ -395,6 +407,16 @@ def main() -> int:
         workspace_path.mkdir(parents=True, exist_ok=True)
         log_dir = run_dir / "logs" / task_id
         log_dir.mkdir(parents=True, exist_ok=True)
+
+        task_env = env
+        bohr_audit_enabled = False
+        if "bohr-cli" in {str(tag) for tag in question.tags}:
+            task_env, bohr_audit_enabled = prepare_bohr_cli_audit_environment(
+                env,
+                receipt_path=log_dir / "bohr_cli_receipts.jsonl",
+                shim_dir=run_dir / "_eval_bin",
+            )
+            bohr_audit_unavailable = bohr_audit_unavailable or not bohr_audit_enabled
 
         prompt = stage_data_files(question, bank_dir, workspace_path, prompt)
 
@@ -440,6 +462,8 @@ def main() -> int:
                 "summary_file": summary_file,
                 "console_log_file": console_log_file,
                 "cmd": cmd,
+                "env": task_env,
+                "bohr_cli_audit_enabled": bohr_audit_enabled,
                 "primary_model": primary_route,
                 "fallback_model": fb or None,
                 "mm_py": py,
@@ -449,6 +473,13 @@ def main() -> int:
                 "eval_tooling": task_eval_tooling,
                 "inject_bohrium_failure": inject_failure,
             }
+        )
+
+    if bohr_audit_unavailable:
+        print(
+            "warning: Bohr-CLI was not found on PATH; tagged tasks cannot emit "
+            "execution receipts",
+            file=sys.stderr,
         )
 
     if args.prepare_cc_baseline:
@@ -493,7 +524,7 @@ def main() -> int:
         rc, duration_ms, summary = _run_devshell_task(
             cmd=prepared["cmd"],
             cwd=cwd,
-            env=env,
+            env=prepared["env"],
             summary_file=summary_file,
             console_log_file=console_log_file,
             timeout_sec=args.task_timeout,
@@ -551,7 +582,7 @@ def main() -> int:
             rc2, d2, summary2 = _run_devshell_task(
                 cmd=cmd_fb,
                 cwd=cwd,
-                env=env,
+                env=prepared["env"],
                 summary_file=summary_file,
                 console_log_file=console_log_file,
                 timeout_sec=args.task_timeout,

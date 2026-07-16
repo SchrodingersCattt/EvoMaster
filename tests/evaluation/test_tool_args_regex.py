@@ -464,93 +464,30 @@ def test_bwo_lit_db_v3_accepts_text_or_structured_batch_strategy() -> None:
     )
 
 
-def test_bwo_param_sweep_v4_requires_complete_grouped_sweep() -> None:
+def test_bwo_param_sweep_v5_uses_execution_receipts_without_prompt_hints() -> None:
     questions = flatten_banks(load_question_banks(QUESTION_BANK_DIR))
-    question = next(q for q in questions if q.id == "BWO_param_sweep_003_20260715_v4")
+    question = next(q for q in questions if q.id == "BWO_param_sweep_003_20260715_v5")
     assert all(
         q.id
         not in {
             "BWO_param_sweep_003_20260715",
             "BWO_param_sweep_003_20260715_v2",
             "BWO_param_sweep_003_20260715_v3",
+            "BWO_param_sweep_003_20260715_v4",
         }
         for q in questions
     )
     assert "`job_group_id`" not in question.human_prompt_seed
     assert "`task_group_id`" not in question.human_prompt_seed
-    sweep_ref = next(
-        ref for ref in question.reference_answers if ref.key == "sweep_record"
+    assert "receipt" not in question.human_prompt_seed.lower()
+    execution_ref = next(
+        ref for ref in question.reference_answers if ref.key == "sweep_execution"
     )
-    assert sweep_ref.value == {"filename": "b3_jobs.json"}
-
-    group_ref = next(
-        ref for ref in question.reference_answers if ref.key == "group_created_via_cli"
+    assert execution_ref.value == {"filename": "b3_jobs.json"}
+    execution_check = next(
+        item for item in question.scoring_checklist if item.id == "sweep_execution"
     )
-    assert re.search(
-        group_ref.value["pattern"],
-        'bohr job_group create -n "temperature-sweep" --project_id 123 -o json',
-    )
-    submit_ref = next(
-        ref
-        for ref in question.reference_answers
-        if ref.key == "group_jobs_submitted_via_cli"
-    )
-    direct_record = BinaryEvaluator().evaluate(
-        question=question,
-        answer="done",
-        tool_calls=[
-            {
-                "tool_name": "Bash",
-                "tool_args": {
-                    "command": 'bohr job submit -i job.json -g "$GROUP_ID" -o json'
-                },
-            }
-        ],
-    )
-    assert direct_record.criteria_results["group_jobs_submitted_via_cli"].passed
-
-    scripted_calls = [
-        {
-            "tool_name": "Write",
-            "tool_args": {
-                "file_path": "/workspace/submit_sweep.py",
-                "content": (
-                    'subprocess.run(["bohr", "job", "submit", "-i", path, '
-                    '"--job_group_id", str(group_id)], check=True)'
-                ),
-            },
-        },
-        {
-            "tool_name": "Bash",
-            "tool_args": {"command": "python3 /workspace/submit_sweep.py"},
-        },
-    ]
-    scripted_record = BinaryEvaluator().evaluate(
-        question=question,
-        answer="done",
-        tool_calls=scripted_calls,
-    )
-    assert scripted_record.criteria_results["group_jobs_submitted_via_cli"].passed
-
-    unexecuted_record = BinaryEvaluator().evaluate(
-        question=question,
-        answer="done",
-        tool_calls=scripted_calls[:1],
-    )
-    assert not unexecuted_record.criteria_results["group_jobs_submitted_via_cli"].passed
-
-    ungrouped_record = BinaryEvaluator().evaluate(
-        question=question,
-        answer="done",
-        tool_calls=[
-            {
-                "tool_name": "Bash",
-                "tool_args": {"command": "bohr job submit -i job.json -o json"},
-            }
-        ],
-    )
-    assert not ungrouped_record.criteria_results["group_jobs_submitted_via_cli"].passed
-    assert submit_ref.value["min_matches"] == 1
+    assert execution_check.verify == "bohr_parameter_sweep_execution"
 
 
 def test_bwo_node_ssh_scp_v2_requires_real_lifecycle_and_cleanup() -> None:

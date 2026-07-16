@@ -16,8 +16,9 @@ item passes; otherwise 0. The DevShell agent loop calls
 and ``turn_budget`` as non-blocking for the binary score (they still appear in ``score_reason``). The CLI
 invocation uses strict ``ingest_optional_checklist_ids=()`` (empty). Per-axis weighted ratios
 are still recorded in ``score_reason`` for debugging; they do not affect the numeric ingest score.
-Questions tagged ``bohr-cli`` additionally require event evidence that ``Bash`` executed a
-``bohr`` command; direct API/SDK or builtin ``Bohrium`` use cannot satisfy this contract.
+Questions tagged ``bohr-cli`` additionally require a successful process-level Bohr-CLI
+receipt. Historical runs without receipts retain the prior ``Bash`` event fallback; direct
+API/SDK or builtin ``Bohrium`` use cannot satisfy this contract.
 """
 
 from __future__ import annotations
@@ -34,6 +35,7 @@ from evaluation.core.evaluator import BinaryEvaluator
 from evaluation.core.evaluator_wiring import token_usage_record_from_evidence
 from evaluation.core.evidence import (
     ArtifactRecord,
+    BohrCliReceiptRecord,
     EventRecord,
     EvidenceBundle,
     EvidenceExtractor,
@@ -183,6 +185,31 @@ def _required_execution_checks(
     if "bohr-cli" not in tags:
         return {}
 
+    successful_receipts = [
+        receipt
+        for receipt in evidence.bohr_cli_receipts
+        if receipt.ok
+        and receipt.exit_code == 0
+        and not receipt.help_requested
+        and not receipt.dry_run
+    ]
+    if evidence.bohr_cli_receipts:
+        if successful_receipts:
+            return {
+                "bohr_cli_execution": (
+                    True,
+                    f"Recorded {len(successful_receipts)} successful Bohr-CLI "
+                    "execution receipt(s).",
+                )
+            }
+        return {
+            "bohr_cli_execution": (
+                False,
+                f"Recorded {len(evidence.bohr_cli_receipts)} Bohr-CLI receipt(s), "
+                "but none was a successful execution.",
+            )
+        }
+
     bash_commands: list[str] = []
     for call in evidence.tool_calls:
         if call.tool_name != "Bash":
@@ -192,17 +219,17 @@ def _required_execution_checks(
             bash_commands.append(command)
             if _BOHR_COMMAND_RE.search(command):
                 return {
-                    "bohr_cli_via_bash": (
+                    "bohr_cli_execution": (
                         True,
-                        "Bash executed a bohr CLI command.",
+                        "Bash executed a bohr CLI command (legacy event evidence).",
                     )
                 }
 
     return {
-        "bohr_cli_via_bash": (
+        "bohr_cli_execution": (
             False,
-            "No Bash tool call executed a bohr CLI command "
-            f"({len(bash_commands)} Bash command(s) inspected).",
+            "No successful Bohr-CLI execution receipt or matching Bash command "
+            f"was found ({len(bash_commands)} Bash command(s) inspected).",
         )
     }
 
@@ -308,6 +335,23 @@ def _load_events(
     return tool_calls, events, run_status
 
 
+def _load_bohr_cli_receipts(*, log_dir: Path) -> list[BohrCliReceiptRecord]:
+    path = log_dir / "bohr_cli_receipts.jsonl"
+    if not path.is_file():
+        return []
+    receipts: list[BohrCliReceiptRecord] = []
+    for raw in path.read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
+        if not line:
+            continue
+        try:
+            value = json.loads(line)
+            receipts.append(BohrCliReceiptRecord.model_validate(value))
+        except (json.JSONDecodeError, ValueError):
+            continue
+    return receipts
+
+
 def _build_evidence(
     *,
     task_id: str,
@@ -330,6 +374,7 @@ def _build_evidence(
             last_turn_usage = TokenUsage.from_usage_dict(last)
 
     tool_calls, events, run_status = _load_events(log_dir=log_dir)
+    bohr_cli_receipts = _load_bohr_cli_receipts(log_dir=log_dir)
     total_steps = int(summary.get("num_turns") or 0) or len(tool_calls)
     model_name = summary.get("model")
     summary_status = summary.get("status")
@@ -340,6 +385,7 @@ def _build_evidence(
         events=events,
         tool_calls=tool_calls,
         artifacts=_build_artifacts(workspace),
+        bohr_cli_receipts=bohr_cli_receipts,
         model_name=model_name if isinstance(model_name, str) else None,
         token_usage_last_turn=last_turn_usage,
         token_usage_run=summary_usage,

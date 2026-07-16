@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from evaluation.core.evaluator import BinaryEvaluator
-from evaluation.core.evidence import EvidenceBundle
+from evaluation.core.evidence import BohrCliReceiptRecord, EvidenceBundle
 from evaluation.core.runner import flatten_banks, load_question_banks
 from evaluation.validators.json_file import check_bohr_parameter_sweep_record
 
@@ -43,6 +43,44 @@ def _check(tmp_path: Path) -> tuple[bool, str]:
         tmp_path,
         filename='b3_jobs.json',
     )
+
+
+def _execution_receipts() -> list[BohrCliReceiptRecord]:
+    receipts = [
+        BohrCliReceiptRecord.model_validate(
+            {
+                'schema_version': 'bohr_cli_receipt_v1',
+                'operation': 'job_group.create',
+                'argv': ['job_group', 'create', '-o', 'json'],
+                'exit_code': 0,
+                'ok': True,
+                'captured_json': True,
+                'ids': {'group_ids': [7247676, 16377695]},
+            }
+        )
+    ]
+    for index, temperature in enumerate(range(300, 1001, 100)):
+        receipts.append(
+            BohrCliReceiptRecord.model_validate(
+                {
+                    'schema_version': 'bohr_cli_receipt_v1',
+                    'operation': 'job.submit',
+                    'argv': ['job', 'submit', '-g', '7247676', '-o', 'json'],
+                    'exit_code': 0,
+                    'ok': True,
+                    'captured_json': True,
+                    'request': {
+                        'job_group_ids': [7247676],
+                        'command': f'echo "T={temperature}" > result.txt',
+                        'temperatures_k': [temperature],
+                    },
+                    'ids': {
+                        'job_ids': [23053718 + index, 33053718 + index],
+                    },
+                }
+            )
+        )
+    return receipts
 
 
 @pytest.mark.parametrize('group_key', ['job_group_id', 'group_id', 'task_group_id'])
@@ -115,16 +153,7 @@ def test_parameter_sweep_checker_is_registered_with_evaluator(
     _write_record(tmp_path, _record('task_group_id'))
     questions = flatten_banks(load_question_banks(QUESTION_BANK_DIR))
     question = next(
-        item for item in questions if item.id == 'BWO_param_sweep_003_20260715_v4'
-    )
-    script = (
-        "cat > submit_sweep.sh <<'SCRIPT'\n"
-        "#!/bin/bash\n"
-        "OUTPUT=$(bohr job submit \\\n"
-        "  --project_id 14844 \\\n"
-        '  --job_group_id "$GROUP_ID" \\\n'
-        "  -i job.json -o json)\n"
-        "SCRIPT"
+        item for item in questions if item.id == 'BWO_param_sweep_003_20260715_v5'
     )
 
     record = BinaryEvaluator().evaluate(
@@ -134,24 +163,36 @@ def test_parameter_sweep_checker_is_registered_with_evaluator(
             task_id=question.id,
             workspace_dir=str(tmp_path),
             total_steps=4,
+            bohr_cli_receipts=_execution_receipts(),
         ),
-        tool_calls=[
-            {
-                'tool_name': 'Bash',
-                'tool_args': {
-                    'command': (
-                        'bohr job_group create -n sweep --project_id 14844 -o json'
-                    )
-                },
-            },
-            {'tool_name': 'Bash', 'tool_args': {'command': script}},
-            {
-                'tool_name': 'Bash',
-                'tool_args': {'command': 'bash submit_sweep.sh'},
-            },
-        ],
     )
 
-    assert record.criteria_results['sweep_record'].passed is True
-    assert record.criteria_results['group_created_via_cli'].passed is True
-    assert record.criteria_results['group_jobs_submitted_via_cli'].passed is True
+    assert record.criteria_results['sweep_execution'].passed is True
+
+
+def test_parameter_sweep_execution_rejects_artifact_job_id_not_returned_by_cli(
+    tmp_path: Path,
+) -> None:
+    value = _record('task_group_id')
+    jobs = value['jobs']
+    assert isinstance(jobs, list)
+    jobs[-1]['job_id'] = 99999999
+    _write_record(tmp_path, value)
+    questions = flatten_banks(load_question_banks(QUESTION_BANK_DIR))
+    question = next(
+        item for item in questions if item.id == 'BWO_param_sweep_003_20260715_v5'
+    )
+
+    record = BinaryEvaluator().evaluate(
+        question=question,
+        answer='done',
+        evidence=EvidenceBundle(
+            task_id=question.id,
+            workspace_dir=str(tmp_path),
+            total_steps=4,
+            bohr_cli_receipts=_execution_receipts(),
+        ),
+    )
+
+    assert record.criteria_results['sweep_execution'].passed is False
+    assert 'artifact job ID' in record.criteria_results['sweep_execution'].reason

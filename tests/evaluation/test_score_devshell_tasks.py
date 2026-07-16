@@ -123,6 +123,24 @@ def _write_events(
     return path
 
 
+def _write_bohr_receipt(log_dir: Path, *, ok: bool = True) -> Path:
+    path = log_dir / "bohr_cli_receipts.jsonl"
+    path.write_text(
+        json.dumps(
+            {
+                "schema_version": "bohr_cli_receipt_v1",
+                "operation": "job.list",
+                "argv": ["job", "list", "-o", "json"],
+                "exit_code": 0 if ok else 1,
+                "ok": ok,
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    return path
+
+
 class TestLoadRawRunRows:
     def test_loads_rows_by_task_id(self, tmp_run_dir: Path) -> None:
         _write_raw_runs(
@@ -201,6 +219,23 @@ class TestBuildEvidence:
 
         bash_call = next(tc for tc in evidence.tool_calls if tc.tool_name == "Bash")
         assert '"job_id":"42"' in bash_call.observation_excerpt
+
+    def test_loads_bohr_cli_execution_receipts(self, tmp_run_dir: Path) -> None:
+        ws = _workspace(tmp_run_dir)
+        _write_summary(ws)
+        _write_bohr_receipt(_log_dir(tmp_run_dir))
+
+        evidence = _build_evidence(
+            task_id="SC_struct_001_direct_r0",
+            workspace=ws,
+            summary=json.loads((ws / "_devshell_summary.json").read_text()),
+            answer="done",
+            duration_ms=1234,
+            log_dir=_log_dir(tmp_run_dir),
+        )
+
+        assert len(evidence.bohr_cli_receipts) == 1
+        assert evidence.bohr_cli_receipts[0].operation == "job.list"
 
 
 class TestFormatters:
@@ -437,7 +472,7 @@ class TestScoreTask:
         assert result["all_criteria_passed"] is False
         assert "✗ fail" in result["score_reason"]
 
-    def test_bohr_cli_question_requires_bohr_through_bash(
+    def test_bohr_cli_question_requires_execution_evidence(
         self, tmp_run_dir: Path
     ) -> None:
         from evaluation.core.evaluator import BinaryEvaluator
@@ -468,13 +503,24 @@ class TestScoreTask:
 
         assert missing["score"] == 0
         assert missing["all_criteria_passed"] is False
-        assert "bohr_cli_via_bash" in missing["score_reason"]
+        assert "bohr_cli_execution" in missing["score_reason"]
         assert "✗ fail" in missing["score_reason"]
 
         _write_events(
             _log_dir(tmp_run_dir),
             bash_command="bohr job list --json",
         )
+        _write_bohr_receipt(_log_dir(tmp_run_dir), ok=False)
+        failed_receipt = score_task(
+            row=row,
+            run_dir=tmp_run_dir,
+            question=question,
+            evaluator=evaluator,
+        )
+        assert failed_receipt["score"] == 0
+        assert "none was a successful execution" in failed_receipt["score_reason"]
+
+        _write_bohr_receipt(_log_dir(tmp_run_dir))
         present = score_task(
             row=row,
             run_dir=tmp_run_dir,
@@ -484,5 +530,5 @@ class TestScoreTask:
 
         assert present["score"] == 100
         assert present["all_criteria_passed"] is True
-        assert "bohr_cli_via_bash" in present["score_reason"]
+        assert "bohr_cli_execution" in present["score_reason"]
         assert "✓ pass" in present["score_reason"]
