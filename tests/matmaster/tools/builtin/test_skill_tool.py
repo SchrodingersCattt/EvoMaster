@@ -133,9 +133,7 @@ class TestSkillExecution:
 
         local_root = _PROJECT_ROOT / "matmaster" / "plugins"
         session = SimpleNamespace(
-            planned_skill_root_map=(
-                (str(local_root), "/personal/.matmaster/plugins"),
-            ),
+            planned_skill_root_map=((str(local_root), "/personal/.matmaster/plugins"),),
             remote_project_root="/share/.matmaster",
         )
         skill = make_skill()

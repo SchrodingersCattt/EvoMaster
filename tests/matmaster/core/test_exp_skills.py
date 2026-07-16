@@ -448,9 +448,7 @@ class TestExpInitSkillTools:
         session.remote_user_skills_root = remote_root
 
         hot_result = await skill_tool.execute({"skill": "test-skill"})
-        assert (
-            f"Base directory for this skill: {remote_root}/test-skill" in hot_result
-        )
+        assert f"Base directory for this skill: {remote_root}/test-skill" in hot_result
         assert f"Remote body with {remote_root}/test-skill" in hot_result
 
     async def test_local_skill_settings_disable_registered_skill(self, tmp_path):
