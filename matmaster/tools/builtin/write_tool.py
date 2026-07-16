@@ -94,16 +94,10 @@ class WriteTool(BuiltinTool):
                 decision="deny", reason=f"invalid file_path: '{file_path}'"
             )
 
-        if runner_state is not None and self._session is not None:
-            normalized = posixpath.normpath(file_path)
-            if self._session.path_exists(file_path):
-                read_files = runner_state.get("read_files", set())
-                if normalized not in read_files:
-                    return ToolDecision(
-                        decision="deny",
-                        reason=f"File '{file_path}' must be read before overwrite",
-                        guidance="Read the file first using Read.",
-                    )
+        # The read-before-overwrite check needs session.path_exists and runs in
+        # _execute_internal instead: probing the session here would hit a cold
+        # DeferredBohriumSession before FullToolRunner's async Node approval
+        # gate, failing the call without ever prompting the user.
         return None
 
     async def execute_with_context(
@@ -112,18 +106,22 @@ class WriteTool(BuiltinTool):
         exec_ctx: ToolExecutionContext | None,
     ) -> ToolResult:
         snapshot = None
+        read_files: set[str] | None = None
         if exec_ctx is not None and exec_ctx.runner_state is not None:
             normalized = posixpath.normpath(arguments.get("file_path", ""))
             snapshot = exec_ctx.runner_state.get("file_semantics", {}).get(normalized)
+            read_files = exec_ctx.runner_state.get("read_files", set())
 
         try:
-            return await asyncio.to_thread(self._execute_internal, arguments, snapshot)
+            return await asyncio.to_thread(
+                self._execute_internal, arguments, snapshot, read_files
+            )
         except Exception as exc:
             self.logger.error("Tool %s failed: %s", self.name, exc, exc_info=True)
             return ToolResult(status="error", content=f"Error: {exc}")
 
     def _execute(self, arguments: dict[str, Any]) -> str | ToolResult:
-        result = self._execute_internal(arguments, None)
+        result = self._execute_internal(arguments, None, None)
         if result.status == "success":
             return result.content
         return result
@@ -132,6 +130,7 @@ class WriteTool(BuiltinTool):
         self,
         arguments: dict[str, Any],
         existing_snapshot: FileSemanticSnapshot | None,
+        read_files: set[str] | None,
     ) -> ToolResult:
         session = self._require_session()
         file_path: str = arguments.get("file_path", "")
@@ -139,6 +138,16 @@ class WriteTool(BuiltinTool):
         explicit_encoding: str | None = arguments.get("encoding")
 
         file_exists = session.path_exists(file_path)
+        if file_exists and read_files is not None:
+            normalized = posixpath.normpath(file_path)
+            if normalized not in read_files:
+                return ToolResult(
+                    status="error",
+                    content=(
+                        f"File '{file_path}' must be read before overwrite. "
+                        "Read the file first using Read."
+                    ),
+                )
         current_fingerprint: SnapshotFingerprint | None = None
         current_probe = None
         if file_exists:

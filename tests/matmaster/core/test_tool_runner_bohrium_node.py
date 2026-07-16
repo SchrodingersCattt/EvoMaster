@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import PurePosixPath
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
@@ -178,6 +179,47 @@ async def test_run_unavailable_error_has_terminal_retry_metadata() -> None:
     assert result.meta["retryable"] is False
     assert result.meta["failure_scope"] == "run"
     assert result.meta["terminal_on_repeat"] is True
+
+
+@pytest.mark.asyncio
+async def test_write_tool_cold_session_gates_before_any_session_probe() -> None:
+    """回归：Write 的写前必读探测不得先于 Node 审批门触碰冷态 session。
+
+    此前 WriteTool.validate_input 在校验层调用 session.path_exists，冷态
+    DeferredBohriumSession 会同步抛错，导致审批弹窗永远不出现。
+    """
+    from matmaster.tools.builtin.write_tool import WriteTool
+
+    acquirer = MagicMock()
+    acquirer.ensure_ready = AsyncMock(return_value=MagicMock())
+
+    session = MagicMock()
+
+    def _path_exists(path: str) -> bool:
+        assert (
+            acquirer.ensure_ready.await_count == 1
+        ), "session probed before the Node approval gate"
+        return False
+
+    session.path_exists.side_effect = _path_exists
+    session.write_file.return_value = None
+
+    tool = WriteTool(session=session, workdir=PurePosixPath("/share/case"))
+    results = await _runner(acquirer, tool).execute_batch(
+        [
+            ToolCallData(
+                id="call-1",
+                name="Write",
+                arguments={"file_path": "/share/case/a.py", "content": "x"},
+            )
+        ],
+        ToolExecutionContext(turn=1, max_turns=10),
+    )
+
+    acquirer.ensure_ready.assert_awaited_once()
+    result = results[0][1]
+    assert result.status == "success"
+    session.write_file.assert_called_once()
 
 
 def test_open_circuit_hides_node_tools_and_restricts_bohrium_actions() -> None:
