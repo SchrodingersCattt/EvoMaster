@@ -371,7 +371,7 @@ questions:
   intent: Test agent uploads PDF with spaces in filename to knowledge base and searches for thermal decomposition data.
   human_prompt_seed: |
     利用 bohr-cli，把这篇文献传到知识库里去，然后搜一下里面纳米样品的DSC热分解峰温是多少摄氏度。
-    结果保存到 `c8_result.json`，格式：
+    结果保存到 `c8_kb_search.json`，格式：
     ```json
     {"filename": "...", "kb_id": ..., "upload_success": true/false, "nano_thermal_decomposition_celsius": ..., "search_results": [{"text": "...", "score": ...}]}
     ```
@@ -383,24 +383,24 @@ questions:
     description: PDF with spaces in filename. Energetic molecular perovskite paper, nano sample DSC peak at 384.5°C.
   reference_answers:
   - key: artifact
-    value: c8_result.json
+    value: c8_kb_search.json
   - key: upload_success
     value:
-      filename: c8_result.json
+      filename: c8_kb_search.json
       pattern: '"upload_success"\s*:\s*(true|false)'
   - key: has_kb_id
     value:
-      filename: c8_result.json
+      filename: c8_kb_search.json
       pattern: '"kb_id"\s*:\s*(\d+|null)'
   - key: thermal_decomp
     value:
-      filename: c8_result.json
+      filename: c8_kb_search.json
       key: nano_thermal_decomposition_celsius
       min: 382.0
       max: 387.0
   - key: has_filename_with_spaces
     value:
-      filename: c8_result.json
+      filename: c8_kb_search.json
       pattern: Fabrication.*characterization|H2dabco
       flags: i
   - key: turn_budget
@@ -408,7 +408,7 @@ questions:
       max: 12
   scoring_checklist:
   - id: artifact
-    criterion: c8_result.json written to workspace.
+    criterion: c8_kb_search.json written to workspace.
     axis: correctness
     verify: artifact_exists
   - id: upload_success
