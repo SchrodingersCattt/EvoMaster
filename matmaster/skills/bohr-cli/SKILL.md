@@ -27,6 +27,14 @@ bohr auth status --verify
 | `--dry-run` | 预览不执行 |
 | `--no-interactive` | 禁用交互提示 |
 
+## 写操作流程
+
+- 先用 `--help` 确认参数；涉及 JSON 配置时用程序生成，并在提交前重新解析校验，避免手写转义错误。
+- 对支持 `--dry-run` 的 create/submit 命令，先加 `--dry-run -o json` 验证，再执行一次真实命令。
+- 仅以 `ok=true` 且返回有效 ID 作为创建成功；成功后立即记录 ID，不要再用真实写操作试探或重放。需要确认时按返回 ID 查询。
+- 写操作失败后，先修正明确错误再重试；不得在结果不确定时盲目重复创建。
+- delete/terminate 等清理操作只有在响应成功并经查询确认后才算完成；清理失败时保留并报告真实状态。
+
 ## 计算作业 (job)
 
 ```bash
@@ -49,6 +57,11 @@ bohr job delete <job_id>              # 删除记录（不可恢复）
 - `jobId` 用于 `bohr job terminate`、`kill` 和 `delete`
 - `jobGroupId` 用于 `bohr job_group` 子命令
 
+任务组还有两类相关 ID：
+
+- `bohr job_group create -o json` 返回的 `groupId` 用于后续 `bohr job submit --job_group_id <groupId>`。
+- `bohr job submit -o json` 返回的 `jobGroupId` 用于 `bohr job describe -j <jobGroupId>` 等组查询；不要因为它与 `groupId` 不同而重复创建任务组。
+
 `job describe` 可能同时返回 `status` 和 `webStatus`，两者是不同的状态字段，必须按原字段分别保留。停止后 `status=6` 可能只是结果回收中的过渡态；继续查询，直到 `webStatus=5` 或状态文本、`errorInfo` 明确表明任务已停止，不要把两套状态码混为一套。
 
 submit 配置文件格式：
@@ -60,6 +73,14 @@ submit 配置文件格式：
   "log_file": "run.log", "result_path": "./results/"
 }
 ```
+
+批量提交按以下顺序执行：
+
+1. 只创建一个任务组并保存返回的 `groupId`。
+2. 用 JSON 序列化器生成全部配置，本地逐个解析，并用 `--dry-run` 验证。
+3. 串行执行真实 submit；每次成功后立即保存该任务的返回 ID。
+4. 已成功的试投直接计入批次，不要再次提交同一任务；只有明确失败且修正原因后才重试。
+5. 完成后查询任务组，确认实际任务数与计划一致，再生成汇总文件。
 
 ## 作业组 (job_group)
 
