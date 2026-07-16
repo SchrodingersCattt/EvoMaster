@@ -1,6 +1,6 @@
 ---
 name: sandbox-proxy
-description: "Resolve sandbox outbound-network and package-source failures. Use when downloads from pip, conda, GitHub, HuggingFace, PyPI, or Google Drive time out or fail. Prefer built-in domestic mirrors for common packages and enable the HTTP proxy only for resources that require overseas access. Provides mirror fallback, proxy-on/off, and per-command bypass."
+description: "Resolve sandbox outbound-network and package-source failures. Use when pip/conda/GitHub/HuggingFace downloads time out. Provides domestic mirror fallback, proxy on/off, and per-command bypass for overseas resources."
 ---
 
 # Sandbox Network Proxy
