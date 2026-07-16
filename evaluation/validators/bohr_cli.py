@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+import shlex
 from pathlib import Path
 
 from evaluation.core.evidence import BohrCliReceiptRecord
@@ -116,6 +117,50 @@ def _artifact_contains(data: dict, expected: str) -> bool:
     return any(node == expected for node in _walk_json(data))
 
 
+def _shell_commands_equivalent(actual: str | None, expected: str) -> bool:
+    if actual is None:
+        return False
+    try:
+        return shlex.split(actual) == shlex.split(expected)
+    except ValueError:
+        return actual == expected
+
+
+def _artifact_contains_command(data: dict, expected: str) -> bool:
+    return any(
+        isinstance(node, str) and _shell_commands_equivalent(node, expected)
+        for node in _walk_json(data)
+    )
+
+
+def _artifact_unsuccessful_outcome(data: dict) -> str | None:
+    unsuccessful = {
+        'error',
+        'failed',
+        'failure',
+        'pending',
+        'running',
+        'stopped',
+        'timedout',
+        'timeout',
+    }
+    for node in _walk_json(data):
+        if not isinstance(node, dict):
+            continue
+        for raw_key, raw_value in node.items():
+            if _normalise_key(raw_key) not in {
+                'finalstatus',
+                'outcome',
+                'resultstatus',
+            }:
+                continue
+            if isinstance(raw_value, str):
+                normalised = _normalise_key(raw_value)
+                if normalised in unsuccessful:
+                    return raw_value
+    return None
+
+
 def _artifact_records_saved_log(data: dict, log_filename: str) -> bool:
     for node in _walk_json(data):
         if isinstance(node, str) and Path(node).name == log_filename:
@@ -123,7 +168,11 @@ def _artifact_records_saved_log(data: dict, log_filename: str) -> bool:
         if not isinstance(node, dict):
             continue
         for raw_key, raw_value in node.items():
-            if _normalise_key(raw_key) != 'logsaved':
+            normalised_key = _normalise_key(raw_key)
+            records_saved_log = normalised_key == 'logsaved' or (
+                'log' in normalised_key and 'saved' in normalised_key
+            )
+            if not records_saved_log:
                 continue
             if raw_value is True:
                 return True
@@ -146,6 +195,32 @@ def _successful_mutation(receipt: BohrCliReceiptRecord, operation: str) -> bool:
         and receipt.exit_code == 0
         and not receipt.help_requested
         and not receipt.dry_run
+    )
+
+
+def _successful_terminal_status(value: int | str | None) -> bool:
+    if value == 2:
+        return True
+    if not isinstance(value, str):
+        return False
+    return value.strip().lower() in {
+        '2',
+        'completed',
+        'finished',
+        'succeeded',
+        'success',
+    }
+
+
+def _successful_terminal_receipt(receipt: BohrCliReceiptRecord) -> bool:
+    state = receipt.job_state
+    return bool(
+        state.exit_code == 0
+        and state.end_time
+        and (
+            _successful_terminal_status(state.status)
+            or _successful_terminal_status(state.web_status)
+        )
     )
 
 
@@ -257,7 +332,6 @@ def check_bohr_job_monitor_execution(
     expected_request = {
         'image': (submit.request.image_address, image),
         'machine type': (submit.request.machine_type, machine_type),
-        'command': (submit.request.command, command),
     }
     mismatches = [
         label
@@ -266,6 +340,8 @@ def check_bohr_job_monitor_execution(
     ]
     if mismatches:
         return False, f'job submission does not match expected {", ".join(mismatches)}'
+    if not _shell_commands_equivalent(submit.request.command, command):
+        return False, 'job submission does not match expected command'
 
     selected_describes: list[tuple[int, BohrCliReceiptRecord]] | None = None
     terminal_index: int | None = None
@@ -279,20 +355,28 @@ def check_bohr_job_monitor_execution(
             and bohr_job_id in receipt.request.bohr_job_ids
         ]
         last_describe = describes[-1] if describes else None
+        first_terminal_describe = next(
+            (
+                (index, receipt)
+                for index, receipt in describes
+                if _successful_terminal_receipt(receipt)
+            ),
+            None,
+        )
         if (
             len(describes) >= 2
             and last_describe is not None
-            and last_describe[1].job_state.exit_code == 0
-            and last_describe[1].job_state.end_time
+            and _successful_terminal_receipt(last_describe[1])
+            and first_terminal_describe is not None
         ):
             selected_describes = describes
-            terminal_index = last_describe[0]
+            terminal_index = first_terminal_describe[0]
             break
     if selected_describes is None or terminal_index is None:
         return (
             False,
             'no submitted job has two successful polls and terminal '
-            'exitCode=0/endTime evidence',
+            'successful-status/exitCode=0/endTime evidence',
         )
 
     platform_job_ids = set(submit.ids.platform_job_ids)
@@ -315,13 +399,14 @@ def check_bohr_job_monitor_execution(
         return False, f'{filename}: recorded job identifier does not match CLI receipts'
     if _artifact_poll_count(artifact) < 2:
         return False, f'{filename}: monitoring record contains fewer than two polls'
-    for label, expected in (
-        ('image', image),
-        ('machine type', machine_type),
-        ('command', command),
-    ):
+    for label, expected in (('image', image), ('machine type', machine_type)):
         if not _artifact_contains(artifact, expected):
             return False, f'{filename}: monitoring record does not contain {label}'
+    if not _artifact_contains_command(artifact, command):
+        return False, f'{filename}: monitoring record does not contain command'
+    unsuccessful_outcome = _artifact_unsuccessful_outcome(artifact)
+    if unsuccessful_outcome is not None:
+        return False, f'{filename}: monitoring record reports {unsuccessful_outcome}'
     if not _artifact_records_saved_log(artifact, log_filename):
         return False, f'{filename}: monitoring record does not record the saved log'
 

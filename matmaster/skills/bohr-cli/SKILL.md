@@ -44,17 +44,19 @@ bohr job describe -i <bohr_job_id>    # 单任务详情
 bohr job describe -j <group_id>       # 组内任务列表
 bohr job submit -i job.json [--input_directory ./input]
 bohr job submit --project_id <pid> --image_address <img> --command <cmd> --machine_type <type>
-bohr job log -j <id> [--out ./logs]
-bohr job download -j <id> [--out ./results]
+bohr job log -j <jobId> [--out ./logs]
+bohr job download -j <jobId> [--out ./results]
 bohr job terminate <job_id>           # 优雅停止，保留结果
 bohr job kill <job_id>                # 强制终止，不保证结果
 bohr job delete <job_id>              # 删除记录（不可恢复）
 ```
 
+保存平台日志时，这里必须使用提交响应里的平台 `jobId`，不能使用 `bohrJobId`。先运行 `bohr job log -j <jobId> --out <dir> -o json`：若 `data.log` 非空，将其原样写入目标文件；若 `data.logFiles` 非空，使用 `--out` 下载的日志文件并按需改名。只有两者都为空时，空日志才是有效结果；不要改去下载任务结果包或重复等待。
+
 提交和查询结果可能同时包含三类 ID，不要混用：
 
 - `bohrJobId` 用于 `bohr job describe -i`
-- `jobId` 用于 `bohr job terminate`、`kill` 和 `delete`
+- `jobId` 用于 `bohr job log`、`download`、`terminate`、`kill` 和 `delete`
 - `jobGroupId` 用于 `bohr job_group` 子命令
 
 任务组还有两类相关 ID：
@@ -62,7 +64,7 @@ bohr job delete <job_id>              # 删除记录（不可恢复）
 - `bohr job_group create -o json` 返回的 `groupId` 用于后续 `bohr job submit --job_group_id <groupId>`。
 - `bohr job submit -o json` 返回的 `jobGroupId` 用于 `bohr job describe -j <jobGroupId>` 等组查询；不要因为它与 `groupId` 不同而重复创建任务组。
 
-`job describe` 可能同时返回 `status` 和 `webStatus`，两者是不同的状态字段，必须按原字段分别保留。停止后 `status=6` 可能只是结果回收中的过渡态；继续查询，直到 `webStatus=5` 或状态文本、`errorInfo` 明确表明任务已停止，不要把两套状态码混为一套。
+`job describe` 可能同时返回 `status` 和 `webStatus`，两者是不同的状态字段，必须按原字段分别保留。普通任务成功完成时，当前 CLI 可能返回 `status=2`、`webStatus=2`、`exitCode=0` 和非空 `endTime`；应依据这组完成证据停止轮询，不要套用停止任务的状态码。停止后 `status=6` 可能只是结果回收中的过渡态；继续查询，直到 `webStatus=5` 或状态文本、`errorInfo` 明确表明任务已停止，不要把两套状态码混为一套。
 
 submit 配置文件格式：
 ```json

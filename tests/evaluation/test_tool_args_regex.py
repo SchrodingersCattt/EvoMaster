@@ -349,9 +349,9 @@ def test_tool_args_regex_reference_is_validated(value: object) -> None:
         )
 
 
-def test_bwo_monitor_v5_uses_execution_receipts_without_prompt_hints() -> None:
+def test_bwo_monitor_v6_uses_execution_receipts_without_prompt_hints() -> None:
     questions = flatten_banks(load_question_banks(QUESTION_BANK_DIR))
-    question = next(q for q in questions if q.id == "BWO_monitor_D6_20260715_v5")
+    question = next(q for q in questions if q.id == "BWO_monitor_D6_20260715_v6")
     assert all(
         q.id
         not in {
@@ -359,6 +359,7 @@ def test_bwo_monitor_v5_uses_execution_receipts_without_prompt_hints() -> None:
             "BWO_monitor_D6_20260715_v2",
             "BWO_monitor_D6_20260715_v3",
             "BWO_monitor_D6_20260715_v4",
+            "BWO_monitor_D6_20260715_v5",
         }
         for q in questions
     )
@@ -373,7 +374,7 @@ def test_bwo_monitor_v5_uses_execution_receipts_without_prompt_hints() -> None:
         "log_filename": "d6_job.log",
         "image": "registry.dp.tech/dptech/ubuntu:22.04-py3.10-cuda12.1",
         "machine_type": "c2_m4_cpu",
-        "command": 'echo "hello from bohrium" > result.txt && sleep 60',
+        "command": 'echo "hello from bohrium" | tee result.txt && sleep 60',
     }
     execution_check = next(
         item for item in question.scoring_checklist if item.id == "monitor_execution"

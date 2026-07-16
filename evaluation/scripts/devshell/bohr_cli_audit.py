@@ -29,6 +29,36 @@ RECEIPT_SCHEMA = "bohr_cli_receipt_v1"
 
 _JSON_MUTATION_OPERATIONS = frozenset({"job.submit", "job_group.create"})
 _JOB_DESCRIPTION_OPERATION = "job.describe"
+_COMMAND_NOUNS = frozenset(
+    {
+        "api",
+        "auth",
+        "billing",
+        "chat",
+        "dataset",
+        "doctor",
+        "file",
+        "image",
+        "job",
+        "job_group",
+        "kb",
+        "lkm",
+        "machine",
+        "mentor",
+        "node",
+        "paper",
+        "pdf",
+        "project",
+        "sandbox",
+        "scholar",
+        "search",
+        "tools",
+        "wiki",
+    }
+)
+_GLOBAL_OPTIONS_WITH_VALUES = frozenset(
+    {"-o", "--format", "--output", "--output-format", "-q", "--query"}
+)
 _SECRET_FLAGS = frozenset(
     {
         "--access-key",
@@ -87,15 +117,20 @@ def _normalise_token(value: str) -> str:
 
 
 def _operation(argv: list[str]) -> str:
-    for index in range(len(argv) - 1):
-        noun = _normalise_token(argv[index])
-        verb = _normalise_token(argv[index + 1])
-        if noun == "job" and verb in {"submit", "stop", "terminate", "kill"}:
-            return f"job.{verb}"
-        if noun == "job_group" and verb == "create":
-            return "job_group.create"
-        if noun in {"node", "sandbox", "job_group", "job"}:
-            return f"{noun}.{verb}"
+    for index, raw_noun in enumerate(argv):
+        noun = _normalise_token(raw_noun)
+        if noun not in _COMMAND_NOUNS:
+            continue
+        cursor = index + 1
+        while cursor < len(argv):
+            raw_verb = argv[cursor]
+            key, separator, _value = raw_verb.partition("=")
+            if raw_verb.startswith("-"):
+                cursor += 1
+                if key in _GLOBAL_OPTIONS_WITH_VALUES and not separator:
+                    cursor += 1
+                continue
+            return f"{noun}.{_normalise_token(raw_verb)}"
     return "unknown"
 
 

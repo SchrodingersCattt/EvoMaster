@@ -988,13 +988,13 @@ questions:
     axis: efficiency
     verify: turn_budget
 
-- id: BWO_monitor_D6_20260715_v5
+- id: BWO_monitor_D6_20260715_v6
   capability: workflow_orchestration
   domain: agnostic
   scope: platform
   intent: Test agent can submit a job and poll its status until completion.
   human_prompt_seed: |
-    利用 Bohr-CLI，先提一个 `echo "hello from bohrium" > result.txt && sleep 60` 的短任务（镜像用 `registry.dp.tech/dptech/ubuntu:22.04-py3.10-cuda12.1`，机型 `c2_m4_cpu`），然后轮询监控它，完成后把日志存下来。
+    利用 Bohr-CLI，先提一个 `echo "hello from bohrium" | tee result.txt && sleep 60` 的短任务（镜像用 `registry.dp.tech/dptech/ubuntu:22.04-py3.10-cuda12.1`，机型 `c2_m4_cpu`），然后轮询监控它，完成后把日志存下来。
     将平台日志保存为工作区根目录下的 `d6_job.log`，并将实际提交参数、每次轮询结果和日志保存结果记录到 `d6_monitor.json`。记录应能关联实际任务，并清楚反映轮询过程和最终完成状态。
   tags:
   - bohr-cli
@@ -1008,7 +1008,7 @@ questions:
       log_filename: d6_job.log
       image: registry.dp.tech/dptech/ubuntu:22.04-py3.10-cuda12.1
       machine_type: c2_m4_cpu
-      command: echo "hello from bohrium" > result.txt && sleep 60
+      command: echo "hello from bohrium" | tee result.txt && sleep 60
   - key: log_artifact
     value: d6_job.log
     workspace_resolve: root

@@ -85,6 +85,21 @@ def test_transparent_mode_preserves_stdin_stdout_stderr_and_exit_code(
     assert 'stderr' not in receipt
 
 
+def test_operation_detection_does_not_treat_flag_value_as_command_noun(
+    tmp_path: Path,
+) -> None:
+    env, bohr, receipt_path = _environment(tmp_path)
+
+    subprocess.run(
+        [str(bohr), 'machine', 'list', '-c', 'cpu', '-s', 'job', '-o', 'json'],
+        capture_output=True,
+        env=env,
+        check=False,
+    )
+
+    assert _receipts(receipt_path)[0]['operation'] == 'machine.list'
+
+
 def test_json_submit_is_replayed_and_snapshots_safe_input_fields(
     tmp_path: Path,
 ) -> None:
