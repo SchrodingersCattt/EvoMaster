@@ -26,7 +26,11 @@ args = sys.argv[1:]
 if args[:2] == ['job_group', 'create']:
     sys.stdout.buffer.write(b'{"id":7247676,"jobGroupId":16377774}')
 elif args[:2] == ['job', 'submit']:
-    sys.stdout.buffer.write(b'{"bohrJobId":23053718}')
+    sys.stdout.buffer.write(b'{"bohrJobId":20402319,"jobId":23053718}')
+elif args[:2] == ['job', 'describe']:
+    sys.stdout.buffer.write(b'{"ok":true,"data":{"id":23053718,"bohrId":20402319,"webStatus":2,"status":2,"endTime":"2026-07-16 11:35:55","exitCode":0},"secret":"must-not-be-recorded"}')
+elif args[:2] == ['job', 'log']:
+    sys.stdout.buffer.write(b'{"ok":true,"data":{"log":"signed-secret-output"}}')
 else:
     data = sys.stdin.buffer.read()
     sys.stdout.buffer.write(b'OUT:' + data)
@@ -121,18 +125,75 @@ def test_json_submit_is_replayed_and_snapshots_safe_input_fields(
     )
 
     assert result.returncode == 0
-    assert result.stdout == b'{"bohrJobId":23053718}'
+    assert result.stdout == b'{"bohrJobId":20402319,"jobId":23053718}'
     receipt_text = receipt_path.read_text(encoding='utf-8')
     assert 'evo-secret-value-123456789' not in receipt_text
     assert 'must-not-be-recorded' not in receipt_text
     receipt = _receipts(receipt_path)[0]
     assert receipt['operation'] == 'job.submit'
     assert receipt['captured_json'] is True
-    assert receipt['ids'] == {'job_ids': [23053718], 'group_ids': []}
+    assert receipt['ids'] == {
+        'job_ids': [20402319, 23053718],
+        'bohr_job_ids': [20402319],
+        'platform_job_ids': [23053718],
+        'group_ids': [],
+    }
     assert receipt['request']['job_group_ids'] == [7247676]
     assert receipt['request']['temperatures_k'] == [300]
     assert receipt['request']['command'] == 'echo "T=300" > result.txt'
     assert receipt['argv'][-1] == '<redacted>'
+
+
+def test_job_describe_captures_allow_listed_state_without_changing_output(
+    tmp_path: Path,
+) -> None:
+    env, bohr, receipt_path = _environment(tmp_path)
+
+    result = subprocess.run(
+        [str(bohr), 'job', 'describe', '-i', '20402319'],
+        capture_output=True,
+        env=env,
+        check=False,
+    )
+
+    assert result.returncode == 0
+    assert b'must-not-be-recorded' in result.stdout
+    receipt_text = receipt_path.read_text(encoding='utf-8')
+    assert 'must-not-be-recorded' not in receipt_text
+    receipt = _receipts(receipt_path)[0]
+    assert receipt['operation'] == 'job.describe'
+    assert receipt['captured_json'] is True
+    assert receipt['request']['bohr_job_ids'] == [20402319]
+    assert receipt['ids']['bohr_job_ids'] == [20402319]
+    assert receipt['ids']['platform_job_ids'] == [23053718]
+    assert receipt['job_state'] == {
+        'status': 2,
+        'web_status': 2,
+        'exit_code': 0,
+        'end_time': '2026-07-16 11:35:55',
+    }
+
+
+def test_job_log_records_target_and_success_without_capturing_output(
+    tmp_path: Path,
+) -> None:
+    env, bohr, receipt_path = _environment(tmp_path)
+
+    result = subprocess.run(
+        [str(bohr), 'job', 'log', '-j', '23053718'],
+        capture_output=True,
+        env=env,
+        check=False,
+    )
+
+    assert result.returncode == 0
+    assert b'signed-secret-output' in result.stdout
+    receipt_text = receipt_path.read_text(encoding='utf-8')
+    assert 'signed-secret-output' not in receipt_text
+    receipt = _receipts(receipt_path)[0]
+    assert receipt['operation'] == 'job.log'
+    assert receipt['captured_json'] is False
+    assert receipt['request']['platform_job_ids'] == [23053718]
 
 
 def test_json_group_create_captures_both_group_identifier_names(

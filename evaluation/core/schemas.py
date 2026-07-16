@@ -99,6 +99,7 @@ VerifyLiteral = Literal[
     # JSON file checks
     "json_file_schema",
     "bohr_gpu_comparison_record",
+    "bohr_job_monitor_execution",
     "bohr_parameter_sweep_execution",
     "bohr_parameter_sweep_record",
     "bohr_job_stop_record",
@@ -373,6 +374,7 @@ class QuestionItem(BaseModel):
             "answer_json_numeric",
             "json_file_schema",
             "bohr_gpu_comparison_record",
+            "bohr_job_monitor_execution",
             "bohr_parameter_sweep_record",
             "bohr_job_stop_record",
             "bohr_job_upgrade_record",
@@ -463,6 +465,38 @@ class QuestionItem(BaseModel):
             if not isinstance(filename, str) or not filename:
                 raise ValueError(
                     f"bohr_parameter_sweep_record reference '{item.id}' requires filename"
+                )
+        for item in self.scoring_checklist:
+            if item.verify != "bohr_job_monitor_execution":
+                continue
+            value = refs_by_key[item.id].value
+            if not isinstance(value, dict):
+                raise ValueError(
+                    f"bohr_job_monitor_execution reference '{item.id}' "
+                    "must be an object"
+                )
+            expected_keys = {
+                "filename",
+                "log_filename",
+                "image",
+                "machine_type",
+                "command",
+            }
+            unknown_keys = set(value) - expected_keys
+            if unknown_keys:
+                raise ValueError(
+                    f"bohr_job_monitor_execution reference '{item.id}' has "
+                    f"unsupported keys: {sorted(unknown_keys)}"
+                )
+            missing_keys = [
+                key
+                for key in sorted(expected_keys)
+                if not isinstance(value.get(key), str) or not value[key]
+            ]
+            if missing_keys:
+                raise ValueError(
+                    f"bohr_job_monitor_execution reference '{item.id}' requires "
+                    f"non-empty string values for: {missing_keys}"
                 )
         for item in self.scoring_checklist:
             if item.verify != "bohr_parameter_sweep_execution":

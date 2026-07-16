@@ -349,53 +349,36 @@ def test_tool_args_regex_reference_is_validated(value: object) -> None:
         )
 
 
-def test_bwo_monitor_v4_schema_requires_real_lifecycle() -> None:
+def test_bwo_monitor_v5_uses_execution_receipts_without_prompt_hints() -> None:
     questions = flatten_banks(load_question_banks(QUESTION_BANK_DIR))
-    question = next(q for q in questions if q.id == "BWO_monitor_D6_20260715_v4")
+    question = next(q for q in questions if q.id == "BWO_monitor_D6_20260715_v5")
     assert all(
         q.id
         not in {
             "BWO_monitor_D6_20260715",
             "BWO_monitor_D6_20260715_v2",
             "BWO_monitor_D6_20260715_v3",
+            "BWO_monitor_D6_20260715_v4",
         }
         for q in questions
     )
-    schema_ref = next(
-        ref for ref in question.reference_answers if ref.key == "monitor_schema"
+    assert "receipt" not in question.human_prompt_seed.lower()
+    assert "`job_id`" not in question.human_prompt_seed
+    assert "`final_status`" not in question.human_prompt_seed
+    execution_ref = next(
+        ref for ref in question.reference_answers if ref.key == "monitor_execution"
     )
-    schema = schema_ref.value["schema"]
-    validator = validator_for(schema)(schema)
-    valid = {
-        "job_id": 20400713,
+    assert execution_ref.value == {
+        "filename": "d6_monitor.json",
+        "log_filename": "d6_job.log",
         "image": "registry.dp.tech/dptech/ubuntu:22.04-py3.10-cuda12.1",
         "machine_type": "c2_m4_cpu",
         "command": 'echo "hello from bohrium" > result.txt && sleep 60',
-        "polls": [
-            {"time": "2026-07-15 21:29:58", "status": 1},
-            {"time": "2026-07-15 21:31:10", "status": 2},
-        ],
-        "final_status": 2,
-        "log_saved": True,
     }
-    validator.validate(valid)
-    validator.validate({**valid, "job_id": "20400713"})
-    validator.validate({**valid, "final_status": "Finished"})
-    validator.validate({**valid, "final_status": "2"})
-
-    with pytest.raises(ValidationError):
-        validator.validate(
-            {
-                **valid,
-                "polls": [{"time": "2026-07-15 21:31:10", "status": 2}],
-            }
-        )
-    with pytest.raises(ValidationError):
-        validator.validate({**valid, "job_id": "job-20400713"})
-    with pytest.raises(ValidationError):
-        validator.validate({**valid, "final_status": "Running"})
-    with pytest.raises(ValidationError):
-        validator.validate({**valid, "log_saved": False})
+    execution_check = next(
+        item for item in question.scoring_checklist if item.id == "monitor_execution"
+    )
+    assert execution_check.verify == "bohr_job_monitor_execution"
 
 
 def test_bwo_lit_db_v3_accepts_text_or_structured_batch_strategy() -> None:

@@ -151,6 +151,8 @@ class BohrCliRequestRecord(BaseModel):
     input_path: str | None = Field(default=None)
     project_id: str | None = Field(default=None)
     job_group_ids: list[int] = Field(default_factory=list)
+    bohr_job_ids: list[int] = Field(default_factory=list)
+    platform_job_ids: list[int] = Field(default_factory=list)
     image_address: str | None = Field(default=None)
     machine_type: str | None = Field(default=None)
     command: str | None = Field(default=None)
@@ -159,10 +161,21 @@ class BohrCliRequestRecord(BaseModel):
 
 
 class BohrCliResponseIds(BaseModel):
-    """Identifiers parsed from an explicit JSON Bohr-CLI response."""
+    """Identifiers parsed from a captured JSON Bohr-CLI response."""
 
     job_ids: list[int] = Field(default_factory=list)
+    bohr_job_ids: list[int] = Field(default_factory=list)
+    platform_job_ids: list[int] = Field(default_factory=list)
     group_ids: list[int] = Field(default_factory=list)
+
+
+class BohrCliJobStateRecord(BaseModel):
+    """Allow-listed lifecycle fields parsed from a job-description response."""
+
+    status: int | str | None = Field(default=None)
+    web_status: int | str | None = Field(default=None)
+    exit_code: int | None = Field(default=None)
+    end_time: str | None = Field(default=None)
 
 
 class BohrCliReceiptRecord(BaseModel):
@@ -180,6 +193,7 @@ class BohrCliReceiptRecord(BaseModel):
     captured_json: bool = Field(default=False)
     request: BohrCliRequestRecord = Field(default_factory=BohrCliRequestRecord)
     ids: BohrCliResponseIds = Field(default_factory=BohrCliResponseIds)
+    job_state: BohrCliJobStateRecord = Field(default_factory=BohrCliJobStateRecord)
 
 
 class TokenUsage(BaseModel):

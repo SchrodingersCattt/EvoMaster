@@ -7,6 +7,9 @@ from typing import Any
 from evaluation.validators.abacus_input import check_abacus_input
 from evaluation.validators.answer_text import check_answer_json_numeric
 from evaluation.validators.bohr_cli import (
+    check_bohr_job_monitor_execution as _check_bohr_job_monitor_execution,
+)
+from evaluation.validators.bohr_cli import (
     check_bohr_parameter_sweep_execution as _check_bohr_parameter_sweep_execution,
 )
 from evaluation.validators.budget import check_duration_budget as _check_duration_budget
@@ -193,6 +196,23 @@ def check_bohr_parameter_sweep_execution(
     return _check_bohr_parameter_sweep_execution(
         evidence.workspace_dir,
         filename=cfg.get("filename", ""),
+        receipts=evidence.bohr_cli_receipts,
+    )
+
+
+def check_bohr_job_monitor_execution(
+    *, evidence: EvidenceBundle | None, ref: ReferenceAnswer
+) -> tuple[bool, str]:
+    if evidence is None or not evidence.workspace_dir:
+        return False, "no workspace root"
+    cfg = ref.value if isinstance(ref.value, dict) else {}
+    return _check_bohr_job_monitor_execution(
+        evidence.workspace_dir,
+        filename=cfg.get("filename", ""),
+        log_filename=cfg.get("log_filename", ""),
+        image=cfg.get("image", ""),
+        machine_type=cfg.get("machine_type", ""),
+        command=cfg.get("command", ""),
         receipts=evidence.bohr_cli_receipts,
     )
 

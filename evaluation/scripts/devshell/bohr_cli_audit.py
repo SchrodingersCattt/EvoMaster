@@ -3,7 +3,8 @@
 The launcher is injected ahead of the real Bohr-CLI binary only for evaluation
 questions tagged ``bohr-cli``.  Most commands inherit the caller's standard
 streams unchanged.  Short mutating commands with an explicit JSON output mode
-are captured, replayed byte-for-byte, and parsed for allow-listed identifiers.
+and job-description queries are captured, replayed byte-for-byte, and parsed
+for allow-listed identifiers and lifecycle fields.
 
 No environment values or full command output are written to the receipt file.
 """
@@ -26,7 +27,8 @@ REAL_BIN_ENV = "BOHR_EVAL_REAL_BIN"
 RECEIPT_PATH_ENV = "BOHR_EVAL_RECEIPT_PATH"
 RECEIPT_SCHEMA = "bohr_cli_receipt_v1"
 
-_CAPTURED_OPERATIONS = frozenset({"job.submit", "job_group.create"})
+_JSON_MUTATION_OPERATIONS = frozenset({"job.submit", "job_group.create"})
+_JOB_DESCRIPTION_OPERATION = "job.describe"
 _SECRET_FLAGS = frozenset(
     {
         "--access-key",
@@ -212,7 +214,9 @@ def _request_from_json(value: object) -> dict[str, Any]:
     return request
 
 
-def _load_input_request(argv: list[str]) -> dict[str, Any]:
+def _load_input_request(argv: list[str], *, operation: str) -> dict[str, Any]:
+    if operation != "job.submit":
+        return {}
     input_name = _flag_value(argv, {"-i", "--input", "--input-file"})
     if not input_name:
         return {}
@@ -228,8 +232,8 @@ def _load_input_request(argv: list[str]) -> dict[str, Any]:
     return request
 
 
-def _request_from_argv(argv: list[str]) -> dict[str, Any]:
-    request = _load_input_request(argv)
+def _request_from_argv(argv: list[str], *, operation: str) -> dict[str, Any]:
+    request = _load_input_request(argv, operation=operation)
     flag_fields = {
         "project_id": {"--project-id", "--project_id"},
         "image_address": {"--image", "--image-address", "--image_address"},
@@ -252,6 +256,19 @@ def _request_from_argv(argv: list[str]) -> dict[str, Any]:
         current.add(group_id)
         request["job_group_ids"] = sorted(current)
 
+    if operation == "job.describe":
+        bohr_job_id = _positive_int(
+            _flag_value(argv, {"-i", "--id", "--bohr-job-id", "--bohr_job_id"})
+        )
+        if bohr_job_id is not None:
+            request["bohr_job_ids"] = [bohr_job_id]
+    elif operation in {"job.log", "job.download"}:
+        platform_job_id = _positive_int(
+            _flag_value(argv, {"-j", "--job-id", "--job_id"})
+        )
+        if platform_job_id is not None:
+            request["platform_job_ids"] = [platform_job_id]
+
     command = request.get("command")
     if isinstance(command, str):
         temperatures = set(request.get("temperatures_k", []))
@@ -263,6 +280,8 @@ def _request_from_argv(argv: list[str]) -> dict[str, Any]:
 
 def _response_ids(value: object, *, operation: str) -> dict[str, list[int]]:
     job_ids: set[int] = set()
+    bohr_job_ids: set[int] = set()
+    platform_job_ids: set[int] = set()
     group_ids: set[int] = set()
     for node in _walk_json(value):
         if not isinstance(node, dict):
@@ -272,18 +291,60 @@ def _response_ids(value: object, *, operation: str) -> dict[str, list[int]]:
             identifier = _positive_int(raw_value)
             if identifier is None:
                 continue
-            if key in {"jobid", "bohrjobid"}:
+            if key in {"bohrid", "bohrjobid"}:
+                bohr_job_ids.add(identifier)
+                job_ids.add(identifier)
+            elif key == "jobid":
+                platform_job_ids.add(identifier)
                 job_ids.add(identifier)
             elif key in {"groupid", "jobgroupid", "bohrjobgroupid", "taskgroupid"}:
                 group_ids.add(identifier)
             elif key == "id" and operation == "job.submit":
+                platform_job_ids.add(identifier)
+                job_ids.add(identifier)
+            elif key == "id" and operation == "job.describe":
+                platform_job_ids.add(identifier)
                 job_ids.add(identifier)
             elif key == "id" and operation == "job_group.create":
                 group_ids.add(identifier)
     return {
         "job_ids": sorted(job_ids),
+        "bohr_job_ids": sorted(bohr_job_ids),
+        "platform_job_ids": sorted(platform_job_ids),
         "group_ids": sorted(group_ids),
     }
+
+
+def _integer(value: object) -> int | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str) and re.fullmatch(r"-?[0-9]+", value.strip()):
+        return int(value)
+    return None
+
+
+def _response_job_state(value: object) -> dict[str, Any]:
+    for node in _walk_json(value):
+        if not isinstance(node, dict):
+            continue
+        normalised = {_normalise_key(key): child for key, child in node.items()}
+        if not set(normalised) & {"status", "webstatus", "exitcode", "endtime"}:
+            continue
+        state: dict[str, Any] = {}
+        for source, target in (("status", "status"), ("webstatus", "web_status")):
+            raw = normalised.get(source)
+            if isinstance(raw, (int, str)) and not isinstance(raw, bool):
+                state[target] = raw
+        exit_code = _integer(normalised.get("exitcode"))
+        if exit_code is not None:
+            state["exit_code"] = exit_code
+        end_time = normalised.get("endtime")
+        if isinstance(end_time, str) and end_time.strip():
+            state["end_time"] = end_time.strip()
+        return state
+    return {}
 
 
 def _append_receipt(receipt: dict[str, Any]) -> None:
@@ -347,12 +408,14 @@ def main(argv: list[str] | None = None) -> int:
         _normalise_token(arg.partition("=")[0]) == "__dry_run" for arg in args
     )
     captured_json = (
-        operation in _CAPTURED_OPERATIONS
-        and _explicit_json_output(args)
+        (
+            operation == _JOB_DESCRIPTION_OPERATION
+            or (operation in _JSON_MUTATION_OPERATIONS and _explicit_json_output(args))
+        )
         and not help_requested
         and not dry_run
     )
-    request = _request_from_argv(args)
+    request = _request_from_argv(args, operation=operation)
     command = [real_bin, *args]
     started_at = datetime.now(timezone.utc).isoformat()
     started = time.monotonic()
@@ -364,6 +427,7 @@ def main(argv: list[str] | None = None) -> int:
     exit_code = _shell_exit_code(exit_code)
 
     ids = {"job_ids": [], "group_ids": []}
+    job_state: dict[str, Any] = {}
     if captured_json and exit_code == 0:
         try:
             response = json.loads(stdout.decode("utf-8"))
@@ -371,6 +435,8 @@ def main(argv: list[str] | None = None) -> int:
             response = None
         if response is not None:
             ids = _response_ids(response, operation=operation)
+            if operation == _JOB_DESCRIPTION_OPERATION:
+                job_state = _response_job_state(response)
 
     _append_receipt(
         {
@@ -386,6 +452,7 @@ def main(argv: list[str] | None = None) -> int:
             "captured_json": captured_json,
             "request": request,
             "ids": ids,
+            "job_state": job_state,
         }
     )
     return exit_code

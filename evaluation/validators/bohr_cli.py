@@ -61,6 +61,84 @@ def _artifact_jobs(root: Path, filename: str) -> dict[int, int]:
     return jobs
 
 
+def _load_json_object(root: Path, filename: str) -> tuple[dict, str | None]:
+    path = _resolve_file(root, filename)
+    if path is None:
+        return {}, f'{filename}: file not found or ambiguous'
+    try:
+        data = json.loads(path.read_text(encoding='utf-8'))
+    except (OSError, ValueError) as exc:
+        return {}, f'{filename}: invalid JSON ({exc})'
+    if not isinstance(data, dict):
+        return {}, f'{filename}: top-level JSON value must be an object'
+    return data, None
+
+
+def _artifact_job_ids(data: dict) -> set[int]:
+    identifiers: set[int] = set()
+    for node in _walk_json(data):
+        if not isinstance(node, dict):
+            continue
+        for raw_key, raw_value in node.items():
+            if _normalise_key(raw_key) not in {
+                'id',
+                'jobid',
+                'bohrid',
+                'bohrjobid',
+                'platformjobid',
+            }:
+                continue
+            identifier = _positive_int(raw_value)
+            if identifier is not None:
+                identifiers.add(identifier)
+    return identifiers
+
+
+def _artifact_poll_count(data: dict) -> int:
+    counts: list[int] = []
+    for node in _walk_json(data):
+        if not isinstance(node, list):
+            continue
+        counts.append(
+            sum(
+                isinstance(item, dict)
+                and bool(
+                    {_normalise_key(key) for key in item}
+                    & {'status', 'webstatus', 'state'}
+                )
+                for item in node
+            )
+        )
+    return max(counts, default=0)
+
+
+def _artifact_contains(data: dict, expected: str) -> bool:
+    return any(node == expected for node in _walk_json(data))
+
+
+def _artifact_records_saved_log(data: dict, log_filename: str) -> bool:
+    for node in _walk_json(data):
+        if isinstance(node, str) and Path(node).name == log_filename:
+            return True
+        if not isinstance(node, dict):
+            continue
+        for raw_key, raw_value in node.items():
+            if _normalise_key(raw_key) != 'logsaved':
+                continue
+            if raw_value is True:
+                return True
+            if isinstance(raw_value, str):
+                normalised = raw_value.strip().lower()
+                if Path(raw_value).name == log_filename or normalised in {
+                    'saved',
+                    'success',
+                    'succeeded',
+                    'true',
+                }:
+                    return True
+    return False
+
+
 def _successful_mutation(receipt: BohrCliReceiptRecord, operation: str) -> bool:
     return (
         receipt.operation == operation
@@ -143,4 +221,111 @@ def check_bohr_parameter_sweep_execution(
     return (
         True,
         'one group creation and eight grouped submissions match b3_jobs.json',
+    )
+
+
+def check_bohr_job_monitor_execution(
+    workspace_dir: str | Path,
+    *,
+    filename: str,
+    log_filename: str,
+    image: str,
+    machine_type: str,
+    command: str,
+    receipts: list[BohrCliReceiptRecord],
+) -> tuple[bool, str]:
+    """Validate a submit-poll-complete-log lifecycle from Bohr-CLI receipts."""
+    root = Path(workspace_dir)
+    artifact, artifact_error = _load_json_object(root, filename)
+    if artifact_error:
+        return False, artifact_error
+    if _resolve_file(root, log_filename) is None:
+        return False, f'{log_filename}: file not found or ambiguous'
+
+    indexed_receipts = list(enumerate(receipts))
+    submits = [
+        (index, receipt)
+        for index, receipt in indexed_receipts
+        if _successful_mutation(receipt, 'job.submit')
+    ]
+    if len(submits) != 1:
+        return False, f'expected 1 successful job submission, recorded {len(submits)}'
+
+    submit_index, submit = submits[0]
+    if not submit.captured_json or not submit.ids.bohr_job_ids:
+        return False, 'job submission has no parsed Bohr job identifier'
+    expected_request = {
+        'image': (submit.request.image_address, image),
+        'machine type': (submit.request.machine_type, machine_type),
+        'command': (submit.request.command, command),
+    }
+    mismatches = [
+        label
+        for label, (actual, expected) in expected_request.items()
+        if actual != expected
+    ]
+    if mismatches:
+        return False, f'job submission does not match expected {", ".join(mismatches)}'
+
+    selected_describes: list[tuple[int, BohrCliReceiptRecord]] | None = None
+    terminal_index: int | None = None
+    for bohr_job_id in submit.ids.bohr_job_ids:
+        describes = [
+            (index, receipt)
+            for index, receipt in indexed_receipts
+            if index > submit_index
+            and _successful_mutation(receipt, 'job.describe')
+            and receipt.captured_json
+            and bohr_job_id in receipt.request.bohr_job_ids
+        ]
+        last_describe = describes[-1] if describes else None
+        if (
+            len(describes) >= 2
+            and last_describe is not None
+            and last_describe[1].job_state.exit_code == 0
+            and last_describe[1].job_state.end_time
+        ):
+            selected_describes = describes
+            terminal_index = last_describe[0]
+            break
+    if selected_describes is None or terminal_index is None:
+        return (
+            False,
+            'no submitted job has two successful polls and terminal '
+            'exitCode=0/endTime evidence',
+        )
+
+    platform_job_ids = set(submit.ids.platform_job_ids)
+    for _index, receipt in selected_describes:
+        platform_job_ids.update(receipt.ids.platform_job_ids)
+    successful_logs = [
+        receipt
+        for index, receipt in indexed_receipts
+        if index > terminal_index
+        and _successful_mutation(receipt, 'job.log')
+        and platform_job_ids.intersection(receipt.request.platform_job_ids)
+    ]
+    if not successful_logs:
+        return False, 'no successful post-completion log retrieval for the same job'
+
+    receipt_job_ids = set(submit.ids.job_ids)
+    for _index, receipt in selected_describes:
+        receipt_job_ids.update(receipt.ids.job_ids)
+    if not receipt_job_ids.intersection(_artifact_job_ids(artifact)):
+        return False, f'{filename}: recorded job identifier does not match CLI receipts'
+    if _artifact_poll_count(artifact) < 2:
+        return False, f'{filename}: monitoring record contains fewer than two polls'
+    for label, expected in (
+        ('image', image),
+        ('machine type', machine_type),
+        ('command', command),
+    ):
+        if not _artifact_contains(artifact, expected):
+            return False, f'{filename}: monitoring record does not contain {label}'
+    if not _artifact_records_saved_log(artifact, log_filename):
+        return False, f'{filename}: monitoring record does not record the saved log'
+
+    return (
+        True,
+        'one submitted job was polled to exitCode=0 and its log was retrieved',
     )
