@@ -16,6 +16,7 @@ from matmaster.context.ports import UserInstructions
 from matmaster.core.playground import ExecutionEnvironment, WorkspaceArchivalConfig
 from matmaster.integration.fanout import RunEventFanout
 from matmaster.integration.workspace_handler import WorkspaceHandler
+from matmaster.types.bohrium_node_approval import BohriumNodeStartApprovalGate
 from matmaster.types.figures import FigureUploadConfig
 from matmaster.types.runtime_ports import BohriumNodeAcquirer
 from src.dao.oss_io import upload_bytes_to_oss
@@ -86,6 +87,7 @@ async def run_bohrium_stage(
     bohrium_node_lifecycle_policy: str = "run_end",
     bohrium_node_idle_timeout_seconds: int | None = None,
     invocation_id: str | None = None,
+    node_start_approval_gate: BohriumNodeStartApprovalGate | None = None,
 ) -> BohriumStageResult:
     """Run Bohrium setup and physically rebind the execution environment.
 
@@ -110,6 +112,7 @@ async def run_bohrium_stage(
         bohrium_node_idle_timeout_seconds=bohrium_node_idle_timeout_seconds,
         invocation_id=invocation_id,
         defer_node_start=True,
+        node_start_approval_gate=node_start_approval_gate,
     )
     ssh_attached = bohrium_result.ssh_attached
     if bohrium_result.abort_result is not None:

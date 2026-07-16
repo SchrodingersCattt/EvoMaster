@@ -598,6 +598,10 @@ class ChatSendRequest(BaseModel):
         default=None,
         description="idle_timeout 策略的空闲时长；仅允许 900/1800/7200 秒",
     )
+    bohrium_node_start_confirmation_enabled: bool = Field(
+        default=False,
+        description="本轮首次真正需要 Bohrium Node 时是否通过 interaction 等待用户确认",
+    )
     replace_last_turn: bool = Field(
         default=False,
         description="为 true 时先物理删除最后一条 User/query 及之后的所有事件，再以新 content 发送；用于编辑重发",

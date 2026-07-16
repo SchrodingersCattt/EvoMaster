@@ -308,6 +308,7 @@ class AgentRunService:
         bohrium_node_sku_id: int | None = None,
         bohrium_node_lifecycle_policy: str = "run_end",
         bohrium_node_idle_timeout_seconds: int | None = None,
+        bohrium_node_start_confirmation_enabled: bool = False,
     ) -> tuple[bool | tuple[bool, str], int, dict[str, Any] | None]:
         """Execute agent pipeline using generator event stream with fanout dispatch.
 
@@ -385,6 +386,31 @@ class AgentRunService:
                 ),
             )
 
+            # Node approval must exist before the Bohrium stage builds the lazy
+            # runtime port. The same bridge is reused by later interactions.
+            from matmaster.integration.interaction_bridge import InteractionBridge
+
+            async def _interaction_event_sink(event: BusEvent) -> None:
+                await fanout.dispatch(event)
+
+            bridge = InteractionBridge(
+                session_id=session_id,
+                task_id=task_id,
+                invocation_id=invocation_id or "",
+                event_sink=_interaction_event_sink,
+                dao=get_redis_dao(),
+                timeout_seconds=1800,
+            )
+            from matmaster.integration.bohrium_node_approval_gate import (
+                BridgeBohriumNodeStartApprovalGate,
+            )
+
+            node_start_approval_gate = (
+                BridgeBohriumNodeStartApprovalGate(bridge)
+                if bohrium_node_start_confirmation_enabled
+                else None
+            )
+
             exp_name = mode or "direct"
             from matmaster.config.loader import load_exp_config
 
@@ -413,6 +439,7 @@ class AgentRunService:
                 bohrium_node_lifecycle_policy=bohrium_node_lifecycle_policy,
                 bohrium_node_idle_timeout_seconds=(bohrium_node_idle_timeout_seconds),
                 invocation_id=invocation_id,
+                node_start_approval_gate=node_start_approval_gate,
             )
             bohrium_svc = stage_result.bohrium_svc
             if stage_result.abort_result is not None:
@@ -561,20 +588,7 @@ class AgentRunService:
                     spawn_id=spawn_id,
                 )
 
-            # -- Stage 4b: interaction bridge --
-            from matmaster.integration.interaction_bridge import InteractionBridge
-
-            async def _interaction_event_sink(event: BusEvent) -> None:
-                await fanout.dispatch(event)
-
-            bridge = InteractionBridge(
-                session_id=session_id,
-                task_id=task_id,
-                invocation_id=invocation_id or "",
-                event_sink=_interaction_event_sink,
-                dao=get_redis_dao(),
-                timeout_seconds=1800,
-            )
+            # -- Stage 4b: interaction-specific adapters --
             from matmaster.integration.submit_approval_gate import (
                 BridgeSubmitApprovalGate,
             )

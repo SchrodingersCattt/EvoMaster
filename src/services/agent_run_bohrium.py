@@ -6,6 +6,7 @@ import asyncio
 import logging
 import os
 import time
+import uuid
 from collections.abc import Callable
 from typing import Any, NamedTuple
 
@@ -21,6 +22,7 @@ from matmaster.bohrium.runtime import (
 from matmaster.bohrium.types import BohriumExecutionContext, BohriumRuntimeSnapshot
 from matmaster.sessions.deferred_bohrium import DeferredBohriumSession
 from matmaster.sessions.ssh import SSHSession, SSHSessionConfig
+from matmaster.types.bohrium_node_approval import BohriumNodeStartApprovalGate
 from matmaster.types.runtime_ports import BohriumNodeAcquirer, BohriumNodeBinding
 from src.dao.bohrium_nodes_table import get_bohrium_nodes_table
 from src.services.agent_run_bohrium_node import acquire_compatibility_node
@@ -328,6 +330,7 @@ class BohriumSetupService:
         bohrium_node_idle_timeout_seconds: int | None = None,
         invocation_id: str | None = None,
         defer_node_start: bool = False,
+        node_start_approval_gate: BohriumNodeStartApprovalGate | None = None,
     ) -> BohriumSetupResult:
         """Load credentials, bridge events, and run setup in the executor."""
         loop = asyncio.get_running_loop()
@@ -349,6 +352,7 @@ class BohriumSetupService:
                 bohrium_node_lifecycle_policy=bohrium_node_lifecycle_policy,
                 bohrium_node_idle_timeout_seconds=(bohrium_node_idle_timeout_seconds),
                 invocation_id=invocation_id,
+                node_start_approval_gate=node_start_approval_gate,
             ),
         )
 
@@ -365,6 +369,7 @@ class BohriumSetupService:
         bohrium_node_lifecycle_policy: str = "run_end",
         bohrium_node_idle_timeout_seconds: int | None = None,
         invocation_id: str | None = None,
+        node_start_approval_gate: BohriumNodeStartApprovalGate | None = None,
     ) -> BohriumSetupResult:
         run_creds, user_id_for_ak, org_id = self._load_run_credentials(session_id)
         access_key = str(run_creds.get("access_key") or "").strip()
@@ -450,6 +455,7 @@ class BohriumSetupService:
         bohrium_node_lifecycle_policy: str = "run_end",
         bohrium_node_idle_timeout_seconds: int | None = None,
         invocation_id: str | None = None,
+        node_start_approval_gate: BohriumNodeStartApprovalGate | None = None,
     ) -> BohriumSetupResult:
         """Prepare a cold Session proxy; acquire Node on first tool demand."""
         run_creds, user_id_for_ak, org_id = self._load_run_credentials(session_id)
@@ -485,6 +491,8 @@ class BohriumSetupService:
 
         def _acquire_binding(
             cancel_checker: Callable[[], bool],
+            lifecycle_policy: str,
+            idle_timeout_seconds: int | None,
         ) -> BohriumNodeBinding:
             if credential_error is not None:
                 raise RuntimeError(credential_error)
@@ -498,8 +506,8 @@ class BohriumSetupService:
                 run_started_at=run_started_at,
                 workspace=workspace,
                 bohrium_node_sku_id=bohrium_node_sku_id,
-                bohrium_node_lifecycle_policy=bohrium_node_lifecycle_policy,
-                bohrium_node_idle_timeout_seconds=(bohrium_node_idle_timeout_seconds),
+                bohrium_node_lifecycle_policy=lifecycle_policy,
+                bohrium_node_idle_timeout_seconds=idle_timeout_seconds,
                 invocation_id=invocation_id,
                 emit_run_error_on_failure=False,
                 cancel_checker=cancel_checker,
@@ -522,7 +530,16 @@ class BohriumSetupService:
                 snapshot=snapshot,
             )
 
-        coordinator = BohriumNodeRuntimeCoordinator(_acquire_binding)
+        coordinator = BohriumNodeRuntimeCoordinator(
+            _acquire_binding,
+            approval_gate=(
+                node_start_approval_gate if credential_error is None else None
+            ),
+            request_id=f"bohrium-node-start:{invocation_id or uuid.uuid4().hex}",
+            default_lifecycle_policy=bohrium_node_lifecycle_policy,
+            default_idle_timeout_seconds=bohrium_node_idle_timeout_seconds,
+            node_sku_id=_resolve_bohrium_node_sku_id(bohrium_node_sku_id),
+        )
         deferred_session = DeferredBohriumSession(
             coordinator,
             workspace_path=execution_workdir,

@@ -247,6 +247,7 @@ def test_prepare_send_message_persists_and_passes_submit_confirmation():
     req = ChatSendRequest(
         content="run",
         bohrium_submit_confirmation_required=False,
+        bohrium_node_start_confirmation_enabled=True,
     )
 
     with (
@@ -257,6 +258,7 @@ def test_prepare_send_message_persists_and_passes_submit_confirmation():
 
     assert ctx is not None
     assert ctx.job["bohrium_submit_confirmation_required"] is False
+    assert ctx.job["bohrium_node_start_confirmation_enabled"] is True
     sessions_service.set_bohrium_submit_confirmation.assert_called_once_with(
         "sess-1",
         "user-1",
