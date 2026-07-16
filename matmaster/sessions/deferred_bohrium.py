@@ -33,6 +33,11 @@ class DeferredBohriumSession:
     Cold-state metadata deliberately exposes no remote skill roots. This keeps
     user-instruction and skill discovery from becoming accidental Node-start
     triggers before the model asks to use a remote capability.
+
+    ``planned_skill_root_map`` is pure metadata (never scanned): pairs of
+    (worker-local skill root, Node-side root the same tree materializes to).
+    SkillTool renders ``${SKILL_DIR}`` through it so skill bodies emitted
+    before the Node starts already carry Node-side paths.
     """
 
     def __init__(
@@ -41,6 +46,7 @@ class DeferredBohriumSession:
         *,
         workspace_path: str,
         timeout: int = 300,
+        planned_skill_root_map: tuple[tuple[str, str], ...] = (),
     ) -> None:
         self._acquirer = acquirer
         self._workspace_path = workspace_path
@@ -48,6 +54,7 @@ class DeferredBohriumSession:
         self._cancel_token: CancellationToken | None = None
         self._is_open = True
         self.config = _DeferredSessionConfig(workspace_path, timeout)
+        self.planned_skill_root_map = tuple(planned_skill_root_map)
 
         # Remote discovery is intentionally cold-safe. Once acquired these are
         # copied from the SSH session for callers that inspect them later.

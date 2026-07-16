@@ -42,6 +42,7 @@ from src.services.bohrium_run_support import (
     _remote_session_workspace_root,
 )
 from src.services.bohrium_runtime_config import (
+    BOHRIUM_PLANNED_SKILL_ROOT_MAP,
     BOHRIUM_REMOTE_USER_PLUGINS_ROOT,
     BOHRIUM_REMOTE_USER_SKILLS_ROOT,
     CLEAR_REMOTE_PROXY_SCRIPT,
@@ -543,6 +544,7 @@ class BohriumSetupService:
         deferred_session = DeferredBohriumSession(
             coordinator,
             workspace_path=execution_workdir,
+            planned_skill_root_map=BOHRIUM_PLANNED_SKILL_ROOT_MAP,
         )
         if credential_error is None:
             attach_local_bohrium_runtime_from_run_credentials(

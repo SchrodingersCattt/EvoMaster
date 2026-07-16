@@ -21,7 +21,21 @@ def test_metadata_access_does_not_acquire_node() -> None:
     assert session.is_open is True
     assert session.config.workspace_path == "/share/case"
     assert session.remote_skill_roots == []
+    assert session.planned_skill_root_map == ()
     assert session.capabilities.file_ops == "sftp"
+    acquirer.ensure_ready_sync.assert_not_called()
+
+
+def test_planned_skill_root_map_is_cold_metadata() -> None:
+    acquirer = MagicMock()
+    planned = (("/app/matmaster/plugins", "/personal/.matmaster/plugins"),)
+    session = DeferredBohriumSession(
+        acquirer,
+        workspace_path="/share/case",
+        planned_skill_root_map=planned,
+    )
+
+    assert session.planned_skill_root_map == planned
     acquirer.ensure_ready_sync.assert_not_called()
 
 

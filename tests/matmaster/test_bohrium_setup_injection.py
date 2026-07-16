@@ -192,6 +192,16 @@ class TestBohriumSetupServiceOrchestration:
             assert result.node_acquirer is not None
             mock_setup.assert_not_called()
 
+            from src.services.bohrium_runtime_config import (
+                BOHRIUM_PLANNED_SKILL_ROOT_MAP,
+            )
+
+            assert (
+                result.execution_session.planned_skill_root_map
+                == BOHRIUM_PLANNED_SKILL_ROOT_MAP
+            )
+            assert result.execution_session.planned_skill_root_map
+
             binding = await result.node_acquirer.ensure_ready(reason="tool:Bash")
 
         assert binding.session is ssh_session

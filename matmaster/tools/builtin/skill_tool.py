@@ -49,10 +49,12 @@ class SkillTool(BuiltinTool):
         workdir: Any | None = None,
         skill_registry: SkillRegistry | None = None,
         on_skill_hit: Callable[[str], None] | None = None,
+        registry_provider: Callable[[], SkillRegistry | None] | None = None,
     ) -> None:
         super().__init__(session=session, workdir=workdir)
         self._registry = skill_registry
         self._on_skill_hit = on_skill_hit
+        self._registry_provider = registry_provider
 
     def prompt(self, ctx=None) -> str:
         return (
@@ -80,10 +82,11 @@ class SkillTool(BuiltinTool):
         try:
             skill_name = (arguments.get("skill") or "").lstrip("/")
 
-            if self._registry is None:
+            registry = self._current_registry()
+            if registry is None:
                 return "Error: skill registry not available"
 
-            skill = self._registry.get_skill(skill_name)
+            skill = registry.get_skill(skill_name)
             if skill is None:
                 return f"Error: Skill '{skill_name}' not found"
 
@@ -97,7 +100,7 @@ class SkillTool(BuiltinTool):
 
             self._maybe_hit_mcp(skill)
             for dep_name in skill.meta_info.depends_on:
-                dep_skill = self._registry.get_skill(dep_name)
+                dep_skill = registry.get_skill(dep_name)
                 if dep_skill is not None:
                     self._maybe_hit_mcp(dep_skill)
 
@@ -105,6 +108,22 @@ class SkillTool(BuiltinTool):
         except Exception as e:
             self.logger.error("Skill tool failed: %s", e, exc_info=True)
             return f"Error: {e}"
+
+    def _current_registry(self) -> SkillRegistry | None:
+        """Re-resolve the registry so remote roots discovered after a lazy
+        Node acquisition take effect for later activations in the same run."""
+        if self._registry_provider is not None:
+            try:
+                refreshed = self._registry_provider()
+            except Exception:
+                self.logger.warning(
+                    "Skill registry refresh failed; using last known registry",
+                    exc_info=True,
+                )
+                refreshed = None
+            if refreshed is not None:
+                self._registry = refreshed
+        return self._registry
 
     async def execute_with_context(
         self,
@@ -127,6 +146,10 @@ class SkillTool(BuiltinTool):
         local_abs = path if path.is_absolute() else path.resolve()
 
         session = self._session
+        planned = self._render_planned_dir(session, local_abs)
+        if planned is not None:
+            return planned
+
         remote_project_root = getattr(session, "remote_project_root", None)
         if remote_project_root:
             try:
@@ -136,6 +159,32 @@ class SkillTool(BuiltinTool):
                 pass
 
         return str(local_abs)
+
+    @staticmethod
+    def _render_planned_dir(session: Any, local_abs: Path) -> str | None:
+        """Map a worker-local skill dir onto the Node root it materializes to.
+
+        Cold DeferredBohriumSession runs resolve skills from worker-local
+        roots; the planned map keeps rendered paths valid on the Node the run
+        will lazily acquire.
+        """
+        planned_map = getattr(session, "planned_skill_root_map", None)
+        if not isinstance(planned_map, (list, tuple)):
+            return None
+        for pair in planned_map:
+            if not (isinstance(pair, (list, tuple)) and len(pair) == 2):
+                continue
+            local_root, remote_root = pair
+            if not (isinstance(local_root, str) and isinstance(remote_root, str)):
+                continue
+            try:
+                rel = local_abs.relative_to(local_root)
+            except ValueError:
+                continue
+            if rel == Path("."):
+                return str(PurePosixPath(remote_root))
+            return str(PurePosixPath(remote_root) / rel.as_posix())
+        return None
 
     def _execute(self, arguments: dict[str, Any]) -> str:
         raise NotImplementedError("SkillTool uses async execute() directly")

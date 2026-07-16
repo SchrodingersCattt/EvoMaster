@@ -1,7 +1,27 @@
 """Configuration shared by Bohrium agent runtime setup helpers."""
 
+from pathlib import Path
+
 BOHRIUM_REMOTE_USER_SKILLS_ROOT = "/personal/.matmaster/skills"
 BOHRIUM_REMOTE_USER_PLUGINS_ROOT = "/personal/.matmaster/plugins"
+
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+
+# Worker-local builtin skill roots -> NAS materialization roots. Same layout
+# contract as builtin_skills_sync (CI uploads these trees to tools-server,
+# the frontend unpacks them under /personal/.matmaster preserving relative
+# paths). Lets a cold DeferredBohriumSession render Node-side skill paths
+# without starting the node.
+BOHRIUM_PLANNED_SKILL_ROOT_MAP: tuple[tuple[str, str], ...] = (
+    (
+        str(_REPO_ROOT / "matmaster" / "plugins"),
+        BOHRIUM_REMOTE_USER_PLUGINS_ROOT,
+    ),
+    (
+        str(_REPO_ROOT / "matmaster" / "skills"),
+        BOHRIUM_REMOTE_USER_SKILLS_ROOT,
+    ),
+)
 
 # Bash snippet for root on Bohrium SSH nodes: wget/curl/git/pip + env.
 # GNU wget only accepts ``use_proxy = on|off``; ``use_proxy = no`` is invalid and

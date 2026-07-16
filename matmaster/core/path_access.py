@@ -49,6 +49,13 @@ def derive_path_access_roots(
         for root in remote_skill_roots:
             _add(root, "skill")
     _add(getattr(session, "remote_user_skills_root", None), "skill")
+    # Deferred Bohrium sessions expose no live remote roots while cold, but
+    # SkillTool already renders paths under the planned Node-side roots.
+    planned_map = getattr(session, "planned_skill_root_map", None)
+    if isinstance(planned_map, (list, tuple)):
+        for pair in planned_map:
+            if isinstance(pair, (list, tuple)) and len(pair) == 2:
+                _add(pair[1], "skill")
 
     snapshot = env.bohrium.snapshot
     if snapshot is not None:
