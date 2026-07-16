@@ -405,7 +405,7 @@ questions:
       flags: i
   - key: turn_budget
     value:
-      max: 15
+      max: 12
   scoring_checklist:
   - id: artifact
     criterion: c8_result.json written to workspace.
