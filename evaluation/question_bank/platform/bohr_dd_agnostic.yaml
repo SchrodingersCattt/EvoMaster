@@ -370,7 +370,7 @@ questions:
   scope: platform
   intent: Test agent uploads PDF with spaces in filename to knowledge base and searches for thermal decomposition data.
   human_prompt_seed: |
-    利用 bohr-cli，把这篇文献传到知识库里去，然后搜一下里面纳米样品的热分解峰温（DSC peak temperature）是多少摄氏度。
+    利用 bohr-cli，把这篇文献传到知识库里去，然后搜一下里面纳米样品的DSC热分解峰温是多少摄氏度。
     结果保存到 `c8_result.json`，格式：
     ```json
     {"filename": "...", "kb_id": ..., "upload_success": true/false, "nano_thermal_decomposition_celsius": ..., "search_results": [{"text": "...", "score": ...}]}
