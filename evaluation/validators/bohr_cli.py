@@ -8,7 +8,10 @@ import shlex
 from pathlib import Path
 
 from evaluation.core.evidence import BohrCliReceiptRecord
-from evaluation.validators.json_file import check_bohr_parameter_sweep_record
+from evaluation.validators.json_file import (
+    check_bohr_job_stop_record,
+    check_bohr_parameter_sweep_record,
+)
 
 
 def _normalise_key(value: object) -> str:
@@ -221,6 +224,112 @@ def _successful_terminal_receipt(receipt: BohrCliReceiptRecord) -> bool:
             _successful_terminal_status(state.status)
             or _successful_terminal_status(state.web_status)
         )
+    )
+
+
+def _receipt_argv_ids(receipt: BohrCliReceiptRecord) -> set[int]:
+    identifiers: set[int] = set()
+    for argument in receipt.argv:
+        match = re.search(r'(?:^|=)([1-9]\d*)$', argument)
+        if match:
+            identifiers.add(int(match.group(1)))
+    return identifiers
+
+
+def check_bohr_job_stop_execution(
+    workspace_dir: str | Path,
+    *,
+    filename: str,
+    image: str,
+    machine_type: str,
+    command: str,
+    job_name_prefix: str,
+    receipts: list[BohrCliReceiptRecord],
+) -> tuple[bool, str]:
+    """Validate one isolated submit-poll-stop-poll lifecycle and its record."""
+    record_ok, record_reason = check_bohr_job_stop_record(
+        workspace_dir,
+        filename=filename,
+        image=image,
+        machine_type=machine_type,
+        command=command,
+        job_name_prefix=job_name_prefix,
+    )
+    if not record_ok:
+        return False, record_reason
+
+    indexed_receipts = list(enumerate(receipts))
+    submits = [
+        (index, receipt)
+        for index, receipt in indexed_receipts
+        if _successful_mutation(receipt, 'job.submit')
+    ]
+    if len(submits) != 1:
+        return False, f'expected 1 successful job submission, recorded {len(submits)}'
+
+    submit_index, submit = submits[0]
+    if not submit.captured_json or not submit.ids.bohr_job_ids:
+        return False, 'job submission has no parsed Bohr job identifier'
+    if not submit.ids.platform_job_ids:
+        return False, 'job submission has no parsed platform job identifier'
+    if submit.request.image_address != image:
+        return False, 'job submission does not match expected image'
+    if submit.request.machine_type != machine_type:
+        return False, 'job submission does not match expected machine type'
+    if not _shell_commands_equivalent(submit.request.command, command):
+        return False, 'job submission does not match expected command'
+    if not (submit.request.job_name or '').startswith(job_name_prefix):
+        return False, 'job submission does not use the expected unique name prefix'
+
+    bohr_job_ids = set(submit.ids.bohr_job_ids)
+    describes = [
+        (index, receipt)
+        for index, receipt in indexed_receipts
+        if index > submit_index
+        and _successful_mutation(receipt, 'job.describe')
+        and receipt.captured_json
+        and bohr_job_ids.intersection(receipt.request.bohr_job_ids)
+    ]
+    if len(describes) < 2:
+        return False, 'submitted job has fewer than two successful status queries'
+
+    submitted_job_ids = set(submit.ids.job_ids)
+    stop_operations = {'job.terminate', 'job.kill', 'job.cancel', 'job.+cancel'}
+    successful_controls: list[tuple[int, BohrCliReceiptRecord]] = []
+    for index, receipt in indexed_receipts:
+        if index <= submit_index or receipt.operation not in stop_operations:
+            continue
+        if not _successful_mutation(receipt, receipt.operation):
+            continue
+        target_ids = (
+            set(receipt.request.platform_job_ids)
+            | set(receipt.request.bohr_job_ids)
+            | _receipt_argv_ids(receipt)
+        )
+        if submitted_job_ids.intersection(target_ids):
+            successful_controls.append((index, receipt))
+
+    lifecycle_control = next(
+        (
+            (index, receipt)
+            for index, receipt in successful_controls
+            if any(describe_index < index for describe_index, _receipt in describes)
+            and any(describe_index > index for describe_index, _receipt in describes)
+        ),
+        None,
+    )
+    if lifecycle_control is None:
+        return False, 'no successful stop of the submitted job between status queries'
+
+    artifact, artifact_error = _load_json_object(Path(workspace_dir), filename)
+    if artifact_error:
+        return False, artifact_error
+    if not submitted_job_ids.intersection(_artifact_job_ids(artifact)):
+        return False, f'{filename}: recorded job identifier does not match CLI receipts'
+
+    return (
+        True,
+        'one self-submitted job was queried, stopped, queried again, and recorded',
     )
 
 

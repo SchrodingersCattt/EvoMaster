@@ -10,6 +10,9 @@ from evaluation.validators.bohr_cli import (
     check_bohr_job_monitor_execution as _check_bohr_job_monitor_execution,
 )
 from evaluation.validators.bohr_cli import (
+    check_bohr_job_stop_execution as _check_bohr_job_stop_execution,
+)
+from evaluation.validators.bohr_cli import (
     check_bohr_parameter_sweep_execution as _check_bohr_parameter_sweep_execution,
 )
 from evaluation.validators.budget import check_duration_budget as _check_duration_budget
@@ -160,6 +163,23 @@ def check_bohr_job_stop_record(
         machine_type=cfg.get("machine_type", ""),
         command=cfg.get("command", ""),
         job_name_prefix=cfg.get("job_name_prefix", ""),
+    )
+
+
+def check_bohr_job_stop_execution(
+    *, evidence: EvidenceBundle | None, ref: ReferenceAnswer
+) -> tuple[bool, str]:
+    if evidence is None or not evidence.workspace_dir:
+        return False, "no workspace root"
+    cfg = ref.value if isinstance(ref.value, dict) else {}
+    return _check_bohr_job_stop_execution(
+        evidence.workspace_dir,
+        filename=cfg.get("filename", ""),
+        image=cfg.get("image", ""),
+        machine_type=cfg.get("machine_type", ""),
+        command=cfg.get("command", ""),
+        job_name_prefix=cfg.get("job_name_prefix", ""),
+        receipts=evidence.bohr_cli_receipts,
     )
 
 

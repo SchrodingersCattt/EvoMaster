@@ -584,7 +584,7 @@ questions:
   - key: artifact
     value: b9_actions.json
     workspace_resolve: root
-  - key: stop_record
+  - key: stop_execution
     value:
       filename: b9_actions.json
       image: registry.dp.tech/dptech/ubuntu:22.04-py3.10-cuda12.1
@@ -592,24 +592,6 @@ questions:
       command: echo "b9 started" > b9_started.txt && sleep 600
       job_name_prefix: b9-stop-running-
     workspace_resolve: root
-  - key: submitted_via_cli
-    tool_name: Bash
-    tool_arg: command
-    value:
-      pattern: '(?:^|[\n;&|]\s*)(?:(?:env|sudo)(?:\s+[^\s;&|]+)*\s+)?(?:[^\s;&|]+/)?bohr\s+job\s+submit\b(?![^\n;&|]*(?:-h|--help)(?:\s|$))'
-      min_matches: 1
-  - key: polled_via_cli
-    tool_name: Bash
-    tool_arg: command
-    value:
-      pattern: '(?:^|[\n;&|]\s*)(?:(?:env|sudo)(?:\s+[^\s;&|]+)*\s+)?(?:[^\s;&|]+/)?bohr\s+job\s+describe\b'
-      min_matches: 2
-  - key: stopped_via_cli
-    tool_name: Bash
-    tool_arg: command
-    value:
-      pattern: '(?:^|[\n;&|]\s*)(?:(?:env|sudo)(?:\s+[^\s;&|]+)*\s+)?(?:[^\s;&|]+/)?bohr\s+job\s+(?:terminate|kill|\+cancel)\b(?![^\n;&|]*(?:-h|--help)(?:\s|$))(?=[^\n;&|]*(?:--job_id(?:=|\s+)|-j(?:=|\s+)|\s+)[1-9]\d*\b)'
-      min_matches: 1
   - key: turn_budget
     value:
       max: 30
@@ -618,22 +600,10 @@ questions:
     criterion: b9_actions.json written to workspace.
     axis: correctness
     verify: artifact_exists
-  - id: stop_record
+  - id: stop_execution
     criterion: The record identifies the self-submitted job and its configuration, preserves status history, and records a successful stop action or stopped state.
     axis: correctness
-    verify: bohr_job_stop_record
-  - id: submitted_via_cli
-    criterion: The disposable sleep job was submitted through bohr-cli.
-    axis: grounding
-    verify: tool_args_regex
-  - id: polled_via_cli
-    criterion: The submitted job was inspected through bohr-cli before and after the stop action.
-    axis: grounding
-    verify: tool_args_regex
-  - id: stopped_via_cli
-    criterion: The submitted job was stopped through Bohr-CLI; terminate, kill, cancel, and a terminate-to-kill fallback are all acceptable.
-    axis: grounding
-    verify: tool_args_regex
+    verify: bohr_job_stop_execution
   - id: turn_budget
     criterion: Agent completes within turn budget.
     axis: efficiency

@@ -100,6 +100,7 @@ VerifyLiteral = Literal[
     "json_file_schema",
     "bohr_gpu_comparison_record",
     "bohr_job_monitor_execution",
+    "bohr_job_stop_execution",
     "bohr_parameter_sweep_execution",
     "bohr_parameter_sweep_record",
     "bohr_job_stop_record",
@@ -375,6 +376,7 @@ class QuestionItem(BaseModel):
             "json_file_schema",
             "bohr_gpu_comparison_record",
             "bohr_job_monitor_execution",
+            "bohr_job_stop_execution",
             "bohr_parameter_sweep_record",
             "bohr_job_stop_record",
             "bohr_job_upgrade_record",
@@ -520,12 +522,15 @@ class QuestionItem(BaseModel):
                     "requires filename"
                 )
         for item in self.scoring_checklist:
-            if item.verify != "bohr_job_stop_record":
+            if item.verify not in {
+                "bohr_job_stop_execution",
+                "bohr_job_stop_record",
+            }:
                 continue
             value = refs_by_key[item.id].value
             if not isinstance(value, dict):
                 raise ValueError(
-                    f"bohr_job_stop_record reference '{item.id}' must be an object"
+                    f"{item.verify} reference '{item.id}' must be an object"
                 )
             expected_keys = {
                 "filename",
@@ -537,7 +542,7 @@ class QuestionItem(BaseModel):
             unknown_keys = set(value) - expected_keys
             if unknown_keys:
                 raise ValueError(
-                    f"bohr_job_stop_record reference '{item.id}' has unsupported "
+                    f"{item.verify} reference '{item.id}' has unsupported "
                     f"keys: {sorted(unknown_keys)}"
                 )
             missing_keys = [
@@ -547,7 +552,7 @@ class QuestionItem(BaseModel):
             ]
             if missing_keys:
                 raise ValueError(
-                    f"bohr_job_stop_record reference '{item.id}' requires non-empty "
+                    f"{item.verify} reference '{item.id}' requires non-empty "
                     f"string values for: {missing_keys}"
                 )
         for item in self.scoring_checklist:

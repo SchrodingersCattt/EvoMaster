@@ -605,52 +605,13 @@ def test_bwo_stop_running_v4_is_isolated_and_accepts_stop_fallbacks() -> None:
         assert leaked_term not in prompt
 
     checklist_by_id = {item.id: item for item in question.scoring_checklist}
-    assert checklist_by_id["stop_record"].verify == "bohr_job_stop_record"
+    assert set(checklist_by_id) == {"artifact", "stop_execution", "turn_budget"}
+    assert (
+        checklist_by_id["stop_execution"].verify == "bohr_job_stop_execution"
+    )
 
     refs_by_key = {ref.key: ref for ref in question.reference_answers}
-    commands_by_key = {
-        "submitted_via_cli": (
-            "bohr job submit --job_name b9-stop-running-1721123456 "
-            "--command 'echo \"b9 started\" > b9_started.txt && sleep 600'"
-        ),
-        "polled_via_cli": "bohr job describe -j 20409999 --json",
-        "stopped_via_cli": "bohr job terminate 20409999",
-    }
-    for key, command in commands_by_key.items():
-        assert re.search(refs_by_key[key].value["pattern"], command)
-
-    submit_pattern = refs_by_key["submitted_via_cli"].value["pattern"]
-    multiline_submit = (
-        "bohr job submit \\\n"
-        "  --image_address registry.dp.tech/dptech/ubuntu:22.04-py3.10-cuda12.1 \\\n"
-        "  --machine_type c2_m4_cpu \\\n"
-        "  --command 'echo \"b9 started\" > b9_started.txt && sleep 600'"
-    )
-    assert re.search(submit_pattern, multiline_submit)
-    assert re.search(
-        submit_pattern,
-        "bohr job submit -c 'echo started && sleep 600' -t c2_m4_cpu",
-    )
-    assert not re.search(submit_pattern, "bohr job submit --help")
-
-    control_ref = refs_by_key["stopped_via_cli"]
-    assert control_ref.value["min_matches"] == 1
-    assert re.search(control_ref.value["pattern"], "bohr job kill 20409999")
-    assert (
-        len(
-            re.findall(
-                control_ref.value["pattern"],
-                "bohr job terminate 23050001\nbohr job kill 23050001",
-            )
-        )
-        == 2
-    )
-    assert not re.search(
-        control_ref.value["pattern"],
-        "bohr job_group terminate 16309999 --yes",
-    )
-    assert not re.search(control_ref.value["pattern"], "bohr job terminate")
-    assert not re.search(control_ref.value["pattern"], "bohr job kill --help")
+    assert set(refs_by_key) == {"artifact", "stop_execution", "turn_budget"}
 
 
 def test_bwo_gpu_compare_v4_accepts_forward_compatible_output() -> None:

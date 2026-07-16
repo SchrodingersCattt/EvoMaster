@@ -6,8 +6,9 @@ import json
 from pathlib import Path
 
 from evaluation.core.evaluator import BinaryEvaluator
-from evaluation.core.evidence import EvidenceBundle
+from evaluation.core.evidence import BohrCliReceiptRecord, EvidenceBundle
 from evaluation.core.runner import flatten_banks, load_question_banks
+from evaluation.validators.bohr_cli import check_bohr_job_stop_execution
 from evaluation.validators.json_file import check_bohr_job_stop_record
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -16,6 +17,63 @@ IMAGE = 'registry.dp.tech/dptech/ubuntu:22.04-py3.10-cuda12.1'
 MACHINE_TYPE = 'c2_m4_cpu'
 COMMAND = 'echo "b9 started" > b9_started.txt && sleep 600'
 JOB_NAME = 'b9-stop-running-1721123456'
+BOHR_JOB_ID = 20400001
+PLATFORM_JOB_ID = 23050001
+
+
+def _receipt(**values) -> BohrCliReceiptRecord:
+    return BohrCliReceiptRecord.model_validate(
+        {
+            'schema_version': 'bohr_cli_receipt_v1',
+            'exit_code': 0,
+            'ok': True,
+            **values,
+        }
+    )
+
+
+def _execution_receipts(
+    *, control_job_id: int = PLATFORM_JOB_ID
+) -> list[BohrCliReceiptRecord]:
+    submit_ids = {
+        'job_ids': [BOHR_JOB_ID, PLATFORM_JOB_ID],
+        'bohr_job_ids': [BOHR_JOB_ID],
+        'platform_job_ids': [PLATFORM_JOB_ID],
+    }
+    return [
+        _receipt(
+            operation='job.submit',
+            argv=['job', 'submit', '-o', 'json'],
+            captured_json=True,
+            request={
+                'image_address': IMAGE,
+                'machine_type': MACHINE_TYPE,
+                'command': COMMAND,
+                'job_name': JOB_NAME,
+            },
+            ids=submit_ids,
+        ),
+        _receipt(
+            operation='job.describe',
+            argv=['job', 'describe', '-i', str(BOHR_JOB_ID), '-o', 'json'],
+            captured_json=True,
+            request={'bohr_job_ids': [BOHR_JOB_ID]},
+            ids=submit_ids,
+            job_state={'status': 3, 'web_status': 9},
+        ),
+        _receipt(
+            operation='job.terminate',
+            argv=['job', 'terminate', str(control_job_id), '-o', 'json'],
+        ),
+        _receipt(
+            operation='job.describe',
+            argv=['job', 'describe', '-i', str(BOHR_JOB_ID), '-o', 'json'],
+            captured_json=True,
+            request={'bohr_job_ids': [BOHR_JOB_ID]},
+            ids=submit_ids,
+            job_state={'status': 6, 'web_status': 6},
+        ),
+    ]
 
 
 def _write_record(tmp_path: Path, value: object) -> None:
@@ -149,36 +207,28 @@ def test_bohr_job_stop_record_is_registered_with_evaluator(tmp_path: Path) -> No
             task_id=question.id,
             workspace_dir=str(tmp_path),
             total_steps=5,
+            bohr_cli_receipts=_execution_receipts(),
         ),
-        tool_calls=[
-            {
-                'tool_name': 'Bash',
-                'tool_args': {
-                    'command': (
-                        "bohr job submit --command 'echo \"b9 started\" > "
-                        "b9_started.txt && sleep 600'"
-                    )
-                },
-            },
-            {
-                'tool_name': 'Bash',
-                'tool_args': {'command': 'bohr job describe -i 20400001 --json'},
-            },
-            {
-                'tool_name': 'Bash',
-                'tool_args': {'command': 'bohr job terminate 23050001'},
-            },
-            {
-                'tool_name': 'Bash',
-                'tool_args': {'command': 'bohr job kill 23050001'},
-            },
-            {
-                'tool_name': 'Bash',
-                'tool_args': {'command': 'bohr job describe -i 20400001 --json'},
-            },
-        ],
     )
 
-    assert record.criteria_results['stop_record'].passed is True
-    assert record.criteria_results['submitted_via_cli'].passed is True
-    assert record.criteria_results['stopped_via_cli'].passed is True
+    result = record.criteria_results['stop_execution']
+    assert result.passed is True, result.reason
+
+
+def test_bohr_job_stop_execution_rejects_control_of_another_job(
+    tmp_path: Path,
+) -> None:
+    _write_record(tmp_path, _flat_record())
+
+    ok, reason = check_bohr_job_stop_execution(
+        tmp_path,
+        filename='b9_actions.json',
+        image=IMAGE,
+        machine_type=MACHINE_TYPE,
+        command=COMMAND,
+        job_name_prefix='b9-stop-running-',
+        receipts=_execution_receipts(control_job_id=23059999),
+    )
+
+    assert not ok
+    assert 'submitted job' in reason
