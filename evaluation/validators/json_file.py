@@ -323,6 +323,85 @@ def check_bohr_gpu_comparison_record(
     return True, f'{filename}: recommended machine is a listed in-stock candidate'
 
 
+def check_bohr_parameter_sweep_record(
+    workspace_dir: str | Path,
+    *,
+    filename: str,
+) -> tuple[bool, str]:
+    """Validate grouped 300-1000 K sweep semantics without prescribing layout."""
+    if not filename:
+        return False, 'bohr_parameter_sweep_record: no filename provided'
+
+    root = Path(workspace_dir)
+    fpath = _resolve_file(root, filename)
+    if fpath is None:
+        return False, f'{filename} not found in workspace'
+    try:
+        data = json.loads(fpath.read_text(encoding='utf-8'))
+    except ValueError as exc:
+        return False, f'{filename} is not valid JSON: {exc}'
+
+    def _normalise_key(value: object) -> str:
+        return re.sub(r'[^a-z0-9]', '', str(value).lower())
+
+    def _positive_int(value: object) -> int | None:
+        if not _is_positive_id(value):
+            return None
+        return int(value)
+
+    def _temperature(value: object) -> int | None:
+        if isinstance(value, bool):
+            return None
+        if isinstance(value, int):
+            return value
+        if isinstance(value, str) and value.isdigit():
+            return int(value)
+        return None
+
+    group_ids: set[int] = set()
+    jobs: list[tuple[int, int]] = []
+    group_keys = {'groupid', 'jobgroupid', 'taskgroupid'}
+    for mapping in (value for value in _walk_json(data) if isinstance(value, dict)):
+        normalised = {_normalise_key(key): value for key, value in mapping.items()}
+        for key in group_keys:
+            if key not in normalised:
+                continue
+            group_id = _positive_int(normalised[key])
+            if group_id is None:
+                return False, f'{filename}: task group ID must be positive'
+            group_ids.add(group_id)
+
+        if 'temperaturek' not in normalised or 'jobid' not in normalised:
+            continue
+        temperature = _temperature(normalised['temperaturek'])
+        job_id = _positive_int(normalised['jobid'])
+        if temperature is None:
+            return False, f'{filename}: temperature_K must be an integer'
+        if job_id is None:
+            return False, f'{filename}: every job_id must be positive'
+        jobs.append((temperature, job_id))
+
+    if not group_ids:
+        return False, f'{filename}: no positive task group ID recorded'
+    if len(group_ids) != 1:
+        return False, f'{filename}: conflicting task group IDs recorded'
+    if len(jobs) != 8:
+        return False, f'{filename}: expected 8 temperature jobs, found {len(jobs)}'
+
+    expected_temperatures = set(range(300, 1001, 100))
+    temperatures = [temperature for temperature, _job_id in jobs]
+    if set(temperatures) != expected_temperatures or len(set(temperatures)) != 8:
+        return False, f'{filename}: temperatures must cover 300-1000 K by 100 K once'
+    job_ids = [job_id for _temperature_k, job_id in jobs]
+    if len(set(job_ids)) != 8:
+        return False, f'{filename}: job IDs must identify eight distinct tasks'
+
+    return (
+        True,
+        f'{filename}: one task group and eight distinct 300-1000 K jobs are recorded',
+    )
+
+
 def check_json_file_numeric_range(
     workspace_dir: str | Path,
     *,

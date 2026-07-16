@@ -33,6 +33,7 @@ from .evaluator_wiring import (
     check_bohr_gpu_comparison_record,
     check_bohr_job_stop_record,
     check_bohr_job_upgrade_record,
+    check_bohr_parameter_sweep_record,
     check_checkcif_alerts,
     check_csv_row_count_from_evidence,
     check_duration_budget,
@@ -189,6 +190,54 @@ _SCRIPT_EXECUTOR_TEMPLATE = (
 _INLINE_SCRIPT_EXECUTOR_RE = re.compile(
     r"(?:^|[\n;&|]\s*)(?:[^\s;&|]+/)?" r"(?:python(?:3(?:\.\d+)*)?|bash|sh)\s+[^\s;&|]+"
 )
+_HEREDOC_OPENER_RE = re.compile(
+    r"(?m)^[ \t]*cat\b[^\n]*<<-?[ \t]*(?P<quote>['\"]?)"
+    r"(?P<tag>[A-Za-z_][A-Za-z0-9_]*)(?P=quote)[^\n]*$"
+)
+_HEREDOC_REDIRECT_RE = re.compile(
+    r"(?<![<\d])>{1,2}[ \t]*(?P<quote>['\"]?)" r"(?P<path>[^'\"\s;&|]+)(?P=quote)"
+)
+
+
+def _find_heredoc_scripts(command: str) -> list[tuple[str, str, int, int]]:
+    """Return path, body, and body span for ``cat ... <<TAG`` writes."""
+    scripts: list[tuple[str, str, int, int]] = []
+    for opener in _HEREDOC_OPENER_RE.finditer(command):
+        redirect = _HEREDOC_REDIRECT_RE.search(opener.group(0))
+        if redirect is None:
+            continue
+        content_start = opener.end()
+        if command[content_start : content_start + 2] == "\r\n":
+            content_start += 2
+        elif command[content_start : content_start + 1] == "\n":
+            content_start += 1
+        terminator = re.search(
+            rf"(?m)^[ \t]*{re.escape(opener.group('tag'))}[ \t]*$",
+            command[content_start:],
+        )
+        if terminator is None:
+            continue
+        content_end = content_start + terminator.start()
+        terminator_end = content_start + terminator.end()
+        scripts.append(
+            (
+                redirect.group("path"),
+                command[content_start:content_end],
+                content_start,
+                terminator_end,
+            )
+        )
+    return scripts
+
+
+def _mask_heredoc_bodies(command: str, scripts: list[tuple[str, str, int, int]]) -> str:
+    """Hide heredoc data while preserving newlines and subsequent shell commands."""
+    masked = list(command)
+    for _path, _content, start, end in scripts:
+        for index in range(start, end):
+            if masked[index] not in "\r\n":
+                masked[index] = " "
+    return "".join(masked)
 
 
 @_R("scripted_tool_args_regex")
@@ -230,15 +279,33 @@ def _h_scripted_tool_args_regex(ctx):
             command = args.get(ref.tool_arg)
             if not isinstance(command, str):
                 continue
-            executor_calls.append((index, command))
-            # Here-doc bodies are data until an interpreter executes them.  Do not
-            # count command-looking text inside them as a direct invocation.
-            if "<<" not in command:
-                direct_matches += sum(1 for _ in direct_regex.finditer(command))
-            if script_regex.search(command) and _INLINE_SCRIPT_EXECUTOR_RE.search(
-                command
+            heredoc_scripts = _find_heredoc_scripts(command)
+            executable_command = _mask_heredoc_bodies(command, heredoc_scripts)
+            executor_calls.append((index, executable_command))
+            direct_matches += sum(1 for _ in direct_regex.finditer(executable_command))
+            matching_heredocs = [
+                (path, content)
+                for path, content, _start, _end in heredoc_scripts
+                if script_regex.search(content)
+            ]
+            heredoc_executed_inline = any(
+                re.search(
+                    _SCRIPT_EXECUTOR_TEMPLATE.replace(
+                        "{script}",
+                        re.escape(PurePath(path.replace("\\", "/")).name),
+                    ),
+                    executable_command,
+                )
+                for path, _content in matching_heredocs
+            )
+            if heredoc_executed_inline or (
+                script_regex.search(executable_command)
+                and _INLINE_SCRIPT_EXECUTOR_RE.search(executable_command)
             ):
                 inline_scripts += 1
+            written_scripts.extend(
+                (index, path, content) for path, content in matching_heredocs
+            )
         elif tool_name == "Write":
             path = args.get("file_path")
             content = args.get("content")
@@ -450,6 +517,7 @@ for _name, _fn in [
     ("text_file_regex_absent", check_text_file_regex_absent_from_evidence),
     ("json_file_schema", check_json_file_schema),
     ("bohr_gpu_comparison_record", check_bohr_gpu_comparison_record),
+    ("bohr_parameter_sweep_record", check_bohr_parameter_sweep_record),
     ("bohr_job_stop_record", check_bohr_job_stop_record),
     ("bohr_job_upgrade_record", check_bohr_job_upgrade_record),
     ("json_file_key_values", check_json_file_key_values),

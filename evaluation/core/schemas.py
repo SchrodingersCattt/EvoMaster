@@ -99,6 +99,7 @@ VerifyLiteral = Literal[
     # JSON file checks
     "json_file_schema",
     "bohr_gpu_comparison_record",
+    "bohr_parameter_sweep_record",
     "bohr_job_stop_record",
     "bohr_job_upgrade_record",
     "json_file_key_values",
@@ -371,6 +372,7 @@ class QuestionItem(BaseModel):
             "answer_json_numeric",
             "json_file_schema",
             "bohr_gpu_comparison_record",
+            "bohr_parameter_sweep_record",
             "bohr_job_stop_record",
             "bohr_job_upgrade_record",
             "json_file_numeric_range",
@@ -441,6 +443,25 @@ class QuestionItem(BaseModel):
             if not isinstance(filename, str) or not filename:
                 raise ValueError(
                     f"bohr_gpu_comparison_record reference '{item.id}' requires filename"
+                )
+        for item in self.scoring_checklist:
+            if item.verify != "bohr_parameter_sweep_record":
+                continue
+            value = refs_by_key[item.id].value
+            if not isinstance(value, dict):
+                raise ValueError(
+                    f"bohr_parameter_sweep_record reference '{item.id}' must be an object"
+                )
+            unknown_keys = set(value) - {"filename"}
+            if unknown_keys:
+                raise ValueError(
+                    f"bohr_parameter_sweep_record reference '{item.id}' has unsupported "
+                    f"keys: {sorted(unknown_keys)}"
+                )
+            filename = value.get("filename")
+            if not isinstance(filename, str) or not filename:
+                raise ValueError(
+                    f"bohr_parameter_sweep_record reference '{item.id}' requires filename"
                 )
         for item in self.scoring_checklist:
             if item.verify != "bohr_job_stop_record":

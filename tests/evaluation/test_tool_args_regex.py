@@ -153,6 +153,60 @@ def test_scripted_tool_args_regex_accepts_written_and_executed_script() -> None:
     assert "linked_scripts=1" in result.reason
 
 
+def test_scripted_tool_args_regex_accepts_heredoc_script_executed_later() -> None:
+    record = BinaryEvaluator().evaluate(
+        question=_scripted_tool_regex_question(),
+        answer="done",
+        tool_calls=[
+            {
+                "tool_name": "Bash",
+                "tool_args": {
+                    "command": (
+                        "cat > poll_job.py << 'SCRIPT'\n"
+                        "import subprocess\n"
+                        'subprocess.run(["bohr", "job", "describe", "-i", job_id])\n'
+                        "SCRIPT\n"
+                        "chmod +x poll_job.py"
+                    )
+                },
+            },
+            {
+                "tool_name": "Bash",
+                "tool_args": {"command": "python3 poll_job.py"},
+            },
+        ],
+    )
+
+    result = record.criteria_results["polled"]
+    assert result.passed is True
+    assert "linked_scripts=1" in result.reason
+
+
+def test_scripted_tool_args_regex_rejects_unexecuted_heredoc_script() -> None:
+    record = BinaryEvaluator().evaluate(
+        question=_scripted_tool_regex_question(),
+        answer="done",
+        tool_calls=[
+            {
+                "tool_name": "Bash",
+                "tool_args": {
+                    "command": (
+                        "cat <<'SCRIPT' > poll_job.py\n"
+                        "import subprocess\n"
+                        'subprocess.run(["bohr", "job", "describe", "-i", job_id])\n'
+                        "python3 -c 'print(\"helper\")'\n"
+                        "SCRIPT"
+                    )
+                },
+            }
+        ],
+    )
+
+    result = record.criteria_results["polled"]
+    assert result.passed is False
+    assert "linked_scripts=0" in result.reason
+
+
 def test_scripted_tool_args_regex_accepts_direct_command() -> None:
     record = BinaryEvaluator().evaluate(
         question=_scripted_tool_regex_question(),
@@ -410,69 +464,24 @@ def test_bwo_lit_db_v3_accepts_text_or_structured_batch_strategy() -> None:
     )
 
 
-def test_bwo_param_sweep_v3_requires_complete_grouped_sweep() -> None:
+def test_bwo_param_sweep_v4_requires_complete_grouped_sweep() -> None:
     questions = flatten_banks(load_question_banks(QUESTION_BANK_DIR))
-    question = next(q for q in questions if q.id == "BWO_param_sweep_003_20260715_v3")
+    question = next(q for q in questions if q.id == "BWO_param_sweep_003_20260715_v4")
     assert all(
         q.id
         not in {
             "BWO_param_sweep_003_20260715",
             "BWO_param_sweep_003_20260715_v2",
+            "BWO_param_sweep_003_20260715_v3",
         }
         for q in questions
     )
-
-    schema_ref = next(
-        ref for ref in question.reference_answers if ref.key == "sweep_schema"
+    assert "`job_group_id`" not in question.human_prompt_seed
+    assert "`task_group_id`" not in question.human_prompt_seed
+    sweep_ref = next(
+        ref for ref in question.reference_answers if ref.key == "sweep_record"
     )
-    schema = schema_ref.value["schema"]
-    validator = validator_for(schema)(schema)
-    valid = {
-        "job_group_id": 9876,
-        "jobs": [
-            {"temperature_K": temperature, "job_id": 1000 + index}
-            for index, temperature in enumerate(range(300, 1001, 100))
-        ],
-    }
-    validator.validate(valid)
-    validator.validate(
-        {
-            "group_id": "9876",
-            "jobs": [
-                {
-                    "temperature_K": temperature,
-                    "job_id": str(1000 + index),
-                }
-                for index, temperature in enumerate(range(300, 1001, 100))
-            ],
-        }
-    )
-    with pytest.raises(ValidationError):
-        validator.validate(
-            {
-                **valid,
-                "jobs": [
-                    *valid["jobs"][:-1],
-                    {"temperature_K": 900, "job_id": 9999},
-                ],
-            }
-        )
-    with pytest.raises(ValidationError):
-        validator.validate({**valid, "job_group_id": 0})
-    with pytest.raises(ValidationError):
-        validator.validate({"jobs": valid["jobs"]})
-    with pytest.raises(ValidationError):
-        validator.validate({**valid, "job_group_id": "0"})
-    with pytest.raises(ValidationError):
-        validator.validate(
-            {
-                **valid,
-                "jobs": [
-                    {**valid["jobs"][0], "job_id": "job-1000"},
-                    *valid["jobs"][1:],
-                ],
-            }
-        )
+    assert sweep_ref.value == {"filename": "b3_jobs.json"}
 
     group_ref = next(
         ref for ref in question.reference_answers if ref.key == "group_created_via_cli"

@@ -133,7 +133,7 @@ questions:
     axis: efficiency
     verify: turn_budget
 
-- id: BWO_param_sweep_003_20260715_v3
+- id: BWO_param_sweep_003_20260715_v4
   capability: workflow_orchestration
   domain: agnostic
   scope: platform
@@ -147,109 +147,9 @@ questions:
   reference_answers:
   - key: artifact
     value: b3_jobs.json
-  - key: sweep_schema
+  - key: sweep_record
     value:
       filename: b3_jobs.json
-      schema:
-        type: object
-        required:
-        - jobs
-        anyOf:
-        - required:
-          - job_group_id
-        - required:
-          - group_id
-        properties:
-          job_group_id:
-            oneOf:
-            - type: integer
-              minimum: 1
-            - type: string
-              pattern: '^[1-9][0-9]*$'
-          group_id:
-            oneOf:
-            - type: integer
-              minimum: 1
-            - type: string
-              pattern: '^[1-9][0-9]*$'
-          jobs:
-            type: array
-            minItems: 8
-            maxItems: 8
-            items:
-              type: object
-              required:
-              - temperature_K
-              - job_id
-              properties:
-                temperature_K:
-                  type: integer
-                  enum:
-                  - 300
-                  - 400
-                  - 500
-                  - 600
-                  - 700
-                  - 800
-                  - 900
-                  - 1000
-                job_id:
-                  oneOf:
-                  - type: integer
-                    minimum: 1
-                  - type: string
-                    pattern: '^[1-9][0-9]*$'
-              additionalProperties: false
-            allOf:
-            - contains:
-                properties:
-                  temperature_K:
-                    const: 300
-                required:
-                - temperature_K
-            - contains:
-                properties:
-                  temperature_K:
-                    const: 400
-                required:
-                - temperature_K
-            - contains:
-                properties:
-                  temperature_K:
-                    const: 500
-                required:
-                - temperature_K
-            - contains:
-                properties:
-                  temperature_K:
-                    const: 600
-                required:
-                - temperature_K
-            - contains:
-                properties:
-                  temperature_K:
-                    const: 700
-                required:
-                - temperature_K
-            - contains:
-                properties:
-                  temperature_K:
-                    const: 800
-                required:
-                - temperature_K
-            - contains:
-                properties:
-                  temperature_K:
-                    const: 900
-                required:
-                - temperature_K
-            - contains:
-                properties:
-                  temperature_K:
-                    const: 1000
-                required:
-                - temperature_K
-        additionalProperties: false
   - key: group_created_via_cli
     tool_name: Bash
     tool_arg: command
@@ -261,8 +161,8 @@ questions:
     tool_name: Bash
     tool_arg: command
     value:
-      direct_pattern: '(?:^|[\n;&|]\s*)(?:(?:env|sudo)(?:\s+[^\s;&|]+)*\s+)?(?:[^\s;&|]+/)?bohr\s+job\s+submit\b(?=[^\n;&|]*(?:(?:--job_group_id|-g)(?:\s+|=))\S+)'
-      script_pattern: '(?:(?:^|[\n;&|]\s*)(?:(?:env|sudo)(?:\s+[^\s;&|]+)*\s+)?(?:[^\s;&|]+/)?bohr\s+job\s+submit\b(?=[^\n;&|]*(?:(?:--job_group_id|-g)(?:\s+|=))\S+)|["'']bohr["'']\s*,\s*["'']job["'']\s*,\s*["'']submit["''](?=[\s\S]{0,1000}?["''](?:--job_group_id|-g)["'']))'
+      direct_pattern: '(?:^|[\n;&|]\s*|\$\(\s*)(?:(?:env|sudo)(?:\s+[^\s;&|]+)*\s+)?(?:[^\s;&|]+/)?bohr\s+job\s+submit\b(?=[\s\S]{0,1200}?(?:(?:--job_group_id|-g)(?:\s+|=))\S+)'
+      script_pattern: '(?:(?:^|[\n;&|]\s*|\$\(\s*)(?:(?:env|sudo)(?:\s+[^\s;&|]+)*\s+)?(?:[^\s;&|]+/)?bohr\s+job\s+submit\b(?=[\s\S]{0,1200}?(?:(?:--job_group_id|-g)(?:\s+|=))\S+)|["'']bohr["'']\s*,\s*["'']job["'']\s*,\s*["'']submit["''](?=[\s\S]{0,1000}?["''](?:--job_group_id|-g)["'']))'
       min_matches: 1
   - key: turn_budget
     value:
@@ -272,10 +172,10 @@ questions:
     criterion: b3_jobs.json written to workspace.
     axis: correctness
     verify: artifact_exists
-  - id: sweep_schema
+  - id: sweep_record
     criterion: One positive job group ID and eight positive job IDs cover every 100 K step from 300 K through 1000 K.
     axis: correctness
-    verify: json_file_schema
+    verify: bohr_parameter_sweep_record
   - id: group_created_via_cli
     criterion: The job group was created through bohr-cli exactly once.
     axis: grounding
