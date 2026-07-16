@@ -6,6 +6,55 @@ from matmaster.bohrium.runtime import BohriumRuntimeHandle
 from matmaster.mcp.calculation.preflight import CalculationPreflight
 
 
+def test_requires_workspace_access_from_schema_or_config() -> None:
+    preflight = CalculationPreflight(
+        calculation_executors={
+            "mat_calc": {"path_params_by_tool": {"nested": ["items[].input_path"]}}
+        }
+    )
+
+    assert preflight.requires_workspace_access(
+        server_name="mat_calc",
+        remote_tool_name="run",
+        input_schema={
+            "type": "object",
+            "properties": {"input_path": {"type": "string", "format": "path"}},
+        },
+        tool_description=None,
+    )
+    assert preflight.requires_workspace_access(
+        server_name="mat_calc",
+        remote_tool_name="nested",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {"input_path": {"type": "string"}},
+                    },
+                }
+            },
+        },
+        tool_description=None,
+    )
+
+
+def test_job_control_without_paths_does_not_require_workspace_access() -> None:
+    preflight = CalculationPreflight()
+
+    assert not preflight.requires_workspace_access(
+        server_name="mat_sg",
+        remote_tool_name="query_job_status",
+        input_schema={
+            "type": "object",
+            "properties": {"job_id": {"type": "string"}},
+        },
+        tool_description="Query status",
+    )
+
+
 def test_prepare_call_builds_submission_and_materializes_selected_inputs():
     runtime = MagicMock(spec=BohriumRuntimeHandle)
     runtime.build_submission.return_value = MagicMock(

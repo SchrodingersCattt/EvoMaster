@@ -460,6 +460,21 @@ def test_default_acquire_timeout_outlives_creation_claim():
     assert config.acquire_timeout_seconds > config.creation_ttl_seconds
 
 
+def test_acquire_honors_cancellation_before_provider_work():
+    manager, _nodes, _leases, provider = _manager()
+
+    with pytest.raises(RuntimeError, match="acquisition cancelled"):
+        manager.acquire(
+            NodeIdentity("u1", "o1", 99, 456),
+            session_id="session-1",
+            invocation_id="inv-1",
+            access_key="ak",
+            cancel_checker=lambda: True,
+        )
+
+    assert provider.create_count == 0
+
+
 def test_concurrent_invocations_share_one_node_and_last_release_stops_it():
     manager, nodes, leases, provider = _manager()
     identity = NodeIdentity("u1", "o1", 99, 456)

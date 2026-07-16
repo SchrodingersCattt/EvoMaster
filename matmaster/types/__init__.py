@@ -2,6 +2,12 @@
 
 from typing import Any
 
+from .bohrium_node_approval import (
+    BohriumNodeStartApprovalGate,
+    BohriumNodeStartDecision,
+    BohriumNodeStartOutcome,
+    BohriumNodeStartRequest,
+)
 from .cancellation import CancellationController, CancellationToken, CancelledError
 from .errors import LLMError
 from .events import (
@@ -46,6 +52,8 @@ from .messages import (
 )
 from .runtime_ports import (
     AgentRunPorts,
+    BohriumNodeAcquirer,
+    BohriumNodeBinding,
     BusEventSink,
     CheckpointSink,
     CheckpointSinkFactory,
@@ -143,6 +151,12 @@ __all__ = [
     "UserMessage",
     # runtime
     "AgentRunPorts",
+    "BohriumNodeStartApprovalGate",
+    "BohriumNodeStartDecision",
+    "BohriumNodeStartOutcome",
+    "BohriumNodeStartRequest",
+    "BohriumNodeAcquirer",
+    "BohriumNodeBinding",
     "AgentKernelSpec",
     "AgentKernelResources",
     "AgentKernelRuntime",

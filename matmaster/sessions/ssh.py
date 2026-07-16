@@ -36,6 +36,12 @@ except ImportError:
 _ANSI_RE = re.compile(r"\x1b\[[0-9;?]*[A-Za-z]|\r")
 
 
+class SSHConnectionError(ConnectionError):
+    """SSH transport recovery was exhausted for the current operation."""
+
+    recovery_attempted = False
+
+
 class SSHSession:
     """SSH session -- direct paramiko client, exec_command per-channel.
 
@@ -62,6 +68,7 @@ class SSHSession:
         self._connect_lock = threading.Lock()
         self._sftp_pool: SFTPPool | None = None
         self._workspace_path: str = config.workspace_path
+        self._connection_generation = 0
 
         # Session lifecycle
         self._is_open: bool = False
@@ -92,6 +99,16 @@ class SSHSession:
             upload_support=True,
             exec_cancel=True,
         )
+
+    @property
+    def connection_generation(self) -> int:
+        """Monotonic identity used to coalesce concurrent recovery reports."""
+        return self._connection_generation
+
+    @property
+    def connection_active(self) -> bool:
+        """Whether the current transport can accept a new remote operation."""
+        return self._transport_is_active()
 
     # ------------------------------------------------------------------
     # Session Protocol: open / close
@@ -441,7 +458,12 @@ class SSHSession:
     # Internal: SSH connection management
     # ------------------------------------------------------------------
 
-    def _connect(self) -> None:
+    def _connect(
+        self,
+        *,
+        max_attempts: int | None = None,
+        runtime_recovery: bool = False,
+    ) -> None:
         """Establish (or re-establish) the SSH connection with retry."""
         cfg = self.config
         host = cfg.host
@@ -453,7 +475,7 @@ class SSHSession:
         passphrase = cfg.passphrase
         connect_timeout = cfg.connect_timeout
         keepalive_interval = cfg.keepalive_interval
-        max_retries = cfg.max_retries
+        max_retries = max_attempts or cfg.max_retries
 
         if not host:
             raise ValueError("SSH host is required")
@@ -503,37 +525,72 @@ class SSHSession:
                 if attempt < max_retries:
                     time.sleep(min(2**attempt, 10))
         else:
-            raise ConnectionError(
+            try:
+                client.close()
+            except Exception:
+                pass
+            error = SSHConnectionError(
                 f"Failed to connect to {host}:{port} after {max_retries} attempts"
-            ) from last_exc
+            )
+            error.recovery_attempted = runtime_recovery
+            raise error from last_exc
 
         transport = client.get_transport()
         if transport is not None and keepalive_interval > 0:
             transport.set_keepalive(keepalive_interval)
 
         self._client = client
+        self._connection_generation += 1
+
+    def _transport_is_active(self) -> bool:
+        client = self._client
+        if client is None:
+            return False
+        transport = client.get_transport()
+        return bool(transport and transport.is_active())
+
+    def is_connection_error(self, error: BaseException) -> bool:
+        """Classify transport failures without treating command errors as outages."""
+        if isinstance(error, SSHConnectionError):
+            return True
+        if isinstance(error, (ConnectionError, EOFError)):
+            return True
+        return not self._transport_is_active()
+
+    def recover_connection_once(self, *, expected_generation: int) -> None:
+        """Reconnect this exact SSH binding once; never allocate another Node."""
+        with self._connect_lock:
+            if (
+                self._connection_generation != expected_generation
+                and self._transport_is_active()
+            ):
+                return
+
+            old_pool = self._sftp_pool
+            self._sftp_pool = None
+            if old_pool is not None:
+                old_pool.close_all()
+
+            old_client = self._client
+            self._client = None
+            if old_client is not None:
+                try:
+                    old_client.close()
+                except Exception:
+                    pass
+
+            self.logger.warning("SSH connection lost, attempting one reconnect...")
+            self._connect(max_attempts=1, runtime_recovery=True)
+            assert self._client is not None
+            self._sftp_pool = SFTPPool(self._client.get_transport())
 
     def _ensure_connected(self) -> None:
         """Check the SSH connection and reconnect if broken (double-check locking)."""
-        if (
-            self._client
-            and self._client.get_transport()
-            and self._client.get_transport().is_active()
-        ):
+        if self._transport_is_active():
             return
-        with self._connect_lock:
-            if (
-                self._client
-                and self._client.get_transport()
-                and self._client.get_transport().is_active()
-            ):
-                return
-            self.logger.warning("SSH connection lost, reconnecting...")
-            self._connect()
-            old_pool = self._sftp_pool
-            if old_pool:
-                old_pool.close_all()
-            self._sftp_pool = SFTPPool(self._client.get_transport())
+        self.recover_connection_once(
+            expected_generation=self._connection_generation,
+        )
 
     # ------------------------------------------------------------------
     # Internal: SSH command execution

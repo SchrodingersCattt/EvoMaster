@@ -45,27 +45,17 @@ class TestWriteValidation:
         assert result is not None
         assert result.decision == "deny"
 
-    def test_existing_file_without_read(self):
-        tool = WriteTool(
-            session=make_session(path_exists=True), workdir=PurePosixPath("/workspace")
-        )
+    def test_validate_input_never_probes_session(self):
+        """校验层不得触碰 session：冷态 DeferredBohriumSession 下探测会在
+        Node 审批门之前同步失败（写前必读检查已移入执行层）。"""
+        session = make_session(path_exists=True)
+        tool = WriteTool(session=session, workdir=PurePosixPath("/workspace"))
         state = ToolRunnerState()
-        result = asyncio.run(
-            tool.validate_input({"file_path": "/workspace/f.py", "content": "x"}, state)
-        )
-        assert result is not None
-        assert result.decision == "deny"
-
-    def test_existing_file_with_read(self):
-        tool = WriteTool(
-            session=make_session(path_exists=True), workdir=PurePosixPath("/workspace")
-        )
-        state = ToolRunnerState()
-        state.set("read_files", {"/workspace/f.py"})
         result = asyncio.run(
             tool.validate_input({"file_path": "/workspace/f.py", "content": "x"}, state)
         )
         assert result is None
+        session.path_exists.assert_not_called()
 
     def test_new_file_no_read_needed(self):
         tool = WriteTool(
@@ -88,6 +78,43 @@ class TestWriteExecution:
             tool.execute({"file_path": "/workspace/f.py", "content": "hello"})
         )
         session.write_file.assert_called_once_with("/workspace/f.py", "hello", "utf-8")
+        assert "successfully" in result.lower()
+
+    def test_existing_file_without_read_denied_at_execution(self):
+        session = make_session(path_exists=True, raw=b"old")
+        tool = WriteTool(session=session, workdir=PurePosixPath("/workspace"))
+        ctx = ToolExecutionContext(runner_state=ToolRunnerState())
+        result = asyncio.run(
+            tool.execute_with_context(
+                {"file_path": "/workspace/f.py", "content": "x"}, ctx
+            )
+        )
+        assert result.status == "error"
+        assert "must be read before overwrite" in result.content
+        session.write_file.assert_not_called()
+
+    def test_existing_file_with_read_allows_overwrite(self):
+        session = make_session(path_exists=True, raw=b"old")
+        tool = WriteTool(session=session, workdir=PurePosixPath("/workspace"))
+        state = ToolRunnerState()
+        state.set("read_files", {"/workspace/f.py"})
+        ctx = ToolExecutionContext(runner_state=state)
+        result = asyncio.run(
+            tool.execute_with_context(
+                {"file_path": "/workspace/f.py", "content": "x"}, ctx
+            )
+        )
+        assert result.status == "success"
+        session.write_file.assert_called_once()
+
+    def test_no_runner_state_skips_read_first_check(self):
+        """无 runner_state 的直调路径（如子代理/脚本）保持旧行为：不强制先读。"""
+        session = make_session(path_exists=True, raw=b"old")
+        tool = WriteTool(session=session, workdir=PurePosixPath("/workspace"))
+        result = asyncio.run(
+            tool.execute({"file_path": "/workspace/f.py", "content": "x"})
+        )
+        session.write_file.assert_called_once()
         assert "successfully" in result.lower()
 
     def test_write_uses_fresh_probe_when_snapshot_missing(self):

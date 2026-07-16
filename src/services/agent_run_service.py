@@ -308,6 +308,7 @@ class AgentRunService:
         bohrium_node_sku_id: int | None = None,
         bohrium_node_lifecycle_policy: str = "run_end",
         bohrium_node_idle_timeout_seconds: int | None = None,
+        bohrium_node_start_confirmation_enabled: bool = False,
     ) -> tuple[bool | tuple[bool, str], int, dict[str, Any] | None]:
         """Execute agent pipeline using generator event stream with fanout dispatch.
 
@@ -342,6 +343,7 @@ class AgentRunService:
         fanout: RunEventFanout | None = None
         exp = None
         bohrium_svc = None
+        bohrium_node_acquirer = None
         ssh_attached = False
         playground = None
         try:
@@ -384,6 +386,31 @@ class AgentRunService:
                 ),
             )
 
+            # Node approval must exist before the Bohrium stage builds the lazy
+            # runtime port. The same bridge is reused by later interactions.
+            from matmaster.integration.interaction_bridge import InteractionBridge
+
+            async def _interaction_event_sink(event: BusEvent) -> None:
+                await fanout.dispatch(event)
+
+            bridge = InteractionBridge(
+                session_id=session_id,
+                task_id=task_id,
+                invocation_id=invocation_id or "",
+                event_sink=_interaction_event_sink,
+                dao=get_redis_dao(),
+                timeout_seconds=1800,
+            )
+            from matmaster.integration.bohrium_node_approval_gate import (
+                BridgeBohriumNodeStartApprovalGate,
+            )
+
+            node_start_approval_gate = (
+                BridgeBohriumNodeStartApprovalGate(bridge)
+                if bohrium_node_start_confirmation_enabled
+                else None
+            )
+
             exp_name = mode or "direct"
             from matmaster.config.loader import load_exp_config
 
@@ -412,6 +439,7 @@ class AgentRunService:
                 bohrium_node_lifecycle_policy=bohrium_node_lifecycle_policy,
                 bohrium_node_idle_timeout_seconds=(bohrium_node_idle_timeout_seconds),
                 invocation_id=invocation_id,
+                node_start_approval_gate=node_start_approval_gate,
             )
             bohrium_svc = stage_result.bohrium_svc
             if stage_result.abort_result is not None:
@@ -419,6 +447,7 @@ class AgentRunService:
                 return (abort[0], abort[1], None)
             environment = stage_result.environment
             ssh_attached = stage_result.ssh_attached
+            bohrium_node_acquirer = getattr(stage_result, "node_acquirer", None)
             user_instructions = stage_result.user_instructions
 
             # -- Stage 4: Exp assembly --
@@ -559,20 +588,7 @@ class AgentRunService:
                     spawn_id=spawn_id,
                 )
 
-            # -- Stage 4b: interaction bridge --
-            from matmaster.integration.interaction_bridge import InteractionBridge
-
-            async def _interaction_event_sink(event: BusEvent) -> None:
-                await fanout.dispatch(event)
-
-            bridge = InteractionBridge(
-                session_id=session_id,
-                task_id=task_id,
-                invocation_id=invocation_id or "",
-                event_sink=_interaction_event_sink,
-                dao=get_redis_dao(),
-                timeout_seconds=1800,
-            )
+            # -- Stage 4b: interaction-specific adapters --
             from matmaster.integration.submit_approval_gate import (
                 BridgeSubmitApprovalGate,
             )
@@ -662,6 +678,7 @@ class AgentRunService:
                             session_id=session_id,
                         ),
                         bohrium_job_ledger=bohrium_ledger_port,
+                        bohrium_node_acquirer=bohrium_node_acquirer,
                         workspace_jobs=bohrium_jobs_port,
                         submit_approval_gate=submit_approval_gate,
                         tool_timeout_observer=FeishuToolTimeoutObserver(),
@@ -776,6 +793,13 @@ class AgentRunService:
             # Cleanup order matters:
             # 1. Bohrium cleanup is infrastructure-only. Normal node teardown must
             #    not append user-visible events after StreamClosedEvent.
+            if bohrium_node_acquirer is not None:
+                try:
+                    await bohrium_node_acquirer.close()
+                except Exception:
+                    logger.warning(
+                        "Bohrium lazy acquisition close error", exc_info=True
+                    )
             if bohrium_svc:
                 try:
                     await bohrium_svc.run_cleanup(

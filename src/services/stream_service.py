@@ -230,6 +230,7 @@ class ChatStreamService:
         bohrium_node_sku_id: int | None = None,
         bohrium_node_lifecycle_policy: str = "run_end",
         bohrium_node_idle_timeout_seconds: int | None = None,
+        bohrium_node_start_confirmation_enabled: bool = False,
         workspace: str | None = None,
         origin: str | None = None,
         delivery: dict | None = None,
@@ -285,6 +286,9 @@ class ChatStreamService:
             "bohrium_node_sku_id": bohrium_node_sku_id,
             "bohrium_node_lifecycle_policy": bohrium_node_lifecycle_policy,
             "bohrium_node_idle_timeout_seconds": bohrium_node_idle_timeout_seconds,
+            "bohrium_node_start_confirmation_enabled": bool(
+                bohrium_node_start_confirmation_enabled
+            ),
             "workspace": workspace_value,
             "origin": origin,
             "delivery": delivery,
@@ -710,6 +714,9 @@ class ChatStreamService:
             bohrium_node_sku_id=req.bohrium_node_sku_id,
             bohrium_node_lifecycle_policy=req.bohrium_node_lifecycle_policy,
             bohrium_node_idle_timeout_seconds=(req.bohrium_node_idle_timeout_seconds),
+            bohrium_node_start_confirmation_enabled=(
+                req.bohrium_node_start_confirmation_enabled
+            ),
             workspace=resolved_directory.remote_workdir,
             origin=None,
             delivery=None,

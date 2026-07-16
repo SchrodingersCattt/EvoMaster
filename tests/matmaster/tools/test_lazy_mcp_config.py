@@ -8,6 +8,7 @@ from matmaster.mcp.manager import MCPConcurrencyPolicy
 from matmaster.tools.lazy_mcp import (
     _DEFAULT_CALCULATION_SYNC_MCP_TOOL_TIMEOUT,
     configure_mcp_manager,
+    resolve_lazy_mcp_runtime_meta,
     resolve_lazy_mcp_tool_timeout,
 )
 
@@ -22,6 +23,41 @@ class FakeMCPManager:
         self.tool_include_only: dict = {}
         self.concurrency_defaults_by_transport: dict = {}
         self.concurrency_by_server: dict = {}
+
+
+def test_workspace_aware_calculation_tool_gets_node_capability() -> None:
+    meta = resolve_lazy_mcp_runtime_meta(
+        {
+            "description": "Run calculation",
+            "input_schema": {
+                "type": "object",
+                "properties": {"input_path": {"type": "string", "format": "path"}},
+            },
+            "runtime_meta": {"capabilities": ["calculation.submit"]},
+        },
+        mcp_config={"calculation_preflight": "calculation"},
+        server_name="mat_calc",
+        remote_tool_name="submit",
+    )
+
+    assert meta["capabilities"] == ["bohrium.node", "calculation.submit"]
+
+
+def test_path_free_calculation_query_stays_node_free() -> None:
+    meta = resolve_lazy_mcp_runtime_meta(
+        {
+            "description": "Query job status",
+            "input_schema": {
+                "type": "object",
+                "properties": {"job_id": {"type": "string"}},
+            },
+        },
+        mcp_config={"calculation_preflight": "calculation"},
+        server_name="mat_calc",
+        remote_tool_name="query",
+    )
+
+    assert meta["capabilities"] == []
 
 
 class TestConfigureMCPManager:
