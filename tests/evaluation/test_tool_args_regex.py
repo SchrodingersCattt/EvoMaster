@@ -606,9 +606,7 @@ def test_bwo_stop_running_v4_is_isolated_and_accepts_stop_fallbacks() -> None:
 
     checklist_by_id = {item.id: item for item in question.scoring_checklist}
     assert set(checklist_by_id) == {"artifact", "stop_execution", "turn_budget"}
-    assert (
-        checklist_by_id["stop_execution"].verify == "bohr_job_stop_execution"
-    )
+    assert checklist_by_id["stop_execution"].verify == "bohr_job_stop_execution"
 
     refs_by_key = {ref.key: ref for ref in question.reference_answers}
     assert set(refs_by_key) == {"artifact", "stop_execution", "turn_budget"}
@@ -830,9 +828,7 @@ def test_bec_upgrade_machine_v4_preserves_seed_job_config_without_leaking_ids() 
         assert leaked_term not in prompt
 
     checklist_by_id = {item.id: item for item in question.scoring_checklist}
-    assert checklist_by_id["upgrade_execution"].verify == (
-        "bohr_job_upgrade_execution"
-    )
+    assert checklist_by_id["upgrade_execution"].verify == ("bohr_job_upgrade_execution")
 
     refs_by_key = {ref.key: ref for ref in question.reference_answers}
     assert set(refs_by_key) == {"artifact", "upgrade_execution", "turn_budget"}
