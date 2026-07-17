@@ -26,7 +26,7 @@ questions:
   - key: has_machines
     value:
       filename: b1_resources.json
-      pattern: '"machine_types"\s*:\s*\[\s*\{'
+      pattern: '"machine_types"\s*:\s*\[\s*[\{"]'
   - key: turn_budget
     value:
       max: 6

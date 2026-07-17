@@ -11,10 +11,12 @@ This is the devshell counterpart of
 4. Write score / score_reason back to ``pending_ingest/*.json`` or submit them.
 
 **Ingest score (0/100):** a task passes (100) only when **every** scoring_checklist
-item passes; otherwise 0. The DevShell agent loop calls
-:func:`score_devshell_tasks_for_agent_loop` in-process, which treats ``token_budget_total``
-and ``turn_budget`` as non-blocking for the binary score (they still appear in ``score_reason``). The CLI
-invocation uses strict ``ingest_optional_checklist_ids=()`` (empty). Per-axis weighted ratios
+item passes; otherwise 0. Both the DevShell agent loop
+(:func:`score_devshell_tasks_for_agent_loop`, in-process) and the CLI ``--submit``
+invocation (:func:`main`) pass ``ingest_optional_checklist_ids=_DEVSHELL_AGENT_INGEST_OPTIONAL_IDS``,
+so budget-style criteria (``token_budget_total``, ``turn_budget``, ``duration_budget``,
+``efficiency_judge``, ``no_retries``) are non-blocking for the binary score in both paths;
+they still appear in ``score_reason``. Per-axis weighted ratios
 are still recorded in ``score_reason`` for debugging; they do not affect the numeric ingest score.
 Questions tagged ``bohr-cli`` additionally require a successful process-level Bohr-CLI
 receipt. Historical runs without receipts retain the prior ``Bash`` event fallback; direct
