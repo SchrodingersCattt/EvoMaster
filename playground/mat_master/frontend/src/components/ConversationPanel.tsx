@@ -26,7 +26,7 @@ function cardClass(source: string): string {
 
 function renderEntry(entry: LogEntry): React.ReactNode {
   if (entry.type === "planner_reply" && typeof entry.content === "string") {
-    return <div className="text-sm">Planner 回复: {entry.content}</div>;
+    return <div className="text-sm">Planner reply: {entry.content}</div>;
   }
   if (entry.type === "tool_result" && entry.content && typeof entry.content === "object") {
     const c = entry.content as { name?: string; result?: string };
@@ -56,10 +56,10 @@ export default function ConversationPanel({
       ref={scrollRef}
       className="flex flex-col h-full min-h-0 border border-gray-300 rounded-lg p-3 bg-white"
     >
-      <h2 className="text-sm font-semibold mb-1 text-[#1e293b] flex-shrink-0">对话</h2>
+      <h2 className="text-sm font-semibold mb-1 text-[#1e293b] flex-shrink-0">Conversation</h2>
       <div className="flex flex-col gap-3 overflow-y-auto flex-1 min-h-0">
       {filtered.length === 0 ? (
-        <div className="text-xs text-gray-500">暂无消息</div>
+        <div className="text-xs text-gray-500">No messages yet</div>
       ) : (
         filtered.map((log, i) => (
           <div key={log.msg_id ?? i} className={cardClass(log.source) + " whitespace-pre-wrap break-words"}>

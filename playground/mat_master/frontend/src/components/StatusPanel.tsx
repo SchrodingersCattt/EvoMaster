@@ -12,13 +12,13 @@ function inferToolSuccess(entry: LogEntry): boolean {
 }
 
 const PHASE_LABELS: Record<string, { label: string; color: string }> = {
-  planning: { label: "规划中", color: "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400" },
-  preflight: { label: "预检确认", color: "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400" },
-  executing: { label: "执行中", color: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400" },
-  replanning: { label: "重新规划", color: "bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-400" },
-  completed: { label: "已完成", color: "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400" },
-  failed: { label: "失败", color: "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400" },
-  aborted: { label: "已中止", color: "bg-gray-100 text-gray-700 dark:bg-gray-900/40 dark:text-gray-400" },
+  planning: { label: "Planning", color: "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400" },
+  preflight: { label: "Preflight", color: "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400" },
+  executing: { label: "Executing", color: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400" },
+  replanning: { label: "Replanning", color: "bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-400" },
+  completed: { label: "Completed", color: "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400" },
+  failed: { label: "Failed", color: "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400" },
+  aborted: { label: "Aborted", color: "bg-gray-100 text-gray-700 dark:bg-gray-900/40 dark:text-gray-400" },
 };
 
 // Context compaction event payload shape
@@ -69,7 +69,7 @@ export default function StatusPanel({ entries }: { entries: LogEntry[] }) {
 
   return (
     <div className="border border-gray-300 rounded-lg p-3 bg-[#f9fafb] flex flex-col h-full min-h-0">
-      <h2 className="text-sm font-semibold mb-2 text-[#1e293b]">状态记录</h2>
+      <h2 className="text-sm font-semibold mb-2 text-[#1e293b]">Status</h2>
       <div className="flex flex-col gap-2 overflow-y-auto overflow-x-hidden flex-1 min-h-0 text-xs break-words">
 
         {/* Context compaction status */}
@@ -84,17 +84,17 @@ export default function StatusPanel({ entries }: { entries: LogEntry[] }) {
               : "bg-gray-50 border-gray-200 text-gray-500"
           }`}>
             <div className="font-semibold mb-0.5">
-              {lastCompaction.status === "started" && "🔄 正在压缩上下文…"}
-              {lastCompaction.status === "finished" && `✅ 上下文已压缩 ×${compactionCount}`}
-              {lastCompaction.status === "skipped" && "⏭ 跳过压缩（可压缩比例不足）"}
-              {lastCompaction.status === "failed" && "⚠️ 压缩失败，已降级"}
+              {lastCompaction.status === "started" && "🔄 Compacting context…"}
+              {lastCompaction.status === "finished" && `✅ Context compacted ×${compactionCount}`}
+              {lastCompaction.status === "skipped" && "⏭ Skipped compaction (insufficient ratio)"}
+              {lastCompaction.status === "failed" && "⚠️ Compaction failed, degraded"}
             </div>
             {lastCompaction.status === "finished" && lastCompaction.tokens_before != null && lastCompaction.tokens_after != null && (
               <div className="text-sky-600 dark:text-sky-300">
                 {lastCompaction.tokens_before.toLocaleString()} → {lastCompaction.tokens_after.toLocaleString()} tokens
                 {lastCompaction.saved_ratio != null && (
                   <span className="ml-1 font-medium">
-                    (节省 {(lastCompaction.saved_ratio * 100).toFixed(0)}%
+                    (saved {(lastCompaction.saved_ratio * 100).toFixed(0)}%
                     {lastCompaction.duration_ms != null && `, ${(lastCompaction.duration_ms / 1000).toFixed(1)}s`})
                   </span>
                 )}
@@ -124,8 +124,8 @@ export default function StatusPanel({ entries }: { entries: LogEntry[] }) {
 
         {expRuns.length > 0 && (
           <>
-            <div className="font-medium text-[#1e293b]" title="mode 为 direct/planner；此处为实际运行的 Exp 类名，如 DirectSolver、ResearchPlanner、SkillEvolutionExp">
-              执行过的 Exp
+            <div className="font-medium text-[#1e293b]" title="mode is direct/planner; shows the actual Exp class name, e.g. DirectSolver, ResearchPlanner, SkillEvolutionExp">
+              Experiments Run
             </div>
             <ul className="space-y-0.5 list-disc list-inside text-gray-700">
               {expRuns.map((name, i) => (
@@ -136,7 +136,7 @@ export default function StatusPanel({ entries }: { entries: LogEntry[] }) {
         )}
         {skillHits.length > 0 && (
           <>
-            <div className="font-medium text-[#1e293b]">Hit 到的 Skills</div>
+            <div className="font-medium text-[#1e293b]">Matched Skills</div>
             <ul className="space-y-0.5 list-disc list-inside text-gray-700">
               {skillHits.map((name, i) => (
                 <li key={i}>{name}</li>
@@ -146,9 +146,9 @@ export default function StatusPanel({ entries }: { entries: LogEntry[] }) {
         )}
         {mode === "direct" && (
           <>
-            <div className="font-medium text-[#1e293b]">Direct 模式 · 工具调用</div>
+            <div className="font-medium text-[#1e293b]">Direct Mode · Tool Calls</div>
             {toolResults.length === 0 ? (
-              <div className="text-gray-500">暂无</div>
+              <div className="text-gray-500">None</div>
             ) : (
               <ul className="space-y-1 list-disc list-inside">
                 {toolResults.map((e, i) => {
@@ -168,28 +168,28 @@ export default function StatusPanel({ entries }: { entries: LogEntry[] }) {
           <>
             {lastStages && (
               <div className="font-medium text-[#1e293b]">
-                Planner · 共 {lastStages.total ?? "?"} 步，当前第 {lastStages.current ?? "?"} 步
+                Planner · {lastStages.total ?? "?"} steps, current step {lastStages.current ?? "?"}
               </div>
             )}
             {lastStages?.intent && (
               <div className="text-gray-600 whitespace-pre-wrap break-words">
-                当前: {lastStages.intent}
+                Current: {lastStages.intent}
               </div>
             )}
             {/* Replan trigger reason */}
             {lastReplan && lastPhase === "replanning" && (
               <div className="mt-1 p-1.5 rounded bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800">
-                <div className="font-medium text-purple-700 dark:text-purple-400">重新规划原因</div>
+                <div className="font-medium text-purple-700 dark:text-purple-400">Replan Reason</div>
                 <div className="text-purple-600 dark:text-purple-300 mt-0.5">
                   {lastReplan.reason ?? "—"}
                   {lastReplan.after_step != null && (
-                    <span className="text-purple-500"> (Step {lastReplan.after_step} 之后)</span>
+                    <span className="text-purple-500"> (after Step {lastReplan.after_step})</span>
                   )}
                 </div>
               </div>
             )}
             {statusSkill.length > 0 && (
-              <div className="font-medium text-green-700 mt-1">新生成 Skills</div>
+              <div className="font-medium text-green-700 mt-1">Newly Generated Skills</div>
             )}
             {statusSkill.map((e, i) => (
               <div key={i} className="text-green-600 whitespace-pre-wrap break-words">
@@ -197,12 +197,12 @@ export default function StatusPanel({ entries }: { entries: LogEntry[] }) {
               </div>
             ))}
             {mode === "planner" && !lastStages && statusSkill.length === 0 && !lastPhase && (
-              <div className="text-gray-500">规划中或等待执行…</div>
+              <div className="text-gray-500">Planning or awaiting execution…</div>
             )}
           </>
         )}
         {mode !== "direct" && mode !== "planner" && expRuns.length === 0 && skillHits.length === 0 && (
-          <div className="text-gray-500">暂无</div>
+          <div className="text-gray-500">None</div>
         )}
       </div>
     </div>

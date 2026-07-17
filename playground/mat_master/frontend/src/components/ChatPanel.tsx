@@ -78,7 +78,7 @@ const ToolCard = React.memo(function ToolCard({
           )}
           {summaryLabel}
           <span className="ml-1 text-xs font-mono text-zinc-700 dark:text-zinc-300 truncate">{title}</span>
-          <span className="ml-auto text-zinc-400 text-xs flex-shrink-0">展开</span>
+          <span className="ml-auto text-zinc-400 text-xs flex-shrink-0">Expand</span>
         </summary>
         <div className={scrollClasses}>{renderContent(content)}</div>
       </details>
@@ -157,8 +157,8 @@ const PairedToolCard = React.memo(function PairedToolCard({
                 </>
               )}
               <span className="text-[10px] uppercase tracking-wider font-semibold text-zinc-500 dark:text-zinc-400">Call</span>
-              <span className="ml-auto text-zinc-400 dark:text-zinc-500 text-[10px] group-open/call:hidden">展开</span>
-              <span className="ml-auto text-zinc-400 dark:text-zinc-500 text-[10px] hidden group-open/call:inline">收起</span>
+              <span className="ml-auto text-zinc-400 dark:text-zinc-500 text-[10px] group-open/call:hidden">Expand</span>
+              <span className="ml-auto text-zinc-400 dark:text-zinc-500 text-[10px] hidden group-open/call:inline">Collapse</span>
             </summary>
             <div className={cn(scrollClasses, "mt-0.5 rounded-sm border border-zinc-100 dark:border-zinc-800")}>{renderContent(callArgs)}</div>
           </details>
@@ -172,8 +172,8 @@ const PairedToolCard = React.memo(function PairedToolCard({
                 </>
               )}
               <span className="text-[10px] uppercase tracking-wider font-semibold text-emerald-600 dark:text-emerald-400">Output</span>
-              <span className="ml-auto text-zinc-400 dark:text-zinc-500 text-[10px] group-open/out:hidden">展开</span>
-              <span className="ml-auto text-zinc-400 dark:text-zinc-500 text-[10px] hidden group-open/out:inline">收起</span>
+              <span className="ml-auto text-zinc-400 dark:text-zinc-500 text-[10px] group-open/out:hidden">Expand</span>
+              <span className="ml-auto text-zinc-400 dark:text-zinc-500 text-[10px] hidden group-open/out:inline">Collapse</span>
             </summary>
             <div className={cn(scrollClasses, "mt-0.5 rounded-sm border border-zinc-100 dark:border-zinc-800")}>{renderContent(result)}</div>
           </details>

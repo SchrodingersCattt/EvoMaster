@@ -323,12 +323,12 @@ function MoleculePreview({
           if (el) elSet.add(el);
         });
         if (atomCount === 0) {
-          throw new Error("结构中未解析到原子，可能是文件格式不兼容");
+          throw new Error("No atoms parsed from structure; file format may be incompatible");
         }
         setElements(Array.from(elSet).sort((a, b) => a.localeCompare(b)));
       } catch (err) {
         if (!cancelled) {
-          setLoadError(err instanceof Error ? err.message : "分子预览失败");
+          setLoadError(err instanceof Error ? err.message : "Molecule preview failed");
         }
       }
     };
@@ -422,7 +422,7 @@ function FileViewer({
       .catch((err) => {
         if (active) {
           setTextContent(null);
-          setTextError(err instanceof Error ? err.message : "预览失败");
+          setTextError(err instanceof Error ? err.message : "Preview failed");
         }
       })
       .finally(() => {
@@ -484,7 +484,7 @@ function FileViewer({
       .catch((err) => {
         if (active) {
           setMoleculeContent(null);
-          setMoleculeError(err instanceof Error ? err.message : "分子预览失败");
+          setMoleculeError(err instanceof Error ? err.message : "Molecule preview failed");
         }
       })
       .finally(() => {
@@ -539,11 +539,11 @@ function FileViewer({
               className="w-full h-[260px] bg-white dark:bg-zinc-900"
             />
           ) : (
-            <p className="text-xs text-zinc-500 dark:text-zinc-400">加载 PDF 中...</p>
+            <p className="text-xs text-zinc-500 dark:text-zinc-400">Loading PDF...</p>
           )
         ) : showMolecule ? (
           moleculeLoading ? (
-            <p className="text-xs text-zinc-500 dark:text-zinc-400">加载分子结构中...</p>
+            <p className="text-xs text-zinc-500 dark:text-zinc-400">Loading molecular structure...</p>
           ) : moleculeError ? (
             <p className="text-xs text-amber-600 dark:text-amber-400">{moleculeError}</p>
           ) : moleculeContent ? (
@@ -554,16 +554,16 @@ function FileViewer({
               format={inferMoleculeFormat(filePath)}
             />
           ) : (
-            <p className="text-xs text-zinc-500 dark:text-zinc-400">暂无可预览内容。</p>
+            <p className="text-xs text-zinc-500 dark:text-zinc-400">No previewable content.</p>
           )
         ) : textLoading ? (
-          <p className="text-xs text-zinc-500 dark:text-zinc-400">加载中...</p>
+          <p className="text-xs text-zinc-500 dark:text-zinc-400">Loading...</p>
         ) : textContent !== null ? (
           isMarkdownPath(filePath) ? renderMarkdown(textContent) : renderContent(textContent)
         ) : textError ? (
           <p className="text-xs text-amber-600 dark:text-amber-400">{textError}</p>
         ) : (
-          <p className="text-xs text-zinc-500 dark:text-zinc-400">请使用上方「下载」按钮保存文件。</p>
+          <p className="text-xs text-zinc-500 dark:text-zinc-400">Use the "Download" button above to save the file.</p>
         )}
       </div>
     </div>
@@ -671,12 +671,12 @@ export default function WorkspacePanel({
         });
         if (!res.ok) {
           const msg = await res.text();
-          throw new Error(msg || "上传失败");
+          throw new Error(msg || "Upload failed");
         }
       }
       setFileTreeRefresh((t) => t + 1);
     } catch (err) {
-      setUploadError(err instanceof Error ? err.message : "上传失败");
+      setUploadError(err instanceof Error ? err.message : "Upload failed");
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
@@ -755,7 +755,7 @@ export default function WorkspacePanel({
                   className="text-xs px-2 py-1 rounded bg-zinc-200 dark:bg-zinc-700 hover:bg-zinc-300 dark:hover:bg-zinc-600 text-zinc-700 dark:text-zinc-300"
                   disabled={uploading}
                 >
-                  上传文件
+                  Upload File
                 </button>
                 <input
                   ref={fileInputRef}
@@ -765,9 +765,9 @@ export default function WorkspacePanel({
                   onChange={(e) => uploadFiles(e.target.files)}
                 />
                 <span className="text-xs text-zinc-500 dark:text-zinc-400">
-                  目标: {filePath ? filePath : "根目录"}
+                  Target: {filePath ? filePath : "Root"}
                 </span>
-                {uploading && <span className="text-xs text-zinc-500">上传中...</span>}
+                {uploading && <span className="text-xs text-zinc-500">Uploading...</span>}
               </div>
               {uploadError && <p className="text-xs text-amber-600 dark:text-amber-400">{uploadError}</p>}
               {selectedFile && (
@@ -863,7 +863,7 @@ export default function WorkspacePanel({
                             type="button"
                             className="underline-offset-2 hover:underline text-left truncate"
                             onClick={() => onJumpToLogIndex?.(index)}
-                            title="跳转到右侧对话"
+                            title="Jump to conversation"
                           >
                             {c?.name ?? "—"}
                           </button>

@@ -42,7 +42,7 @@ function isStrReplaceEditorPayload(o: unknown): o is Record<string, unknown> {
   );
 }
 
-/** 从 tool_result 外层（含 status/observation）或裸 payload 中取出编辑器结构化结果 */
+/** Extract structured editor result from tool_result wrapper (with status/observation) or raw payload */
 function unwrapStrReplaceEditorPayload(content: unknown): Record<string, unknown> | null {
   if (!content || typeof content !== "object") return null;
   const c = content as Record<string, unknown>;
@@ -221,11 +221,11 @@ export const ContentRenderer = React.memo(function ContentRenderer({
   content: unknown;
 }) {
   if (content === null || content === undefined) {
-    return <span className="text-zinc-500 italic">(空)</span>;
+    return <span className="text-zinc-500 italic">(empty)</span>;
   }
   if (typeof content === "string") {
     const text = content.trim();
-    if (!text) return <span className="text-zinc-500 italic">(无文本输出)</span>;
+    if (!text) return <span className="text-zinc-500 italic">(no text output)</span>;
     const parsed = tryParseJSON(text);
     if (parsed !== null) {
       const editor = unwrapStrReplaceEditorPayload(parsed);

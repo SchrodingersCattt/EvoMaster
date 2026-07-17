@@ -124,8 +124,8 @@ export default function FileTree({
         link.remove();
         URL.revokeObjectURL(objectUrl);
       } catch (err) {
-        const msg = err instanceof Error ? err.message : "未知错误";
-        alert(`下载失败: ${msg}`);
+        const msg = err instanceof Error ? err.message : "Unknown error";
+        alert(`Download failed: ${msg}`);
       } finally {
         setContextMenu(null);
       }
@@ -159,7 +159,7 @@ export default function FileTree({
         setContextMenu(null);
         return;
       }
-      const next = window.prompt("输入新名称", entry.name);
+      const next = window.prompt("Enter new name", entry.name);
       if (!next || !next.trim() || next.trim() === entry.name) {
         setContextMenu(null);
         return;
@@ -171,7 +171,7 @@ export default function FileTree({
       });
       if (!res.ok) {
         const msg = await res.text();
-        alert(`重命名失败: ${msg || res.status}`);
+        alert(`Rename failed: ${msg || res.status}`);
       } else {
         setRefetchTick((t) => t + 1);
       }
@@ -184,13 +184,13 @@ export default function FileTree({
     <div className={compact ? "flex flex-col min-h-0" : "border border-zinc-200 dark:border-zinc-700 rounded-md p-3 bg-zinc-50 dark:bg-zinc-900/50 flex flex-col h-full min-h-0"}>
       {!compact && (
         <div className="flex items-center justify-between gap-2 mb-2">
-          <h2 className="text-sm font-semibold text-zinc-800 dark:text-zinc-200">当前会话文件</h2>
+          <h2 className="text-sm font-semibold text-zinc-800 dark:text-zinc-200">Session Files</h2>
           <button
             type="button"
             onClick={() => setRefetchTick((t) => t + 1)}
             className="p-1 rounded hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-500"
-            title="刷新文件列表"
-            aria-label="刷新"
+            title="Refresh file list"
+            aria-label="Refresh"
           >
             <RefreshCwIcon size={14} />
           </button>
@@ -206,8 +206,8 @@ export default function FileTree({
               type="button"
               onClick={() => setRefetchTick((t) => t + 1)}
               className="p-0.5 rounded hover:bg-zinc-200 dark:hover:bg-zinc-700 shrink-0"
-              title="刷新文件列表"
-              aria-label="刷新"
+              title="Refresh file list"
+              aria-label="Refresh"
             >
               <RefreshCwIcon size={12} />
             </button>
@@ -215,7 +215,7 @@ export default function FileTree({
         </div>
       )}
       <div className="text-xs text-zinc-500 dark:text-zinc-400 mb-1 break-all">
-        {filePath ? filePath : "根目录"}
+        {filePath ? filePath : "Root"}
       </div>
       <div className="flex-1 overflow-y-auto text-sm min-h-0">
         {filePath && (
@@ -260,7 +260,7 @@ export default function FileTree({
             onClick={(event) => event.stopPropagation()}
           >
             <div className="px-3 py-2 border-b border-zinc-100 dark:border-zinc-800">
-              <div className="text-xs text-zinc-500 dark:text-zinc-400">相对路径</div>
+              <div className="text-xs text-zinc-500 dark:text-zinc-400">Relative path</div>
               <div className="text-xs text-zinc-700 dark:text-zinc-300 break-all">
                 {getEntryPath(contextMenu.entry)}
               </div>
@@ -270,7 +270,7 @@ export default function FileTree({
               onClick={() => handleCopyPath(contextMenu.entry)}
               className="w-full text-left px-3 py-2 hover:bg-zinc-100 dark:hover:bg-zinc-800"
             >
-              复制相对路径
+              Copy relative path
             </button>
             {!contextMenu.entry.dir && (
               <button
@@ -278,7 +278,7 @@ export default function FileTree({
                 onClick={() => handleDownload(contextMenu.entry)}
                 className="w-full text-left px-3 py-2 hover:bg-zinc-100 dark:hover:bg-zinc-800"
               >
-                下载
+                Download
               </button>
             )}
             <button
@@ -286,7 +286,7 @@ export default function FileTree({
               onClick={() => handleRename(contextMenu.entry)}
               className="w-full text-left px-3 py-2 hover:bg-zinc-100 dark:hover:bg-zinc-800"
             >
-              重命名
+              Rename
             </button>
           </div>
         </div>

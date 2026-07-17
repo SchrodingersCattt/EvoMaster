@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -11,6 +12,10 @@ from fastapi import FastAPI
 from . import persistence, remote_workspace, state
 
 logger = logging.getLogger(__name__)
+
+# If MAT_MASTER_REPLAY_ONLY=1, skip the heavy playground/agent/MCP init
+# and only load persisted sessions for the /share/ replay route.
+_REPLAY_ONLY = os.environ.get('MAT_MASTER_REPLAY_ONLY', '').strip() in ('1', 'true', 'yes')
 
 
 def _init_playground_sync() -> None:
@@ -41,8 +46,12 @@ def _init_playground_sync() -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup: load tools in a thread so server is ready only after tools are loaded."""
-    loop = asyncio.get_event_loop()
-    await loop.run_in_executor(None, _init_playground_sync)
+    if _REPLAY_ONLY:
+        logger.info('REPLAY_ONLY mode: skipping playground/agent init, loading sessions only.')
+        state._playground_init_done.set()
+    else:
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(None, _init_playground_sync)
     persistence._load_persisted_sessions()
     yield
     if state._cached_pg is not None:
