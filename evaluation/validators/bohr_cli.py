@@ -247,9 +247,7 @@ def _receipt_argv_ids(receipt: BohrCliReceiptRecord) -> set[int]:
     return identifiers
 
 
-def _receipt_flag_value(
-    receipt: BohrCliReceiptRecord, names: set[str]
-) -> str | None:
+def _receipt_flag_value(receipt: BohrCliReceiptRecord, names: set[str]) -> str | None:
     for index, argument in enumerate(receipt.argv):
         key, separator, value = argument.partition('=')
         if key in names and separator:
@@ -347,7 +345,10 @@ def check_bohr_job_upgrade_execution(
     if seed_id not in artifact_ids:
         return False, f'{filename}: source job identifier does not match CLI request'
     if not submitted_ids.intersection(artifact_ids):
-        return False, f'{filename}: resubmitted job identifier does not match CLI response'
+        return (
+            False,
+            f'{filename}: resubmitted job identifier does not match CLI response',
+        )
     if seed_id in submitted_ids:
         return False, 'job submission response reuses the source job identifier'
 
