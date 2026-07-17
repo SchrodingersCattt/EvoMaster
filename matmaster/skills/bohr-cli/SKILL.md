@@ -100,7 +100,7 @@ bohr job_group delete <job_group_id>
 bohr node list [--started] [--paused] [--quiet]
 bohr node resources                   # 可用机型列表
 bohr node get <id>                    # 详情（含 SSH 信息）
-bohr node create -n <name> -p <pid> -i <image> -m <machine> [-d <disk_gb>] [-t <hours>]
+bohr node create -n <name> -p <pid> -i <image> -m <machine> [-d <disk_gb>] [-t <hours>]   # GPU 机型见下方避坑
 bohr node start <id>
 bohr node stop <id>
 bohr node restart <id>
@@ -109,6 +109,8 @@ bohr node delete <id>                 # 不可恢复
 ```
 
 状态码：-1=Paused, 0=Waiting, 1=Pending, 2=Started, 3=Starting
+
+GPU 机型避坑：`node resources` 返回的 GPU 标识带空格（如 `c16_m62_1 * NVIDIA T4`），直接传给 `node create -m` 会在首个空格处截断、报 `unknown machine type`。GPU 机型改用 `-f config.json`，在文件里写 `machine_type`（完整标签）或 `skuId`（取自 `resources` 的 `value`，如 T4=372）；不要用 `-m`。CPU 机型标识无空格（如 `c2_m4_cpu`），`-m` 可正常使用。
 
 ## 沙箱 (sandbox)
 
