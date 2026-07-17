@@ -398,6 +398,59 @@ class TestExpInitSkillTools:
         assert f"Base directory for this skill: {expected_dir}" in result
         assert f"Remote body with {expected_dir}" in result
 
+    async def test_registry_refreshes_after_lazy_node_acquisition(self, tmp_path):
+        """冷态激活走本地技能；节点就绪(远端根出现)后同 run 内切远端解析。"""
+        skills_root = _make_skill_dir(tmp_path)
+        remote_root = "/personal/.matmaster/skills"
+        session = FakeRemoteSkillSession(
+            remote_root,
+            {
+                f"{remote_root}/test-skill/SKILL.md": (
+                    "---\n"
+                    "name: test-skill\n"
+                    "description: Remote copy\n"
+                    "---\n"
+                    "Remote body with ${SKILL_DIR}\n"
+                ),
+            },
+        )
+        # Cold deferred sessions expose no remote roots before acquisition.
+        session.remote_user_skills_root = None
+        cache_dir = _make_cache(tmp_path)
+        _make_mcp_yaml(tmp_path)
+        (tmp_path / "mcp_config.json").write_text('{"mcpServers": {}}')
+
+        cfg = ExpConfig.model_validate(
+            {
+                "name": "test",
+                "skills": {
+                    "enabled": True,
+                    "skills_root": str(skills_root),
+                    "cache_dir": str(cache_dir),
+                    "config_dir": str(tmp_path),
+                    "mcp_config_file": "mcp_config.json",
+                    "mcp_runtime_file": "mcp.yaml",
+                },
+            }
+        )
+        exp = Exp(cfg)
+        registry = ToolRegistry()
+        ctx = _make_ctx(session=session, execution_workdir=str(tmp_path))
+
+        exp._init_skill_tools(ctx, registry, skill_cache=SkillRegistryCache())
+        skill_tool = registry._tools["Skill"]
+
+        cold_result = await skill_tool.execute({"skill": "test-skill"})
+        local_dir = str((skills_root / "test-skill").resolve())
+        assert f"Base directory for this skill: {local_dir}" in cold_result
+
+        # Simulate DeferredBohriumSession copying roots after Node acquisition.
+        session.remote_user_skills_root = remote_root
+
+        hot_result = await skill_tool.execute({"skill": "test-skill"})
+        assert f"Base directory for this skill: {remote_root}/test-skill" in hot_result
+        assert f"Remote body with {remote_root}/test-skill" in hot_result
+
     async def test_local_skill_settings_disable_registered_skill(self, tmp_path):
         skills_root = _make_skill_dir(tmp_path)
         (skills_root / ".settings.json").write_text(

@@ -6,7 +6,7 @@ that core runtime components invoke directly.
 
 from __future__ import annotations
 
-from collections.abc import Awaitable
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any, Literal, NotRequired, Protocol, TypedDict, runtime_checkable
 
@@ -17,13 +17,18 @@ from matmaster.context.ports import (
     SessionEventQuery,
     WorkspaceJobsPort,
 )
+from matmaster.types.bohrium_node_runtime import BohriumNodeRuntimeError
+from matmaster.types.cancellation import CancellationToken
 from matmaster.types.events import BusEvent
 from matmaster.types.figures import FigureUploadConfig
 from matmaster.types.messages import Message
+from matmaster.types.session import Session
 from matmaster.types.submit_review import SubmitApprovalGate
 
 __all__ = [
     "AgentRunPorts",
+    "BohriumNodeAcquirer",
+    "BohriumNodeBinding",
     "BohriumRuntimePort",
     "BohriumRuntimeSnapshot",
     "BusEventSink",
@@ -135,6 +140,73 @@ class BohriumRuntimePort:
     snapshot: BohriumRuntimeSnapshot | None = None
 
 
+@dataclass(frozen=True)
+class BohriumNodeBinding:
+    """Physical Bohrium binding produced by the first remote tool demand."""
+
+    session: Session
+    execution_workdir: str
+    snapshot: BohriumRuntimeSnapshot
+
+
+@runtime_checkable
+class BohriumNodeAcquirer(Protocol):
+    """Acquire the run's shared Bohrium Node once, on first remote tool use.
+
+    Consumers:
+    - ``FullToolRunner`` calls ``ensure_ready`` before SESSION_SHELL / SESSION_FS
+      tools, before scheduler locks and tool execution timeouts start.
+    - ``DeferredBohriumSession`` calls ``ensure_ready_sync`` as a defensive
+      fallback for remote session access outside the tool runner.
+
+    Both methods return the same immutable binding for the remainder of the
+    run. They raise ``RuntimeError`` when credentials are unavailable, Node/SSH
+    setup fails, the run is closing, or cancellation is observed. ``close``
+    fences new acquisitions; provider release remains owned by the service
+    layer's normal run cleanup.
+
+    ``handle_connection_failure_sync`` is called by ``DeferredBohriumSession``
+    only after a remote operation has been classified as a transport failure.
+    It single-flights at most one same-Node recovery for the run and returns the
+    typed error that the caller must raise: retryable when reconnection succeeds,
+    or run-terminal when the circuit opens. The optional ``recover`` callback
+    must reconnect the existing binding and must never allocate a replacement
+    Node. ``unavailable_for_run`` and ``unavailable_error`` are read by
+    ``FullToolRunner`` after execution to block or normalize Node-dependent
+    calls even when an individual tool caught the original exception.
+    """
+
+    async def ensure_ready(
+        self,
+        *,
+        reason: str,
+        cancel_token: CancellationToken | None = None,
+    ) -> BohriumNodeBinding: ...
+
+    def ensure_ready_sync(
+        self,
+        *,
+        reason: str,
+        cancel_token: CancellationToken | None = None,
+    ) -> BohriumNodeBinding: ...
+
+    @property
+    def unavailable_for_run(self) -> bool: ...
+
+    @property
+    def unavailable_error(self) -> BohriumNodeRuntimeError | None: ...
+
+    def handle_connection_failure_sync(
+        self,
+        *,
+        reason: str,
+        error: BaseException,
+        recover: Callable[[], None] | None,
+    ) -> BohriumNodeRuntimeError: ...
+
+    async def close(self) -> None: ...
+
+
 @runtime_checkable
 class InterruptChecker(Protocol):
     """Check and wait for user interrupt at checkpoint boundaries."""
@@ -225,6 +297,7 @@ class AgentRunPorts:
     interrupt_checker: InterruptChecker | None = None
     user_turn_context_writer: UserTurnContextWriter | None = None
     bohrium_job_ledger: BohriumJobLedgerPort | None = None
+    bohrium_node_acquirer: BohriumNodeAcquirer | None = None
     workspace_jobs: WorkspaceJobsPort | None = None
     submit_approval_gate: SubmitApprovalGate | None = None
     tool_timeout_observer: ToolTimeoutObserver | None = None

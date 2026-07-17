@@ -7,7 +7,6 @@ shared runtime_scope/run_stream lifecycle used by service and devshell paths.
 from __future__ import annotations
 
 import inspect
-import json
 import logging
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
@@ -89,17 +88,6 @@ _SESSION_REQUIRING_TOOL_NAMES: frozenset[str] = frozenset(
 @dataclass(frozen=True)
 class RootTurnRender:
     rendered_content: str
-
-
-def _deep_merge_dict(base: dict[str, Any], patch: dict[str, Any]) -> dict[str, Any]:
-    merged = dict(base)
-    for key, value in patch.items():
-        base_value = merged.get(key)
-        if isinstance(base_value, dict) and isinstance(value, dict):
-            merged[key] = _deep_merge_dict(base_value, value)
-            continue
-        merged[key] = value
-    return merged
 
 
 class Exp:
@@ -412,6 +400,7 @@ class Exp:
             topology=topology,
             hook_executor=hook_executor,
             state=runner_state,
+            bohrium_node_acquirer=request.ports.bohrium_node_acquirer,
         )
 
         checkpoint_sink_factory = request.ports.compaction.checkpoint_sink_factory
@@ -708,7 +697,9 @@ class Exp:
         exec_wd = Path(env.execution_workdir)
         has_session = env.session is not None
         bohrium_allow_local_paths = env.metadata.source == "devshell"
-        bohrium_workdir = exec_wd if env.session_type == "ssh" else env.workdir
+        bohrium_workdir = (
+            exec_wd if env.session_type in {"ssh", "bohrium-deferred"} else env.workdir
+        )
         search_path_roots = tuple(
             root.root
             for root in path_access_roots
@@ -754,6 +745,7 @@ class Exp:
                 session=env.session,
                 workdir=bohrium_workdir,
                 job_ledger=ctx.request.ports.bohrium_job_ledger,
+                node_acquirer=ctx.request.ports.bohrium_node_acquirer,
                 session_id=ctx.environment.session_id,
                 invocation_id=ctx.request.invocation_id,
                 allow_local_paths=bohrium_allow_local_paths,
@@ -832,47 +824,9 @@ class Exp:
         # MCP runtime config: ALWAYS self-load from config_dir.
         # Independent of skills_config -- MCP runtime config (calculation_preflight,
         # calculation_executors) is a separate concern from skill routing.
-        from matmaster.config.loader import _load_raw
+        from matmaster.config.loader import load_skill_mcp_runtime
 
-        resolved_config_dir = Path(skills_cfg.config_dir)
-        mcp_runtime_path = resolved_config_dir / skills_cfg.mcp_runtime_file
-        if mcp_runtime_path.exists():
-            mcp_config = _load_raw(mcp_runtime_path)
-        else:
-            raise FileNotFoundError(
-                f"MCP runtime config not found: {mcp_runtime_path}. "
-                f"Required when skills.enabled=true."
-            )
-        runtime_patch = skills_cfg.mcp_runtime_patch or {}
-        if isinstance(runtime_patch, dict) and runtime_patch:
-            mcp_config = _deep_merge_dict(mcp_config, runtime_patch)
-
-        mcp_config_file = mcp_config.get("config_file", skills_cfg.mcp_config_file)
-        config_path = Path(mcp_config_file)
-        if not config_path.is_absolute():
-            config_path = resolved_config_dir / config_path
-
-        if mcp_config.get("calculation_preflight") == "calculation":
-            try:
-                from matmaster.mcp.calculation.config_env import resolve_mcp_config_path
-
-                config_path = resolve_mcp_config_path(config_path)
-            except ImportError:
-                self.logger.warning(
-                    "calculation_preflight=calculation but "
-                    "matmaster.mcp.calculation.config_env is unavailable; "
-                    "using config_path as-is: %s",
-                    config_path,
-                )
-
-        # Load server connection config from JSON
-        server_config: dict = {}
-        if config_path.exists():
-            try:
-                raw = json.loads(config_path.read_text(encoding="utf-8"))
-                server_config = raw.get("mcpServers", {})
-            except Exception as e:
-                self.logger.warning("Failed to load MCP server config: %s", e)
+        mcp_config, server_config = load_skill_mcp_runtime(skills_cfg)
 
         connector = LazyMCPConnector(
             mcp_server_config=server_config,
@@ -882,7 +836,6 @@ class Exp:
         )
         self._register_cleanup(connector.cleanup)
 
-        # Extract sync_tools mapping from calculation_executors config.
         # Sync tools are synchronous operations that should complete quickly,
         # so they get a shorter timeout than the default MCP tool timeout.
         _SYNC_TOOL_TIMEOUT = 30.0
@@ -949,6 +902,7 @@ class Exp:
                     description=tool_schema.get("description", ""),
                     input_schema=tool_schema.get("input_schema", {}),
                     connector=connector,
+                    mcp_config=mcp_config,
                     timeout=tool_timeout,
                 )
                 if catalog is not None:
@@ -956,10 +910,22 @@ class Exp:
                 else:
                     registry.register(lazy_tool, source="mcp")
 
+        def refresh_skill_registry():
+            # Memoized by roots-derived cache key: cold calls hit the cached
+            # entry; once a deferred Bohrium session copies its remote skill
+            # roots after Node acquisition, the key changes and remote skills
+            # override worker-local fallbacks for later activations.
+            return build_cached_skill_registry(
+                skills_cfg=skills_cfg,
+                session=env.session,
+                skill_cache=skill_cache,
+            )
+
         skill_tool = SkillTool(
             session=env.session,
             skill_registry=skill_registry,
             on_skill_hit=activate_mcp_server,
+            registry_provider=refresh_skill_registry,
         )
         registry.register(skill_tool, source="skill")
 

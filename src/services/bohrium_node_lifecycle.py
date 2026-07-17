@@ -6,6 +6,7 @@ import logging
 import os
 import time
 import uuid
+from collections.abc import Callable
 from functools import lru_cache
 from typing import Any
 
@@ -35,6 +36,21 @@ from src.services.bohrium_node_service import (
 from src.utils.constant import BOHRIUM_DEFAULT_IMAGE_ID, BOHRIUM_DEFAULT_IMAGE_NAME
 
 logger = logging.getLogger(__name__)
+
+
+def _raise_if_cancelled(cancel_checker: Callable[[], bool] | None) -> None:
+    if cancel_checker is not None and cancel_checker():
+        raise RuntimeError("Bohrium Node acquisition cancelled")
+
+
+def _sleep_or_cancel(seconds: float, cancel_checker: Callable[[], bool] | None) -> None:
+    deadline = time.monotonic() + seconds
+    while time.monotonic() < deadline:
+        _raise_if_cancelled(cancel_checker)
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            break
+        time.sleep(min(0.1, remaining))
 
 
 class BohriumNodeLeaseManager:
@@ -70,8 +86,10 @@ class BohriumNodeLeaseManager:
         lifecycle_policy: str | NodeLifecyclePolicy | None = None,
         idle_timeout_seconds: int | None = None,
         progress_reporter: NodeProgressReporter | None = None,
+        cancel_checker: Callable[[], bool] | None = None,
     ) -> NodeLease:
         """Acquire an invocation lease, creating or restarting the shared Node."""
+        _raise_if_cancelled(cancel_checker)
         policy, idle_timeout_seconds = resolve_node_lifecycle(
             lifecycle_policy, idle_timeout_seconds
         )
@@ -91,6 +109,7 @@ class BohriumNodeLeaseManager:
         deadline = time.monotonic() + self._config.acquire_timeout_seconds
         reported_waiting = False
         while time.monotonic() < deadline:
+            _raise_if_cancelled(cancel_checker)
             action: str | None = None
             row: dict[str, Any] | None = None
             with self._slot_lock(identity):
@@ -196,7 +215,7 @@ class BohriumNodeLeaseManager:
                         "共享节点正在启动，等待就绪...",
                     )
                     reported_waiting = True
-                time.sleep(self._config.retry_interval_seconds)
+                _sleep_or_cancel(self._config.retry_interval_seconds, cancel_checker)
                 continue
 
             if action == "reuse" and row is not None:
@@ -274,8 +293,9 @@ class BohriumNodeLeaseManager:
                     creator_id=creator_id,
                     expected_image_name=expected_image_name,
                     progress_reporter=progress_reporter,
+                    cancel_checker=cancel_checker,
                 )
-            time.sleep(self._config.retry_interval_seconds)
+            _sleep_or_cancel(self._config.retry_interval_seconds, cancel_checker)
         raise TimeoutError("Timed out waiting for shared Bohrium node slot")
 
     def _prepare_and_publish(
@@ -292,9 +312,11 @@ class BohriumNodeLeaseManager:
         creator_id: int,
         expected_image_name: str | None,
         progress_reporter: NodeProgressReporter | None,
+        cancel_checker: Callable[[], bool] | None,
     ) -> NodeLease:
         created_new = action in {"create", "replace"}
         try:
+            _raise_if_cancelled(cancel_checker)
             if action == "restart" and expected_image_name:
                 detail = self._node_service.get_node_detail(
                     access_key, int(row["node_id"])
@@ -337,6 +359,7 @@ class BohriumNodeLeaseManager:
                     creator_id=creator_id,
                 )
             if created_new:
+                _raise_if_cancelled(cancel_checker)
                 created = self._node_service.create_node(
                     access_key,
                     identity.project_id,
@@ -365,7 +388,13 @@ class BohriumNodeLeaseManager:
                     else "节点已重启，正在等待资源就绪..."
                 ),
             )
-            info = self._node_service.wait_until_ready(access_key, node_id)
+            wait_kwargs = (
+                {'cancel_checker': cancel_checker} if cancel_checker is not None else {}
+            )
+            info = self._node_service.wait_until_ready(
+                access_key, node_id, **wait_kwargs
+            )
+            _raise_if_cancelled(cancel_checker)
             with self._slot_lock(identity):
                 self._leases.acquire(
                     int(row["id"]),

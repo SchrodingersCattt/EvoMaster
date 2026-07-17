@@ -116,6 +116,22 @@ async def dispatch_tool_calls(
         usage_delta = extract_tool_usage_delta(tc.name, tool_result)
         if usage_delta:
             accumulate_usage(state.total_usage, usage_delta)
+
+        meta = getattr(tool_result, "meta", {}) or {}
+        if (
+            meta.get("terminal_on_repeat") is True
+            and meta.get("retryable") is False
+            and meta.get("failure_scope") == "run"
+        ):
+            error_code = str(meta.get("error_code") or "RUN_TERMINAL_TOOL_ERROR")
+            count = state.terminal_failure_counts.get(error_code, 0) + 1
+            state.terminal_failure_counts[error_code] = count
+            if count >= 2:
+                state.forced_stop_message = str(
+                    meta.get("stop_message")
+                    or "A required runtime is unavailable, so this run was stopped."
+                )
+
         yield _KernelItem(
             event=ToolResultEvent(
                 source="agent",

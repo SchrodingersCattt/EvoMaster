@@ -48,6 +48,7 @@ from matmaster.bohrium.types import BohriumContext
 from matmaster.bohrium.upload import upload_input_archive
 from matmaster.tools.builtin.base import BuiltinTool
 from matmaster.tools.tool_result import ToolResult, normalize_tool_result
+from matmaster.types.runtime_ports import BohriumNodeAcquirer
 from matmaster.types.tool_desc_ctx import ToolDescriptionContext
 from matmaster.types.tool_spec import ResourceClaim, ToolExecutionContext
 from matmaster.types.topology import ToolPlane
@@ -319,6 +320,7 @@ class BohriumTool(BuiltinTool):
         workdir: Any | None = None,
         path_access_roots: Any = (),
         job_ledger: Any | None = None,
+        node_acquirer: BohriumNodeAcquirer | None = None,
         session_id: str | None = None,
         invocation_id: str | None = None,
         allow_local_paths: bool = True,
@@ -330,6 +332,7 @@ class BohriumTool(BuiltinTool):
             path_access_roots=path_access_roots,
         )
         self._job_ledger = job_ledger
+        self._node_acquirer = node_acquirer
         self._session_id = session_id
         self._invocation_id = invocation_id
         self._allow_local_paths = allow_local_paths
@@ -439,7 +442,25 @@ class BohriumTool(BuiltinTool):
         exec_ctx: ToolExecutionContext | None,
     ) -> str | ToolResult:
         """Pace repeated query calls for the same running job within one run."""
-        if arguments.get("action") != "query":
+        action = arguments.get("action")
+        if action in {"submit", "download"} and self._node_acquirer is not None:
+            try:
+                await self._node_acquirer.ensure_ready(
+                    reason=f"tool:Bohrium.{action}",
+                    cancel_token=(exec_ctx.cancel_token if exec_ctx else None),
+                )
+            except Exception as exc:
+                cancelled = bool(
+                    exec_ctx is not None
+                    and exec_ctx.cancel_token is not None
+                    and exec_ctx.cancel_token.is_cancelled
+                )
+                return ToolResult(
+                    status="cancelled" if cancelled else "error",
+                    content="Run cancelled." if cancelled else str(exc),
+                    meta={"layer": "bohrium_node_acquisition"},
+                )
+        if action != "query":
             return await super().execute_with_context(arguments, exec_ctx)
 
         raw_job_id = arguments.get("job_id")

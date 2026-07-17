@@ -2,6 +2,7 @@
 
 import asyncio
 from pathlib import Path, PurePosixPath
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 from matmaster.tools.builtin.skill_tool import SkillTool
@@ -102,6 +103,70 @@ class TestSkillExecution:
         result = asyncio.run(tool.execute({"skill": "test-skill"}))
         assert "error" in result.lower()
 
+    def test_planned_root_map_renders_node_side_paths_while_cold(self):
+        """冷态 deferred session：本地 plugin 技能路径按规划映射渲染成节点侧路径。"""
+        session = SimpleNamespace(
+            planned_skill_root_map=(
+                ("/app/matmaster/plugins", "/personal/.matmaster/plugins"),
+                ("/app/matmaster/skills", "/personal/.matmaster/skills"),
+            ),
+            remote_project_root=None,
+        )
+        skill = make_skill(
+            body="Scripts: ${SKILL_DIR}/scripts\nPlugin root: ${PLUGIN_DIR}"
+        )
+        skill.is_remote = False
+        skill.skill_path = Path("/app/matmaster/plugins/mlips/skills/mlips")
+        skill.plugin_dir = Path("/app/matmaster/plugins/mlips")
+        tool = SkillTool(session=session, skill_registry=make_registry(skill=skill))
+
+        result = asyncio.run(tool.execute({"skill": "mlips"}))
+
+        expected = "/personal/.matmaster/plugins/mlips/skills/mlips"
+        assert f"Base directory for this skill: {expected}" in result
+        assert f"Scripts: {expected}/scripts" in result
+        assert "Plugin root: /personal/.matmaster/plugins/mlips" in result
+        assert "/app/matmaster" not in result
+
+    def test_planned_root_map_wins_over_remote_project_root(self):
+        from matmaster.tools.builtin.skill_tool import _PROJECT_ROOT
+
+        local_root = _PROJECT_ROOT / "matmaster" / "plugins"
+        session = SimpleNamespace(
+            planned_skill_root_map=((str(local_root), "/personal/.matmaster/plugins"),),
+            remote_project_root="/share/.matmaster",
+        )
+        skill = make_skill()
+        skill.is_remote = False
+        skill.skill_path = local_root / "mlips" / "skills" / "mlips"
+        skill.plugin_dir = None
+        tool = SkillTool(session=session, skill_registry=make_registry(skill=skill))
+
+        result = asyncio.run(tool.execute({"skill": "mlips"}))
+
+        assert (
+            "Base directory for this skill: "
+            "/personal/.matmaster/plugins/mlips/skills/mlips" in result
+        )
+        assert "/share/.matmaster" not in result
+
+    def test_path_outside_planned_roots_falls_back_to_local(self):
+        session = SimpleNamespace(
+            planned_skill_root_map=(
+                ("/app/matmaster/plugins", "/personal/.matmaster/plugins"),
+            ),
+            remote_project_root=None,
+        )
+        skill = make_skill()
+        skill.is_remote = False
+        skill.skill_path = Path("/elsewhere/custom-skill")
+        skill.plugin_dir = None
+        tool = SkillTool(session=session, skill_registry=make_registry(skill=skill))
+
+        result = asyncio.run(tool.execute({"skill": "custom-skill"}))
+
+        assert "Base directory for this skill: /elsewhere/custom-skill" in result
+
     def test_remote_plugin_dir_not_remapped_through_project_root(self):
         """远端 skill 的 plugin_dir 原样直出，不走 remote_project_root 本地映射。"""
         from matmaster.tools.builtin.skill_tool import _PROJECT_ROOT
@@ -117,3 +182,40 @@ class TestSkillExecution:
         result = asyncio.run(tool.execute({"skill": "member"}))
         assert f"Plugin root: {remote_plugin_dir}" in result
         assert "/remote/proj" not in result.split("Plugin root: ")[1]
+
+
+class TestRegistryProviderRefresh:
+    def test_provider_result_replaces_registry_between_calls(self):
+        local_skill = make_skill(body="local body")
+        remote_skill = make_skill(body="remote body")
+        provider = MagicMock(
+            side_effect=[
+                make_registry(skill=local_skill),
+                make_registry(skill=remote_skill),
+            ]
+        )
+        tool = SkillTool(skill_registry=None, registry_provider=provider)
+
+        first = asyncio.run(tool.execute({"skill": "s"}))
+        second = asyncio.run(tool.execute({"skill": "s"}))
+
+        assert "local body" in first
+        assert "remote body" in second
+
+    def test_provider_returning_none_keeps_constructor_registry(self):
+        skill = make_skill(body="constructor body")
+        tool = SkillTool(
+            skill_registry=make_registry(skill=skill),
+            registry_provider=MagicMock(return_value=None),
+        )
+        result = asyncio.run(tool.execute({"skill": "s"}))
+        assert "constructor body" in result
+
+    def test_provider_error_keeps_constructor_registry(self):
+        skill = make_skill(body="constructor body")
+        tool = SkillTool(
+            skill_registry=make_registry(skill=skill),
+            registry_provider=MagicMock(side_effect=RuntimeError("boom")),
+        )
+        result = asyncio.run(tool.execute({"skill": "s"}))
+        assert "constructor body" in result

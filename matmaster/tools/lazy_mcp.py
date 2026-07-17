@@ -102,6 +102,7 @@ class LazyMCPTool:
         input_schema: dict,
         connector: Any,
         runtime_meta: dict[str, Any] | None = None,
+        mcp_config: dict[str, Any] | None = None,
         timeout: float | None = None,
     ) -> None:
         self._name = tool_name
@@ -112,6 +113,17 @@ class LazyMCPTool:
         self._connector = connector
 
         meta = runtime_meta or {}
+        if mcp_config is not None:
+            meta = resolve_lazy_mcp_runtime_meta(
+                {
+                    "description": description,
+                    "input_schema": input_schema,
+                    "runtime_meta": meta,
+                },
+                mcp_config=mcp_config,
+                server_name=server_name,
+                remote_tool_name=remote_tool_name,
+            )
         self._plane = (
             ToolPlane(meta["plane"])
             if meta.get("plane")
@@ -457,6 +469,36 @@ def resolve_lazy_mcp_tool_timeout(
     if remote_tool_name in sync_tools:
         return _DEFAULT_CALCULATION_SYNC_MCP_TOOL_TIMEOUT
     return None
+
+
+def resolve_lazy_mcp_runtime_meta(
+    tool_schema: dict[str, Any],
+    *,
+    mcp_config: dict[str, Any],
+    server_name: str,
+    remote_tool_name: str,
+) -> dict[str, Any]:
+    """Add the Node capability when calculation preflight needs workspace IO."""
+    raw_meta = tool_schema.get("runtime_meta")
+    runtime_meta = dict(raw_meta) if isinstance(raw_meta, dict) else {}
+    capabilities = set(runtime_meta.get("capabilities") or ())
+    if mcp_config.get("calculation_preflight") == "calculation":
+        from matmaster.mcp.calculation.preflight import CalculationPreflight
+
+        preflight = CalculationPreflight(mcp_config.get("calculation_executors") or {})
+        try:
+            needs_node = preflight.requires_workspace_access(
+                server_name=server_name,
+                remote_tool_name=remote_tool_name,
+                input_schema=tool_schema.get("input_schema", {}),
+                tool_description=tool_schema.get("description", ""),
+            )
+        except ValueError:
+            needs_node = True
+        if needs_node:
+            capabilities.add("bohrium.node")
+    runtime_meta["capabilities"] = sorted(capabilities)
+    return runtime_meta
 
 
 class LazyMCPConnector:

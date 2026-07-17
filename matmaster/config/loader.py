@@ -17,7 +17,7 @@ import re
 from pathlib import Path
 from typing import Any
 
-from .exp import ExpConfig, ExpSubagentMeta
+from .exp import ExpConfig, ExpSkillsConfig, ExpSubagentMeta
 from .llm import LLMConfig
 
 _ENV_PATTERN = re.compile(r"\$\{([^}]+)\}")
@@ -87,6 +87,69 @@ def load_agents_general_llm(main_config: Path) -> str | None:
 
 
 _logger = logging.getLogger(__name__)
+
+
+def _deep_merge_dict(base: dict[str, Any], patch: dict[str, Any]) -> dict[str, Any]:
+    merged = dict(base)
+    for key, value in patch.items():
+        base_value = merged.get(key)
+        if isinstance(base_value, dict) and isinstance(value, dict):
+            merged[key] = _deep_merge_dict(base_value, value)
+            continue
+        merged[key] = value
+    return merged
+
+
+def load_skill_mcp_runtime(
+    skills_cfg: ExpSkillsConfig,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Load the MCP runtime YAML and server connection config for skill init.
+
+    MCP runtime config (calculation_preflight, calculation_executors) is a
+    separate concern from skill routing and is always self-loaded from
+    ``skills_cfg.config_dir``. Returns ``(mcp_config, server_config)``.
+    """
+    resolved_config_dir = Path(skills_cfg.config_dir)
+    mcp_runtime_path = resolved_config_dir / skills_cfg.mcp_runtime_file
+    if not mcp_runtime_path.exists():
+        raise FileNotFoundError(
+            f"MCP runtime config not found: {mcp_runtime_path}. "
+            f"Required when skills.enabled=true."
+        )
+    mcp_config = _load_raw(mcp_runtime_path)
+    runtime_patch = skills_cfg.mcp_runtime_patch or {}
+    if isinstance(runtime_patch, dict) and runtime_patch:
+        mcp_config = _deep_merge_dict(mcp_config, runtime_patch)
+
+    mcp_config_file = mcp_config.get("config_file", skills_cfg.mcp_config_file)
+    config_path = Path(mcp_config_file)
+    if not config_path.is_absolute():
+        config_path = resolved_config_dir / config_path
+
+    if mcp_config.get("calculation_preflight") == "calculation":
+        try:
+            from matmaster.mcp.calculation.config_env import resolve_mcp_config_path
+
+            config_path = resolve_mcp_config_path(config_path)
+        except ImportError:
+            _logger.warning(
+                "calculation_preflight=calculation but "
+                "matmaster.mcp.calculation.config_env is unavailable; "
+                "using config_path as-is: %s",
+                config_path,
+            )
+
+    server_config: dict[str, Any] = {}
+    if config_path.exists():
+        try:
+            import json
+
+            raw = json.loads(config_path.read_text(encoding="utf-8"))
+            server_config = raw.get("mcpServers", {})
+        except Exception as e:
+            _logger.warning("Failed to load MCP server config: %s", e)
+
+    return mcp_config, server_config
 
 
 def _load_base_system_prompt(exps_dir: Path) -> str:

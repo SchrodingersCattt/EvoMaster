@@ -294,3 +294,12 @@ def test_wait_until_ready_timeout_reports_last_sanitized_observation(
     assert "secret-ak" not in message
     assert "secret-password" not in message
     assert "10.0.0.1" not in message
+
+
+def test_wait_until_ready_honors_cancellation_before_polling() -> None:
+    with pytest.raises(RuntimeError, match="acquisition cancelled"):
+        _service().wait_until_ready(
+            "secret-ak",
+            123,
+            cancel_checker=lambda: True,
+        )

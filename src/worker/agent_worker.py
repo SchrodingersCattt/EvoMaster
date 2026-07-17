@@ -321,6 +321,9 @@ def _run_worker_loop() -> None:
         submit_confirmation_enabled = bool(
             payload.get("bohrium_submit_confirmation_required")
         )
+        node_start_confirmation_enabled = bool(
+            payload.get("bohrium_node_start_confirmation_enabled")
+        )
         bohrium_job_max_runtime_seconds = None
         raw_max_runtime = payload.get("bohrium_job_max_runtime_seconds")
         if raw_max_runtime not in (None, ""):
@@ -496,6 +499,9 @@ def _run_worker_loop() -> None:
                         bohrium_node_idle_timeout_seconds
                     ),
                     "submit_confirmation_enabled": submit_confirmation_enabled,
+                    "bohrium_node_start_confirmation_enabled": (
+                        node_start_confirmation_enabled
+                    ),
                     "delivery_snapshot": delivery_snapshot,
                     "job_context_mode": job_context_mode,
                 }

@@ -317,6 +317,16 @@ class AgentKernel:
 
             state.turn += 1
             tool_definitions = ensure_tool_definitions(kernel_resources, state)
+            filter_definitions = getattr(
+                kernel_resources.tool_runner,
+                "filter_model_tool_definitions",
+                None,
+            )
+            tool_defs = (
+                filter_definitions(tool_definitions)
+                if callable(filter_definitions)
+                else tool_definitions
+            )
 
             async for item in run_runtime_compaction_if_needed(
                 kernel_spec=kernel_spec,
@@ -324,11 +334,9 @@ class AgentKernel:
                 state=state,
                 checkpoint_sink=checkpoint_sink,
                 turn_input=turn_input,
-                tool_definitions=tool_definitions,
+                tool_definitions=tool_defs,
             ):
                 yield item
-
-            tool_defs = tool_definitions
 
             canonical_messages = state.pipeline.feed_tail(state.messages)
             canonical_messages = apply_tool_image_budget(canonical_messages)
@@ -530,6 +538,32 @@ class AgentKernel:
             except InvalidToolUsageDelta:
                 logger.exception("malformed tool usage delta; ending run as failed")
                 yield self._terminal(state, "internal_error")
+                return
+
+            if state.forced_stop_message:
+                forced_content = state.forced_stop_message
+                state.messages.append(AssistantMessage(content=forced_content))
+                if is_root_run:
+                    state.last_emitted_content = forced_content
+                    yield _KernelItem(
+                        event=ResponseEvent(
+                            source="agent",
+                            content=forced_content,
+                            stream_state="complete",
+                            turn_index=turn_index,
+                            turn_usage=turn_usage_snapshot,
+                            total_usage=dict(state.total_usage),
+                            usage_vendor=usage_vendor_snapshot,
+                            model=state.llm_model,
+                            model_profile=state.llm_model_profile,
+                            model_route=state.llm_model_route,
+                        )
+                    )
+                yield self._terminal(
+                    state,
+                    "natural",
+                    final_content=forced_content,
+                )
                 return
 
         yield self._terminal(state, "max_turns")
