@@ -9,7 +9,7 @@ questions:
   intent: Test agent self-heals from incorrect image name by searching and resubmitting.
   human_prompt_seed: |
     利用 bohr-cli，用镜像名 "dptech/deepmd-kit" 提个任务试试（命令 `dp --version`，机型 `c2_m4_cpu`），报错的话帮我排查修好重新提。
-    排查过程记录到 `e1_troubleshoot.json`，包含最初用的镜像名、报错信息、修正后的镜像和重新提交的任务 ID。
+    排查过程记录到 `e1_troubleshoot.json`，包含最初用的镜像名、报错信息、修正后的镜像和重新提交的任务 ID。JSON 顶层使用 `initial_image`、`error_message`、`correct_image` 和 `resubmit_job_id`。
   tags:
   - bohr-cli
   reference_answers:
@@ -35,13 +35,13 @@ questions:
     tool_name: Bash
     tool_arg: command
     value:
-      pattern: '(?:^|[\n;&|]\s*)(?:[^\s;&|]+/)?bohr\s+image\s+search\b'
+      pattern: '(?:^|[\n;&|]\s*)(?:[^\s;&|]+/)?bohr\s+image\s+\+?search\b'
       min_matches: 1
   - key: job_submitted_via_cli
     tool_name: Bash
     tool_arg: command
     value:
-      pattern: '(?:^|[\n;&|]\s*)(?:[^\s;&|]+/)?bohr\s+job\s+submit\b'
+      pattern: '(?:^|[\n;&|]\s*)(?:[^\s;&|]+/)?bohr\s+job\s+\+?submit\b'
       min_matches: 2
   - key: turn_budget
     value:
@@ -90,7 +90,7 @@ questions:
   priority: P1
   human_prompt_seed: |
     利用 bohr-cli，看看我有没有节点，状态都正常吗？有异常的帮我重启一下。
-    状态报告保存到 `e2_nodes.json`，记录每个节点的 ID、状态和是否执行了操作。
+    状态报告保存到 `e2_nodes.json`，记录每个节点的 ID、状态和是否执行了操作。JSON 顶层使用 `nodes`；`nodes` 为数组，每项含 `status` 和 `action_taken`。
   tags:
   - bohr-cli
   reference_answers:
@@ -115,7 +115,7 @@ questions:
     tool_name: Bash
     tool_arg: command
     value:
-      pattern: '(?:^|[\n;&|]\s*)(?:[^\s;&|]+/)?bohr\s+node\s+(list|get)\b'
+      pattern: '(?:^|[\n;&|]\s*)(?:[^\s;&|]+/)?bohr\s+node\s+\+?(list|get)\b'
       min_matches: 1
   scoring_checklist:
   - id: artifact
@@ -150,7 +150,7 @@ questions:
   intent: Test agent queries billing and explains cost structure.
   human_prompt_seed: |
     利用 bohr-cli，平台一个月免费额度多少？我现在还剩多少？哪些操作要花钱？
-    保存到 `e3_billing.json`，记录当前余额、哪些操作收费、哪些免费。
+    保存到 `e3_billing.json`，记录当前余额、哪些操作收费、哪些免费。JSON 顶层使用 `balance_cny`、`paid_operations` 和 `free_operations`。
   tags:
   - bohr-cli
   reference_answers:
@@ -175,7 +175,7 @@ questions:
     tool_name: Bash
     tool_arg: command
     value:
-      pattern: '(?:^|[\n;&|]\s*)(?:[^\s;&|]+/)?bohr\s+billing\s+(balance|list)\b'
+      pattern: '(?:^|[\n;&|]\s*)(?:[^\s;&|]+/)?bohr\s+billing\s+\+?(balance|list)\b'
       min_matches: 1
   scoring_checklist:
   - id: artifact
@@ -340,7 +340,7 @@ questions:
   intent: Test agent queries billing ledger with proper time range.
   human_prompt_seed: |
     利用 bohr-cli，查查我上个月一共花了多少，计算、存储、解析各花了多少。
-    保存到 `e7_spending.json`，记录时间范围、总花费和各类别明细。
+    保存到 `e7_spending.json`，记录时间范围、总花费和各类别明细。JSON 顶层使用 `total_cny` 和 `breakdown`；`breakdown` 为数组，每项含 `category`。
   tags:
   - bohr-cli
   reference_answers:
@@ -362,7 +362,7 @@ questions:
     tool_name: Bash
     tool_arg: command
     value:
-      pattern: '(?:^|[\n;&|]\s*)(?:[^\s;&|]+/)?bohr\s+billing\s+(list|ledger)\b'
+      pattern: '(?:^|[\n;&|]\s*)(?:[^\s;&|]+/)?bohr\s+billing\s+\+?(list|ledger)\b'
       min_matches: 1
   - key: turn_budget
     value:
@@ -400,7 +400,7 @@ questions:
   intent: Test agent estimates PDF parsing costs with calculation.
   human_prompt_seed: |
     利用 bohr-cli，解析一篇 50 页 PDF 要花多少钱？我有 100 篇，你估算下价格。
-    估算保存到 `e8_cost_estimate.json`，记录单价、总费用和建议。
+    估算保存到 `e8_cost_estimate.json`，记录单价、总费用和建议。JSON 顶层使用 `unit_price_per_page`、`total_papers`、`estimated_total_cny` 和 `advice`。
   tags:
   - bohr-cli
   reference_answers:
@@ -458,7 +458,7 @@ questions:
   intent: Test agent handles pagination and recovers from an invalid resource query to complete the task.
   human_prompt_seed: |
     利用 bohr-cli，帮我统计一下我在平台上所有已完成任务的总数和总消耗机时，先试着查一下任务ID 99999999 的详情作为对照，查不到的话跳过继续。
-    结果保存到 `e9_stats.json`，记录总任务数、总机时、以及那个无效查询的错误信息。
+    结果保存到 `e9_stats.json`，记录总任务数、总机时、以及那个无效查询的错误信息。JSON 顶层使用 `total_completed_jobs`、`total_machine_hours` 和 `invalid_query_error`。
   tags:
   - bohr-cli
   reference_answers:
@@ -487,13 +487,13 @@ questions:
     tool_name: Bash
     tool_arg: command
     value:
-      pattern: '(?:^|[\n;&|]\s*)(?:[^\s;&|]+/)?bohr\s+job\s+list\b'
+      pattern: '(?:^|[\n;&|]\s*)(?:[^\s;&|]+/)?bohr\s+job\s+\+?list\b'
       min_matches: 1
   - key: invalid_queried_via_cli
     tool_name: Bash
     tool_arg: command
     value:
-      pattern: '(?:^|[\n;&|]\s*)(?:[^\s;&|]+/)?bohr\s+job\s+describe\b(?=[^\n]*99999999)'
+      pattern: '(?:^|[\n;&|]\s*)(?:[^\s;&|]+/)?bohr\s+job\s+\+?describe\b(?=[^\n]*99999999)'
       min_matches: 1
   - key: turn_budget
     value:

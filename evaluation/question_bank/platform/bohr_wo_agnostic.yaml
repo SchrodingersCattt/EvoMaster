@@ -9,7 +9,7 @@ questions:
   intent: Test agent queries images and machine types without creating resources.
   human_prompt_seed: |
     利用 bohr-cli，我有个 CP2K 输入文件要跑 DFT，有没有现成的镜像？版本都是几？有哪些计算机型？
-    结果保存到 `b1_resources.json`，记录找到的镜像名称和版本，以及可用机型。
+    结果保存到 `b1_resources.json`，记录找到的镜像名称和版本，以及可用机型。JSON 顶层使用 `images` 和 `machine_types`，两者均为数组。
   tags:
   - bohr-cli
   reference_answers:
@@ -69,7 +69,7 @@ questions:
   intent: Test agent diagnoses long-running jobs with appropriate recommendations.
   human_prompt_seed: |
     利用 bohr-cli，看看我有没有跑超过一天还没结束的任务，有的话检查下是不是卡死了。
-    将分析结果保存到 `b2_diagnosis.json`，记录每个超时任务的 ID、运行时长、状态和处理建议。
+    将分析结果保存到 `b2_diagnosis.json`，记录每个超时任务的 ID、运行时长、状态和处理建议。JSON 顶层使用 `long_running_jobs` 和 `total_checked`；`long_running_jobs` 为数组，每项含 `job_id`、`name`、`duration_hours`、`status` 和 `recommendation`。
   tags:
   - bohr-cli
   reference_answers:
@@ -127,7 +127,7 @@ questions:
     tool_name: Bash
     tool_arg: command
     value:
-      pattern: '(?:^|[\n;&|]\s*)(?:[^\s;&|]+/)?bohr\s+job\s+list\b'
+      pattern: '(?:^|[\n;&|]\s*)(?:[^\s;&|]+/)?bohr\s+job\s+\+?list\b'
       min_matches: 1
   scoring_checklist:
   - id: artifact
@@ -279,7 +279,7 @@ questions:
     tool_name: Bash
     tool_arg: command
     value:
-      pattern: '(?:^|[\n;&|]\s*)(?:(?:env|sudo)(?:\s+[^\s;&|]+)*\s+)?(?:[^\s;&|]+/)?bohr\s+machine\s+list\b(?=[^\n]*(?:-c|--chooseType)(?:\s+|=)gpu(?:\s|$))(?=[^\n]*(?:-s|--scene)(?:\s+|=)job(?:\s|$))'
+      pattern: '(?:^|[\n;&|]\s*)(?:(?:env|sudo)(?:\s+[^\s;&|]+)*\s+)?(?:[^\s;&|]+/)?bohr\s+machine\s+\+?list\b(?=[^\n]*(?:-c|--chooseType)(?:\s+|=)gpu(?:\s|$))(?=[^\n]*(?:-s|--scene)(?:\s+|=)job(?:\s|$))'
       min_matches: 1
   - key: turn_budget
     value:
@@ -313,7 +313,7 @@ questions:
   intent: Test agent diagnoses failed jobs from logs and takes corrective action.
   human_prompt_seed: |
     利用 bohr-cli，看看最近有没有失败的任务，拉日志分析下原因，内存不够的话换大机器重跑。
-    诊断报告保存到 `b5_diagnosis.json`，记录失败原因和采取的措施。
+    诊断报告保存到 `b5_diagnosis.json`，记录失败原因和采取的措施。JSON 顶层使用 `failed_jobs`、`error_type` 和 `action_taken`；`failed_jobs` 为数组。
   tags:
   - bohr-cli
   reference_answers:
@@ -338,7 +338,7 @@ questions:
     tool_name: Bash
     tool_arg: command
     value:
-      pattern: '(?:^|[\n;&|]\s*)(?:[^\s;&|]+/)?bohr\s+job\s+log\b'
+      pattern: '(?:^|[\n;&|]\s*)(?:[^\s;&|]+/)?bohr\s+job\s+\+?log\b'
       min_matches: 1
   scoring_checklist:
   - id: artifact
@@ -373,7 +373,7 @@ questions:
   intent: Test agent checks finished jobs for result files availability.
   human_prompt_seed: |
     利用 bohr-cli，看看最近完成的任务，有没有忘设回传路径的，输出文件能不能捞回来。
-    结果保存到 `b6_results.json`，记录每个任务是否有结果可下载。
+    结果保存到 `b6_results.json`，记录每个任务是否有结果可下载。JSON 顶层使用 `finished_jobs`；`finished_jobs` 为数组，每项含 `has_result`。
   tags:
   - bohr-cli
   reference_answers:
@@ -394,7 +394,7 @@ questions:
     tool_name: Bash
     tool_arg: command
     value:
-      pattern: '(?:^|[\n;&|]\s*)(?:[^\s;&|]+/)?bohr\s+job\s+(list|describe)\b'
+      pattern: '(?:^|[\n;&|]\s*)(?:[^\s;&|]+/)?bohr\s+job\s+\+?(list|describe)\b'
       min_matches: 1
   scoring_checklist:
   - id: artifact
@@ -467,25 +467,25 @@ questions:
     tool_name: Bash
     tool_arg: command
     value:
-      pattern: '(?:^|[\n;&|]\s*)(?:(?:env|sudo)(?:\s+[^\s;&|]+)*\s+)?(?:[^\s;&|]+/)?bohr\s+sandbox\s+files\s+write\b(?=[^\n]*\bopt_water\.py\b)'
+      pattern: '(?:^|[\n;&|]\s*)(?:(?:env|sudo)(?:\s+[^\s;&|]+)*\s+)?(?:[^\s;&|]+/)?bohr\s+sandbox\s+files\s+\+?write\b(?=[^\n]*\bopt_water\.py\b)'
       min_matches: 1
   - key: script_executed_via_cli
     tool_name: Bash
     tool_arg: command
     value:
-      pattern: '(?:^|[\n;&|]\s*)(?:(?:env|sudo)(?:\s+[^\s;&|]+)*\s+)?(?:[^\s;&|]+/)?bohr\s+sandbox\s+exec\b(?=[^\n]*\bopt_water\.py\b)'
+      pattern: '(?:^|[\n;&|]\s*)(?:(?:env|sudo)(?:\s+[^\s;&|]+)*\s+)?(?:[^\s;&|]+/)?bohr\s+sandbox\s+\+?exec\b(?=[^\n]*\bopt_water\.py\b)'
       min_matches: 1
   - key: results_downloaded_via_cli
     tool_name: Bash
     tool_arg: command
     value:
-      pattern: '(?:^|[\n;&|]\s*)(?:(?:env|sudo)(?:\s+[^\s;&|]+)*\s+)?(?:[^\s;&|]+/)?bohr\s+sandbox\s+files\s+read\b(?=[^\n]*(?:b7_water_optimized\.xyz|b7_log\.txt)\b)'
+      pattern: '(?:^|[\n;&|]\s*)(?:(?:env|sudo)(?:\s+[^\s;&|]+)*\s+)?(?:[^\s;&|]+/)?bohr\s+sandbox\s+files\s+\+?read\b(?=[^\n]*(?:b7_water_optimized\.xyz|b7_log\.txt)\b)'
       min_matches: 2
   - key: sandbox_deleted_via_cli
     tool_name: Bash
     tool_arg: command
     value:
-      pattern: '(?:^|[\n;&|]\s*)(?:(?:env|sudo)(?:\s+[^\s;&|]+)*\s+)?(?:[^\s;&|]+/)?bohr\s+sandbox\s+delete\b'
+      pattern: '(?:^|[\n;&|]\s*)(?:(?:env|sudo)(?:\s+[^\s;&|]+)*\s+)?(?:[^\s;&|]+/)?bohr\s+sandbox\s+\+?delete\b'
       min_matches: 1
   - key: turn_budget
     value:
@@ -543,7 +543,7 @@ questions:
   intent: Test agent can run comparison tests on two models in sandbox.
   human_prompt_seed: |
     利用 bohr-cli，我有两个势函数模型想对比精度，用同一组测试集分别跑 dp test，结果对比一下。
-    对比结果保存到 `b8_comparison.json`，记录各模型的误差指标和结论。
+    对比结果保存到 `b8_comparison.json`，记录各模型的误差指标和结论。JSON 顶层使用 `model_a`、`model_b` 和 `conclusion`。
     注：如果环境里没有模型文件，可以用 mock 数据演示流程，但要体现完整的 dp test 对比逻辑。
   tags:
   - bohr-cli
@@ -642,7 +642,7 @@ questions:
   priority: P1
   human_prompt_seed: |
     利用 bohr-cli，我有节点在跑，能不能动态再挂一个数据集进去？先看看我有哪些节点和数据集。
-    分析结果保存到 `b10_analysis.json`，记录节点和数据集状态，以及是否支持热挂载。
+    分析结果保存到 `b10_analysis.json`，记录节点和数据集状态，以及是否支持热挂载。JSON 顶层使用 `nodes` 和 `hot_mount_supported`。
   tags:
   - bohr-cli
   reference_answers:
@@ -696,7 +696,7 @@ questions:
   intent: Test agent designs a multi-step material screening workflow with real cost estimation.
   human_prompt_seed: |
     利用 bohr-cli，我要做新材料筛选：先从文献里找候选结构，然后平台上跑 DFT 初筛，给我一个可行方案加预算。
-    方案保存到 `d1_plan.json`，包含各步骤及预估费用、推荐机型。要求查询真实的机型和价格信息。
+    方案保存到 `d1_plan.json`，包含各步骤及预估费用、推荐机型。要求查询真实的机型和价格信息。JSON 顶层使用 `steps`、`total_budget_cny` 和 `recommended_machine`；`steps` 为数组，每项含 `estimated_cost_cny`。
   tags:
   - bohr-cli
   reference_answers:
@@ -722,7 +722,7 @@ questions:
     tool_name: Bash
     tool_arg: command
     value:
-      pattern: '(?:^|[\n;&|]\s*)(?:[^\s;&|]+/)?bohr\s+machine\s+list\b'
+      pattern: '(?:^|[\n;&|]\s*)(?:[^\s;&|]+/)?bohr\s+machine\s+\+?list\b'
       min_matches: 1
   - key: turn_budget
     value:
@@ -817,7 +817,7 @@ questions:
   intent: Test agent extracts computation parameters from a paper and matches platform images.
   human_prompt_seed: |
     利用 bohr-cli，我想复现这篇论文的计算结果，帮我看看它用的什么软件什么参数，然后在平台上搜一下有没有对应的镜像。
-    提取结果保存到 `d3_params.json`，记录软件名称、版本、关键计算参数和匹配到的镜像。
+    提取结果保存到 `d3_params.json`，记录软件名称、版本、关键计算参数和匹配到的镜像。JSON 顶层使用 `software`、`parameters` 和 `functional`；`parameters` 为对象。
   tags:
   - bohr-cli
   data_files:
@@ -843,7 +843,7 @@ questions:
     tool_name: Bash
     tool_arg: command
     value:
-      pattern: '(?:^|[\n;&|]\s*)(?:[^\s;&|]+/)?bohr\s+image\s+search\b'
+      pattern: '(?:^|[\n;&|]\s*)(?:[^\s;&|]+/)?bohr\s+image\s+\+?search\b'
       min_matches: 1
   - key: turn_budget
     value:
@@ -881,7 +881,7 @@ questions:
   intent: Test agent can organize job results and identify missing data.
   human_prompt_seed: |
     利用 bohr-cli，论文要投稿了，帮我把计算数据从任务结果里整理出来，看看还差什么图表。
-    整理报告保存到 `d4_data_report.json`，记录分析了哪些任务、已有数据和缺失项。
+    整理报告保存到 `d4_data_report.json`，记录分析了哪些任务、已有数据和缺失项。JSON 顶层使用 `jobs_analyzed` 和 `missing_items`；`missing_items` 为数组。
   tags:
   - bohr-cli
   reference_answers:
@@ -899,7 +899,7 @@ questions:
     tool_name: Bash
     tool_arg: command
     value:
-      pattern: '(?:^|[\n;&|]\s*)(?:[^\s;&|]+/)?bohr\s+job\s+(list|describe)\b'
+      pattern: '(?:^|[\n;&|]\s*)(?:[^\s;&|]+/)?bohr\s+job\s+\+?(list|describe)\b'
       min_matches: 1
   - key: turn_budget
     value:
@@ -933,7 +933,7 @@ questions:
   intent: Test agent designs a literature database construction pipeline.
   human_prompt_seed: |
     利用 bohr-cli，我想为钠离子电池正极材料做个文献数据库。帮我检索 20 篇高引文献，再根据检索结果设计用于记录关键性能参数的字段和批处理入库策略。
-    把结果保存到 `d5_literature_db.json`，其中记录 `schema.fields`、实际检索到的文献数 `papers_found` 和 `batch_strategy`；每个字段包含 `name`、`type` 和 `description`。
+    把结果保存到 `d5_literature_db.json`，其中记录 `schema.fields`、实际检索到的文献数 `papers_found` 和 `batch_strategy`；每个字段包含 `name`、`type` 和 `description`。JSON 顶层使用 `schema`、`papers_found` 和 `batch_strategy`；`schema` 包含 `fields`，`fields` 为数组，每项含 `name`、`type` 和 `description`。
   tags:
   - bohr-cli
   reference_answers:
@@ -986,7 +986,7 @@ questions:
     tool_name: Bash
     tool_arg: command
     value:
-      pattern: '(?:^|[\n;&|]\s*)(?:(?:env|sudo)(?:\s+[^\s;&|]+)*\s+)?(?:[^\s;&|]+/)?bohr\s+paper\s+search\b(?=[^\n;&|]*--size(?:\s+|=)20(?:\s|$))'
+      pattern: '(?:^|[\n;&|]\s*)(?:(?:env|sudo)(?:\s+[^\s;&|]+)*\s+)?(?:[^\s;&|]+/)?bohr\s+paper\s+\+?search\b(?=[^\n;&|]*--size(?:\s+|=)20(?:\s|$))'
       min_matches: 1
   - key: turn_budget
     value:
@@ -1109,19 +1109,19 @@ questions:
     tool_name: Bash
     tool_arg: command
     value:
-      pattern: '(?:^|[\n;&|]\s*)(?:(?:env|sudo)(?:\s+[^\s;&|]+)*\s+)?(?:[^\s;&|]+/)?bohr\s+node\s+resources\b'
+      pattern: '(?:^|[\n;&|]\s*)(?:(?:env|sudo)(?:\s+[^\s;&|]+)*\s+)?(?:[^\s;&|]+/)?bohr\s+node\s+\+?resources\b'
       min_matches: 1
   - key: node_created_via_cli
     tool_name: Bash
     tool_arg: command
     value:
-      pattern: '(?:^|[\n;&|]\s*)(?:(?:env|sudo)(?:\s+[^\s;&|]+)*\s+)?(?:[^\s;&|]+/)?bohr\s+node\s+create\b'
+      pattern: '(?:^|[\n;&|]\s*)(?:(?:env|sudo)(?:\s+[^\s;&|]+)*\s+)?(?:[^\s;&|]+/)?bohr\s+node\s+\+?create\b'
       min_matches: 1
   - key: node_inspected_via_cli
     tool_name: Bash
     tool_arg: command
     value:
-      pattern: '(?:^|[\n;&|]\s*)(?:(?:env|sudo)(?:\s+[^\s;&|]+)*\s+)?(?:[^\s;&|]+/)?bohr\s+node\s+get\b'
+      pattern: '(?:^|[\n;&|]\s*)(?:(?:env|sudo)(?:\s+[^\s;&|]+)*\s+)?(?:[^\s;&|]+/)?bohr\s+node\s+\+?get\b'
       min_matches: 1
   - key: file_transferred_via_scp
     tool_name: Bash
@@ -1133,7 +1133,7 @@ questions:
     tool_name: Bash
     tool_arg: command
     value:
-      pattern: '(?:^|[\n;&|]\s*)(?:(?:env|sudo)(?:\s+[^\s;&|]+)*\s+)?(?:[^\s;&|]+/)?bohr\s+node\s+delete\b'
+      pattern: '(?:^|[\n;&|]\s*)(?:(?:env|sudo)(?:\s+[^\s;&|]+)*\s+)?(?:[^\s;&|]+/)?bohr\s+node\s+\+?delete\b'
       min_matches: 1
   - key: turn_budget
     value:
@@ -1179,7 +1179,7 @@ questions:
   intent: Test agent creates a job group, submits jobs into it, and terminates the group.
   human_prompt_seed: |
     利用 bohr-cli，帮我验证一下任务组的批量控制能力：建一个任务组，往里面提两个会跑很久的临时任务（镜像 registry.dp.tech/dptech/ubuntu:22.04-py3.10-cuda12.1，机型 c2_m4_cpu，命令 sleep 300，任务名以 b11-grp-stop- 开头带唯一后缀），确认任务跑起来后按组停掉，最后确认每个任务都到了终止状态。
-    操作过程和最终各任务状态保存到 `b11_group_stop.json`。
+    操作过程和最终各任务状态保存到 `b11_group_stop.json`。JSON 顶层使用 `job_group_id`、`jobs` 和 `group_terminated`；`jobs` 为数组，每项含 `job_id` 和 `final_status`。
   tags:
   - bohr-cli
   reference_answers:
@@ -1222,20 +1222,20 @@ questions:
     tool_name: Bash
     tool_arg: command
     value:
-      pattern: '(?:^|[\n;&|]\s*)(?:[^\s;&|]+/)?bohr\s+job_group\s+create\b'
+      pattern: '(?:^|[\n;&|]\s*)(?:[^\s;&|]+/)?bohr\s+job_group\s+\+?create\b'
       min_matches: 1
       max_matches: 1
   - key: jobs_submitted_via_cli
     tool_name: Bash
     tool_arg: command
     value:
-      pattern: '(?:^|[\n;&|]\s*)(?:[^\s;&|]+/)?bohr\s+job\s+submit\b'
+      pattern: '(?:^|[\n;&|]\s*)(?:[^\s;&|]+/)?bohr\s+job\s+\+?submit\b'
       min_matches: 2
   - key: group_terminated_via_cli
     tool_name: Bash
     tool_arg: command
     value:
-      pattern: '(?:^|[\n;&|]\s*)(?:[^\s;&|]+/)?bohr\s+job_group\s+terminate\b'
+      pattern: '(?:^|[\n;&|]\s*)(?:[^\s;&|]+/)?bohr\s+job_group\s+\+?terminate\b'
       min_matches: 1
   - key: turn_budget
     value:
@@ -1266,75 +1266,3 @@ questions:
     axis: efficiency
     verify: turn_budget
 
-- id: BWO_event_consume_012_20260717
-  capability: workflow_orchestration
-  domain: agnostic
-  scope: platform
-  intent: Test agent submits a short job and consumes the corresponding completion event from the platform.
-  human_prompt_seed: |
-    利用 bohr-cli，帮我验证一下平台事件消费能力：提交一个唯一命名的短任务（镜像 registry.dp.tech/dptech/ubuntu:22.04-py3.10-cuda12.1，机型 c2_m4_cpu，命令 echo "event-test-done"，任务名以 b12-evt- 开头带唯一后缀），等它跑完后从平台事件中找到对应的完成事件，把事件内容和任务最终状态交叉核对。
-    操作记录保存到 `b12_event.json`。
-  tags:
-  - bohr-cli
-  reference_answers:
-  - key: artifact
-    value: b12_event.json
-  - key: event_schema
-    value:
-      filename: b12_event.json
-      schema:
-        type: object
-        required:
-        - job_id
-        - job_name
-        - event_found
-        - final_status_match
-        properties:
-          job_id:
-            type: integer
-            minimum: 1
-          job_name:
-            type: string
-            pattern: ^b12-evt-
-          event_found:
-            type: boolean
-            const: true
-          final_status_match:
-            type: boolean
-            const: true
-  - key: job_submitted_via_cli
-    tool_name: Bash
-    tool_arg: command
-    value:
-      pattern: '(?:^|[\n;&|]\s*)(?:[^\s;&|]+/)?bohr\s+job\s+submit\b'
-      min_matches: 1
-  - key: event_consumed_via_cli
-    tool_name: Bash
-    tool_arg: command
-    value:
-      pattern: '(?:^|[\n;&|]\s*)(?:[^\s;&|]+/)?bohr\s+event\s+consume\b'
-      min_matches: 1
-  - key: turn_budget
-    value:
-      max: 25
-  scoring_checklist:
-  - id: artifact
-    criterion: b12_event.json written to workspace.
-    axis: correctness
-    verify: artifact_exists
-  - id: event_schema
-    criterion: Records job ID with b12-evt- prefix name, confirms event found and status matches.
-    axis: correctness
-    verify: json_file_schema
-  - id: job_submitted_via_cli
-    criterion: Job was submitted through bohr-cli.
-    axis: grounding
-    verify: tool_args_regex
-  - id: event_consumed_via_cli
-    criterion: Event was consumed through bohr-cli.
-    axis: grounding
-    verify: tool_args_regex
-  - id: turn_budget
-    criterion: Agent completes within turn budget.
-    axis: efficiency
-    verify: turn_budget

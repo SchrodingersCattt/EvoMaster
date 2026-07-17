@@ -9,7 +9,7 @@ questions:
   intent: Test agent can use bohr paper search with English keywords and present structured results.
   human_prompt_seed: |
     利用 bohr-cli，看一眼文献到底有没有人做过Mn掺杂的Invar合金？效果怎么样？
-    把搜索结果保存到 `a1_result.json`，包含论文列表和研究现状总结。
+    把搜索结果保存到 `a1_result.json`，包含论文列表和研究现状总结。JSON 中论文列表每项含 `title`，研究现状总结记为 `summary`。
   tags:
   - bohr-cli
   reference_answers:
@@ -35,7 +35,7 @@ questions:
     tool_name: Bash
     tool_arg: command
     value:
-      pattern: '(?:^|[\n;&|]\s*)(?:[^\s;&|]+/)?bohr\s+paper\s+search\b'
+      pattern: '(?:^|[\n;&|]\s*)(?:[^\s;&|]+/)?bohr\s+paper\s+\+?search\b'
       min_matches: 1
   scoring_checklist:
   - id: artifact
@@ -92,7 +92,7 @@ questions:
     tool_name: Bash
     tool_arg: command
     value:
-      pattern: '(?:^|[\n;&|]\s*)(?:[^\s;&|]+/)?bohr\s+paper\s+search\b'
+      pattern: '(?:^|[\n;&|]\s*)(?:[^\s;&|]+/)?bohr\s+paper\s+\+?search\b'
       min_matches: 1
   scoring_checklist:
   - id: artifact
@@ -123,7 +123,7 @@ questions:
   intent: Test agent can extract crystallographic data from PDFs using bohr pdf parse.
   human_prompt_seed: |
     利用 bohr-cli，这两篇文献的晶体学数据整理成表格，要求包含化学式、空间群、晶胞参数。
-    输出为 `a3_crystal_data.json`，记录每篇文献中提取到的化学式、空间群和晶胞参数。
+    输出为 `a3_crystal_data.json`，记录每篇文献中提取到的化学式、空间群和晶胞参数。JSON 中每篇文献记录含 `paper`、`formula`、`space_group` 和 `cell_params`。
   tags:
   - bohr-cli
   data_files:
@@ -159,7 +159,7 @@ questions:
     tool_name: Bash
     tool_arg: command
     value:
-      pattern: '(?:^|[\n;&|]\s*)(?:[^\s;&|]+/)?bohr\s+pdf\s+parse\b'
+      pattern: '(?:^|[\n;&|]\s*)(?:[^\s;&|]+/)?bohr\s+pdf\s+\+?parse\b'
       min_matches: 1
   scoring_checklist:
   - id: artifact
@@ -198,7 +198,7 @@ questions:
   intent: Test agent can search and compare two scholars using bohr scholar.
   human_prompt_seed: |
     利用 bohr-cli，帮我查一下 Jörg Behler 和 Michele Parrinello 两位学者的合作关系和各自研究重点有什么区别。
-    输出为 `a4_scholars.json`，记录两位学者的背景和研究重点对比。
+    输出为 `a4_scholars.json`，记录两位学者的背景和研究重点对比。JSON 中每位学者的研究重点用 `research_focus`，整体对比用 `comparison`。
   tags:
   - bohr-cli
   reference_answers:
@@ -225,7 +225,7 @@ questions:
     tool_name: Bash
     tool_arg: command
     value:
-      pattern: '(?:^|[\n;&|]\s*)(?:[^\s;&|]+/)?bohr\s+scholar\s+(search|get)\b'
+      pattern: '(?:^|[\n;&|]\s*)(?:[^\s;&|]+/)?bohr\s+scholar\s+\+?(search|get)\b'
       min_matches: 2
   scoring_checklist:
   - id: artifact
@@ -260,7 +260,7 @@ questions:
   intent: Test agent can combine wiki+scholar+paper for a learning roadmap.
   human_prompt_seed: |
     利用 bohr-cli，我现在要入门"拓扑绝缘体表面态"，给我一个入门路线图：核心概念 → 关键人物 → 推荐论文。
-    输出为 `a5_roadmap.json`，记录核心概念、关键人物及其贡献、推荐论文及推荐理由。
+    输出为 `a5_roadmap.json`，记录核心概念、关键人物及其贡献、推荐论文及推荐理由。JSON 顶层使用 `concepts`、`key_figures` 和 `papers`；`key_figures` 为数组，每项含 `name` 和 `contribution`；`papers` 为数组，每项含 `title`、`year` 和 `why`。
   tags:
   - bohr-cli
   reference_answers:
@@ -348,7 +348,7 @@ questions:
   intent: Test agent uses both paper patent and paper search endpoints.
   human_prompt_seed: |
     利用 bohr-cli，有个专利是做钠离子电池正极的，搜一下这块还有什么相关专利和学术论文。
-    结果保存到 `a6_result.json`，分别记录专利和论文。
+    结果保存到 `a6_result.json`，分别记录专利和论文。JSON 顶层使用 `patents` 和 `papers`。
   tags:
   - bohr-cli
   reference_answers:
@@ -399,7 +399,7 @@ questions:
   intent: Test agent applies year and journal filters in paper search.
   human_prompt_seed: |
     利用 bohr-cli，找几篇 GNN 做分子性质预测的文章，要 Nature 系列的，最近两年的。
-    保存到 `a7_papers.json`，记录每篇论文的标题、期刊、年份和相关性说明。
+    保存到 `a7_papers.json`，记录每篇论文的标题、期刊、年份和相关性说明。JSON 中每篇论文的年份字段用 `year`。
   tags:
   - bohr-cli
   reference_answers:
@@ -450,7 +450,7 @@ questions:
   intent: Test agent can search and summarize 5 papers with key points.
   human_prompt_seed: |
     利用 bohr-cli，下周组会我要讲"MOF催化CO2还原"，帮我快速整理 5 篇核心文献的要点。
-    保存到 `a8_review.json`，记录每篇的标题和关键要点，要求至少5篇。
+    保存到 `a8_review.json`，记录每篇的标题和关键要点，要求至少5篇。JSON 中每篇的关键要点用 `key_points`。
   tags:
   - bohr-cli
   reference_answers:
@@ -579,7 +579,7 @@ questions:
     tool_name: Bash
     tool_arg: command
     value:
-      pattern: '(?:^|[\n;&|]\s*)(?:[^\s;&|]+/)?bohr\s+mentor\s+(ask|query|chat)\b'
+      pattern: '(?:^|[\n;&|]\s*)(?:[^\s;&|]+/)?bohr\s+mentor\s+\+?(ask|query|chat)\b'
       min_matches: 1
   - key: turn_budget
     value:
@@ -617,7 +617,7 @@ questions:
   intent: Test agent uses bohr lkm for literature knowledge mining with stance analysis.
   human_prompt_seed: |
     利用 bohr-cli，关于 MXene 表面官能团和电化学性能关系的讨论都是怎么样的？哪些结论是相互印证和冲突的，列个表。
-    输出到 `a11_mxene.json`，记录各观点的来源、内容和立场（支持/冲突），以及总结。
+    输出到 `a11_mxene.json`，记录各观点的来源、内容和立场（支持/冲突），以及总结。JSON 中各观点记录在 `claims` 数组，每项立场用 `stance`。
   tags:
   - bohr-cli
   reference_answers:
@@ -668,7 +668,7 @@ questions:
   intent: Test agent discovers docking tools and grounds an onboarding guide in one tool's platform details.
   human_prompt_seed: |
     利用 bohr-cli，我想做小分子和蛋白的 docking，帮我在平台上找几个合适的工具，选一个介绍清楚它能做什么、当前版本以及怎么开始用。只查资料，不要创建资源。
-    把结果保存到工作区根目录的 `a12_tools.json`，记录搜索关键词、候选工具列表和选定工具的详细信息。
+    把结果保存到工作区根目录的 `a12_tools.json`，记录搜索关键词、候选工具列表和选定工具的详细信息。JSON 顶层使用 `query`、`candidates` 和 `selected_tool`；`candidates` 为数组，每项含 `name`、`tool_unique_key` 和 `repo_url`；`selected_tool` 包含 `name`、`tool_unique_key`、`version`、`description`、`usage_entry_command`、`help_urls` 和 `usage_steps`。
   tags:
   - bohr-cli
   reference_answers:
@@ -755,7 +755,7 @@ questions:
     tool_name: Bash
     tool_arg: command
     value:
-      pattern: '(?:^|[\n;&|]\s*)(?:(?:env|sudo)(?:\s+[^\s;&|]+)*\s+)?(?:[^\s;&|]+/)?bohr\s+tools\s+search\b(?=[^\n;&|]*(?i:dock|对接))'
+      pattern: '(?:^|[\n;&|]\s*)(?:(?:env|sudo)(?:\s+[^\s;&|]+)*\s+)?(?:[^\s;&|]+/)?bohr\s+tools\s+\+?search\b(?=[^\n;&|]*(?i:dock|对接))'
       min_matches: 1
   - key: tool_details_queried_via_cli
     tool_name: Bash
@@ -795,7 +795,7 @@ questions:
   intent: Test agent uses LKM deep chain — search, graph, and reasoning in sequence.
   human_prompt_seed: |
     利用 bohr-cli，帮我调研一下"钙钛矿太阳能电池的离子迁移机制"：先检索相关文献，选一篇核心论文，读取它在知识图谱中的关联，再查询相关推理链看看有什么延伸结论。
-    把完整的调研链路保存到 `a13_lkm_chain.json`，记录检索结果、选中的论文、图谱关联和推理链内容。
+    把完整的调研链路保存到 `a13_lkm_chain.json`，记录检索结果、选中的论文、图谱关联和推理链内容。JSON 顶层使用 `search_results`、`selected_paper`、`graph_relations` 和 `reasoning_chain`；`selected_paper` 包含 `title`。
   tags:
   - bohr-cli
   reference_answers:
@@ -836,13 +836,13 @@ questions:
     tool_name: Bash
     tool_arg: command
     value:
-      pattern: '(?:^|[\n;&|]\s*)(?:[^\s;&|]+/)?bohr\s+paper\s+search\b'
+      pattern: '(?:^|[\n;&|]\s*)(?:[^\s;&|]+/)?bohr\s+paper\s+\+?search\b'
       min_matches: 1
   - key: lkm_queried_via_cli
     tool_name: Bash
     tool_arg: command
     value:
-      pattern: '(?:^|[\n;&|]\s*)(?:[^\s;&|]+/)?bohr\s+lkm\s+(graph|reasoning)\b'
+      pattern: '(?:^|[\n;&|]\s*)(?:[^\s;&|]+/)?bohr\s+lkm\s+\+?(graph|reasoning)\b'
       min_matches: 1
   - key: turn_budget
     value:

@@ -349,6 +349,35 @@ def test_tool_args_regex_reference_is_validated(value: object) -> None:
         )
 
 
+def test_grounding_patterns_accept_plus_shortcut_subcommands() -> None:
+    questions = flatten_banks(load_question_banks(QUESTION_BANK_DIR))
+    by_id = {q.id: q for q in questions}
+
+    cases = {
+        ("BWO_group_terminate_011_20260716", "jobs_submitted_via_cli"): (
+            "bohr job +submit -f config.json",
+            "bohr job submit -f config.json",
+        ),
+        ("BDD_file_lifecycle_009_20260716", "list_via_cli"): (
+            "bohr file +list /personal/tmp-x",
+            "bohr file stat /personal/tmp-x",
+        ),
+        ("BDD_file_lifecycle_009_20260716", "upload_via_cli"): (
+            "bohr file +upload ./test -d /personal/tmp-x",
+            "bohr file upload ./test -d /personal/tmp-x",
+        ),
+        ("BSA_lkm_deep_chain_013_20260717", "paper_searched_via_cli"): (
+            "bohr paper +search perovskite -o json",
+            "bohr paper search perovskite -o json",
+        ),
+    }
+    for (question_id, ref_key), commands in cases.items():
+        refs = {ref.key: ref for ref in by_id[question_id].reference_answers}
+        pattern = refs[ref_key].value["pattern"]
+        for command in commands:
+            assert re.search(pattern, command), (question_id, ref_key, command)
+
+
 def test_bwo_monitor_v6_uses_execution_receipts_without_prompt_hints() -> None:
     questions = flatten_banks(load_question_banks(QUESTION_BANK_DIR))
     question = next(q for q in questions if q.id == "BWO_monitor_D6_20260715_v6")

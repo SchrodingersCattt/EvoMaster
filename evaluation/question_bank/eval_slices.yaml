@@ -171,6 +171,6 @@ slices:
     type: skill
     slices:
       - "@bohr-cli"
-    count: 46
+    count: 44
 
   # ── Cross-cutting ───────────────────────────────────────────────────
