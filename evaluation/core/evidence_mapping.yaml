@@ -134,13 +134,8 @@ mappings:
     detail: "MCP electron microscopy analysis"
 
   # -------------------------------------------------------------------------
-  # Document / literature retrieval (MCP mat_doc / mat_sn)
+  # Literature retrieval (MCP mat_sn)
   # -------------------------------------------------------------------------
-  - pattern: "mat_doc_*"
-    event_type: "data_analysis"
-    source_type: "mcp_tool"
-    detail: "MCP document/literature retrieval"
-
   - pattern: "mat_sn_*"
     event_type: "data_analysis"
     source_type: "mcp_tool"

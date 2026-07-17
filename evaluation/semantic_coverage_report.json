@@ -106,7 +106,7 @@
       "rule_type": "general",
       "source_name": "mcp-mat-doc",
       "source_type": "skill",
-      "text": "从论文 PDF 提取晶体参数: `mat_doc_extract_material_data_from_pdf`"
+      "text": "从论文 PDF 提取晶体参数: `bohr pdf parse`"
     },
     {
       "actionability": "runtime_dependent",
@@ -4621,7 +4621,7 @@
       "rule_type": "general",
       "section": "典型用法",
       "source_name": "mcp-mat-doc",
-      "text": "从论文 PDF 提取晶体参数: `mat_doc_extract_material_data_from_pdf`"
+      "text": "从论文 PDF 提取晶体参数: `bohr pdf parse`"
     },
     {
       "actionability": "runtime_dependent",
@@ -7906,7 +7906,7 @@
       "rule_type": "workflow_step",
       "section": "Workflow",
       "source_name": "lit-data-organizer",
-      "text": "**Source preparation**: For PDFs, use `mat_doc_*` tools first. For web sources, use search/extraction tools."
+      "text": "**Source preparation**: For PDFs, use `bohr pdf parse` tools first. For web sources, use search/extraction tools."
     },
     {
       "actionability": "testable",
@@ -7958,11 +7958,11 @@
       "covered_by": [],
       "id": "lit-data-organizer/rules/741",
       "is_actionable": true,
-      "reason": "No evaluation questions are provided to test whether an agent violates the rule by parsing raw PDFs directly instead of using mat_doc_* functions.",
+      "reason": "No evaluation questions are provided to test whether an agent violates the rule by parsing raw PDFs directly instead of using bohr pdf parse functions.",
       "rule_type": "general",
       "section": "Rules",
       "source_name": "lit-data-organizer",
-      "text": "Do not parse raw PDFs directly — use `mat_doc_*` first."
+      "text": "Do not parse raw PDFs directly — use `bohr pdf parse` first."
     },
     {
       "actionability": "testable",
@@ -18873,7 +18873,7 @@
       "rule_type": "general",
       "section": "2.1 When the lookup table has no entry: search literature on the fly",
       "source_name": "tasker-polar-surface",
-      "text": "**Interpret**: From titles/snippets (or full page via **mat_doc_extract_info_from_webpage** if one URL is clearly relevant), infer whether the surface is Type 1 (non-polar), Type 2 (symmetric needed),"
+      "text": "**Interpret**: From titles/snippets (or full page via **bohr pdf parse** if one URL is clearly relevant), infer whether the surface is Type 1 (non-polar), Type 2 (symmetric needed),"
     },
     {
       "actionability": "testable",

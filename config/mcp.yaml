@@ -5,7 +5,6 @@ calculation_preflight: "calculation"
 calculation_servers:
   - "mat_sg"
   - "mat_compdart"
-  - "mat_doc"
   - "mat_struct_db"
   - "mat_recommend_db"
   - "mat_nmr"
@@ -25,8 +24,6 @@ tool_include_only:
     - "query_job_status"
     - "get_job_results"
     - "terminate_job"
-  mat_doc:
-    - extract_material_data_from_pdf
   mat_nmr:
     - "NMR_search_tool"
     - "NMR_predict_tool"
@@ -56,11 +53,6 @@ mcp_concurrency:
       max_inflight: 1
       max_pending_requests: 16
   servers:
-    # 文档/PDF 抽取链路先保守 rollout，避免一期就放大解析与资源占用抖动。
-    mat_doc:
-      mode: "serial"
-      max_inflight: 1
-      max_pending_requests: 16
     # 结构库查询更接近检索型 HTTP 路径，一期允许有限并发以验证吞吐收益。
     mat_struct_db:
       mode: "multiplex"
@@ -113,10 +105,6 @@ calculation_executors:
       submit_run_dart_ga:
         - targets[].model_path
     sync_tools: []
-  mat_doc:
-    executor: null
-    sync_tools:
-      - extract_material_data_from_pdf
   mat_nmr:
     executor: null
     path_params_by_tool:
