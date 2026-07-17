@@ -1266,3 +1266,75 @@ questions:
     axis: efficiency
     verify: turn_budget
 
+- id: BWO_event_consume_012_20260717
+  capability: workflow_orchestration
+  domain: agnostic
+  scope: platform
+  intent: Test agent submits a short job and consumes the corresponding completion event from the platform.
+  human_prompt_seed: |
+    利用 bohr-cli，帮我验证一下平台事件消费能力：提交一个唯一命名的短任务（镜像 registry.dp.tech/dptech/ubuntu:22.04-py3.10-cuda12.1，机型 c2_m4_cpu，命令 echo "event-test-done"，任务名以 b12-evt- 开头带唯一后缀），等它跑完后从平台事件中找到对应的完成事件，把事件内容和任务最终状态交叉核对。
+    操作记录保存到 `b12_event.json`。JSON 顶层使用 `job_id`、`job_name`、`event_found` 和 `final_status_match`。
+  tags:
+  - bohr-cli
+  reference_answers:
+  - key: artifact
+    value: b12_event.json
+  - key: event_schema
+    value:
+      filename: b12_event.json
+      schema:
+        type: object
+        required:
+        - job_id
+        - job_name
+        - event_found
+        - final_status_match
+        properties:
+          job_id:
+            type: integer
+            minimum: 1
+          job_name:
+            type: string
+            pattern: ^b12-evt-
+          event_found:
+            type: boolean
+            const: true
+          final_status_match:
+            type: boolean
+            const: true
+  - key: job_submitted_via_cli
+    tool_name: Bash
+    tool_arg: command
+    value:
+      pattern: '(?:^|[\n;&|]\s*)(?:[^\s;&|]+/)?bohr\s+job\s+\+?submit\b'
+      min_matches: 1
+  - key: event_consumed_via_cli
+    tool_name: Bash
+    tool_arg: command
+    value:
+      pattern: '(?:^|[\n;&|]\s*)(?:[^\s;&|]+/)?bohr\s+event\s+\+?consume\b'
+      min_matches: 1
+  - key: turn_budget
+    value:
+      max: 25
+  scoring_checklist:
+  - id: artifact
+    criterion: b12_event.json written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: event_schema
+    criterion: Records job ID with b12-evt- prefix name, confirms event found and status matches.
+    axis: correctness
+    verify: json_file_schema
+  - id: job_submitted_via_cli
+    criterion: Job was submitted through bohr-cli.
+    axis: grounding
+    verify: tool_args_regex
+  - id: event_consumed_via_cli
+    criterion: Event was consumed through bohr-cli.
+    axis: grounding
+    verify: tool_args_regex
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
