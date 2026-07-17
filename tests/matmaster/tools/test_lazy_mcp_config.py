@@ -38,9 +38,7 @@ class TestConfigureMCPManager:
         """When calculation_servers is absent, fallback to all_server_names."""
         manager = FakeMCPManager()
         config = {"calculation_preflight": "calculation"}
-        configure_mcp_manager(
-            manager, config, all_server_names={"mat_sg", "mat_sn"}
-        )
+        configure_mcp_manager(manager, config, all_server_names={"mat_sg", "mat_sn"})
         assert manager.calculation_preflight_servers == {
             "mat_sg",
             "mat_sn",
@@ -189,9 +187,7 @@ class TestConfigureMCPManager:
 
         assert manager.concurrency_defaults_by_transport == {}
         assert manager.concurrency_by_server == {}
-        assert manager.tool_include_only == {
-            "mat_struct_db": ["search_structures"]
-        }
+        assert manager.tool_include_only == {"mat_struct_db": ["search_structures"]}
 
     def test_invalid_concurrency_entries_emit_warnings_with_config_paths(self, caplog):
         manager = FakeMCPManager()
