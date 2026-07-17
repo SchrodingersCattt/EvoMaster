@@ -269,7 +269,7 @@ Generated: 2026-05-08 02:31 UTC
 
 ### lit-data-organizer (4 uncovered)
 
-- **[workflow_step]** **Source preparation**: For PDFs, use `mat_doc_*` tools first. For web sources, use search/extraction tools.
+- **[workflow_step]** **Source preparation**: For PDFs, use `bohr pdf parse` first. For web sources, use search/extraction tools.
 - **[workflow_step]** **Normalize and merge**: `build_lit_table.py` harmonizes fields, deduplicates, preserves conflicts with metadata.
 - **[workflow_step]** **Enrich** (agent-side): Read `_tmp/lit_data/normalized_rows.json`, apply pattern-based or semantic extraction (see `references/enrich_strategy.md`),
 - **[workflow_step]** **Export**: CSV or JSONL. For business deliverables (e.g. `candidates.csv`), see `references/business_export_candidates.md`.

@@ -39,12 +39,11 @@ class TestConfigureMCPManager:
         manager = FakeMCPManager()
         config = {"calculation_preflight": "calculation"}
         configure_mcp_manager(
-            manager, config, all_server_names={"mat_sg", "mat_sn", "mat_doc"}
+            manager, config, all_server_names={"mat_sg", "mat_sn"}
         )
         assert manager.calculation_preflight_servers == {
             "mat_sg",
             "mat_sn",
-            "mat_doc",
         }
 
     def test_sync_tools_only_inside_calculation_branch(self):
@@ -133,7 +132,7 @@ class TestConfigureMCPManager:
                     }
                 },
                 "servers": {
-                    "mat_doc": {
+                    "mat_struct_db": {
                         "mode": "multiplex",
                         "max_inflight": 5,
                         "max_pending_requests": 20,
@@ -152,7 +151,7 @@ class TestConfigureMCPManager:
             )
         )
         assert manager.concurrency_by_server == {
-            "mat_doc": MCPConcurrencyPolicy(
+            "mat_struct_db": MCPConcurrencyPolicy(
                 mode="multiplex",
                 max_inflight=5,
                 max_pending_requests=20,
@@ -176,14 +175,14 @@ class TestConfigureMCPManager:
                     },
                 },
                 "servers": {
-                    "mat_doc": {
+                    "mat_struct_db": {
                         "mode": "multiplex",
                         "max_inflight": 3,
                     },
                     "mat_nmr": "bad",
                 },
             },
-            "tool_include_only": {"mat_doc": ["extract_material_data_from_pdf"]},
+            "tool_include_only": {"mat_struct_db": ["search_structures"]},
         }
 
         configure_mcp_manager(manager, config)
@@ -191,7 +190,7 @@ class TestConfigureMCPManager:
         assert manager.concurrency_defaults_by_transport == {}
         assert manager.concurrency_by_server == {}
         assert manager.tool_include_only == {
-            "mat_doc": ["extract_material_data_from_pdf"]
+            "mat_struct_db": ["search_structures"]
         }
 
     def test_invalid_concurrency_entries_emit_warnings_with_config_paths(self, caplog):
@@ -206,7 +205,7 @@ class TestConfigureMCPManager:
                     }
                 },
                 "servers": {
-                    "mat_doc": {
+                    "mat_struct_db": {
                         "mode": "multiplex",
                         "max_inflight": 3,
                     }
@@ -220,7 +219,7 @@ class TestConfigureMCPManager:
         assert manager.concurrency_defaults_by_transport == {}
         assert manager.concurrency_by_server == {}
         assert "mcp_concurrency.defaults.http" in caplog.text
-        assert "mcp_concurrency.servers.mat_doc" in caplog.text
+        assert "mcp_concurrency.servers.mat_struct_db" in caplog.text
 
     @pytest.mark.parametrize("bad_concurrency", ["bad", []])
     def test_non_dict_top_level_concurrency_emits_warning_and_is_ignored(
@@ -298,14 +297,14 @@ class TestResolveLazyMCPToolTimeout:
         timeout = resolve_lazy_mcp_tool_timeout(
             {
                 "calculation_executors": {
-                    "mat_doc": {
+                    "mat_nmr": {
                         "executor": None,
-                        "sync_tools": ["extract_data"],
+                        "sync_tools": ["NMR_search_tool"],
                     }
                 }
             },
-            server_name="mat_doc",
-            remote_tool_name="extract_data",
+            server_name="mat_nmr",
+            remote_tool_name="NMR_search_tool",
         )
         assert timeout is None
 

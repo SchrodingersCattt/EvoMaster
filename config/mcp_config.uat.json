@@ -5,11 +5,6 @@
       "transport": "http",
       "url": "http://pfmx1355864.bohrium.tech:50002/mcp"
     },
-    "mat_doc": {
-      "headers": {},
-      "transport": "http",
-      "url": "http://pfmx1355864.bohrium.tech:50005/mcp"
-    },
     "mat_electron_microscope": {
       "headers": {},
       "transport": "sse",

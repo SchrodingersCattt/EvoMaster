@@ -1,10 +1,10 @@
 ---
 name: composition-optimization
 description: Multi-component alloy/material composition optimization via DART GA. Use for alloy composition search, seed design, or converting composition targets to explicit structures.
-depends_on: mcp-mat-compdart, mcp-mat-struct-db, mcp-mat-doc
+depends_on: mcp-mat-compdart, mcp-mat-struct-db
 ---
 
-<!-- multi-server: mat_compdart, mat_struct_db, mat_sg, mat_sn, mat_doc -->
+<!-- multi-server: mat_compdart, mat_struct_db, mat_sg, mat_sn -->
 
 # Composition Optimization Skill
 
@@ -28,7 +28,7 @@ A routing skill for composition-design workflows with explicit decision branches
 2. **Prepare initial candidates**
    - If user provided candidate compositions, clean and standardize them.
    - If not provided (or if literature search is planned regardless),
-     collect literature evidence with `mat_doc_*` / `mat_sn_*` tools and
+     collect literature evidence with `mat_sn_*` tools and
      record candidate compositions with sources before sampling seeds.
 
 3. **Route by surrogate-model availability**
