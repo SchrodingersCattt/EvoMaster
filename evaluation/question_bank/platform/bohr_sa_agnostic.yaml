@@ -213,7 +213,7 @@ questions:
   - key: has_focus
     value:
       filename: a4_scholars.json
-      pattern: '"research_focus"\s*:\s*\['
+      pattern: '"research_focus"\s*:\s*[\["]'
   - key: has_comparison
     value:
       filename: a4_scholars.json
@@ -853,7 +853,7 @@ questions:
     tool_name: Bash
     tool_arg: command
     value:
-      pattern: '(?:^|[\n;&|]\s*)(?:[^\s;&|]+/)?bohr\s+paper\s+\+?search\b'
+      pattern: '(?:^|[\n;&|]\s*)(?:[^\s;&|]+/)?bohr\s+(?:paper|lkm)\s+\+?search\b'
       min_matches: 1
   - key: lkm_queried_via_cli
     tool_name: Bash
