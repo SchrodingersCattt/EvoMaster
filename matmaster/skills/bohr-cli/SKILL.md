@@ -12,12 +12,13 @@ description: "Use Bohrium CLI (bohr) for platform operations: job/node/sandbox m
 
 ## 认证
 
-沙箱内平台注入的是 `BOHRIUM_ACCESS_KEY`（CLI 不直接读它），两种用法任选：
+沙箱内平台已注入 CLI 直读的 `BOHR_ACCESS_KEY` 和 `BOHR_OPENAPI_HOST`（同环境端点），常规情况免登录：
 
 ```bash
-export BOHR_ACCESS_KEY="$BOHRIUM_ACCESS_KEY"   # CLI 直读该变量，免 login
+bohr auth status --verify   # 应显示 logged_in: true / auth_method: access_key，host 与本环境一致
+# 仅当上述变量缺失（旧环境只注入 BOHRIUM_ACCESS_KEY，CLI 不读它）时手动补：
+export BOHR_ACCESS_KEY="$BOHRIUM_ACCESS_KEY"
 bohr auth login --ak "$BOHRIUM_ACCESS_KEY"     # 或持久化到 ~/.bohrium/cfg.yaml
-bohr auth status --verify                       # 校验；输出含 logged_in/auth_method/host
 ```
 
 无 AK 或 AK 失效（401）时，改用设备码流程让用户在浏览器完成授权，不要要求用户在对话中粘贴 AK：
