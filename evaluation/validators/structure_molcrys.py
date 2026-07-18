@@ -510,17 +510,12 @@ def check_molcrys_molecule_formulas(
     if not root.is_dir():
         return False, f'workspace not a directory: {workspace_dir}'
 
-    # Resolve file
-    import glob as _glob
+    from evaluation.validators._common import resolve_file
 
-    matches = sorted(_glob.glob(str(root / filename)))
-    if not matches:
-        # Try recursive
-        matches = sorted(root.rglob(filename.lstrip('*').lstrip('/')))
-        matches = [str(m) for m in matches]
-    if not matches:
+    resolved = resolve_file(root, filename)
+    if resolved is None:
         return False, f'no file matching {filename!r} in {root}'
-    fpath = matches[0]
+    fpath = str(resolved)
 
     expected_sorted = sorted(expected_formulas)
 

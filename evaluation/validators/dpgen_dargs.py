@@ -7,6 +7,8 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
+from evaluation.validators._common import resolve_file as _resolve_file
+
 
 def _coerce_bool(value: Any, *, name: str) -> bool:
     """Coerce YAML/JSON-friendly boolean values without bool("false") traps."""
@@ -19,28 +21,6 @@ def _coerce_bool(value: Any, *, name: str) -> bool:
         if lowered in {"0", "false", "no", "n", "off", ""}:
             return False
     raise ValueError(f"{name} must be a boolean")
-
-
-def _resolve_file(
-    workspace: Path,
-    name: str,
-    *,
-    workspace_resolve: str = "recursive",
-) -> Path | None:
-    """Resolve a workspace file by exact relative path, then by basename."""
-    if workspace_resolve == "root":
-        if len(Path(name).parts) != 1:
-            return None
-        direct = workspace / name
-        return direct if direct.is_file() else None
-
-    direct = workspace / name
-    if direct.is_file():
-        return direct
-    for path in workspace.rglob(Path(name).name):
-        if path.is_file():
-            return path
-    return None
 
 
 def _load_json(path: Path) -> tuple[Any | None, str | None]:

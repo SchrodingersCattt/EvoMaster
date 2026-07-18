@@ -12,16 +12,13 @@ from pathlib import Path
 from jsonschema.exceptions import SchemaError
 from jsonschema.validators import validator_for
 
-
-def _resolve_file(workspace: Path, name: str) -> Path | None:
-    """Try direct child first, then recursive glob."""
-    direct = workspace / name
-    if direct.is_file():
-        return direct
-    for p in workspace.rglob(Path(name).name):
-        if p.is_file():
-            return p
-    return None
+from evaluation.validators._common import (
+    collect_positive_ids as _collect_json_identifiers,
+)
+from evaluation.validators._common import normalise_key as _normalise_key
+from evaluation.validators._common import positive_int as _positive_int
+from evaluation.validators._common import resolve_file as _resolve_file
+from evaluation.validators._common import walk_json as _walk_json
 
 
 def _traverse_dotted(obj: object, dotted_key: str) -> object | None:
@@ -35,55 +32,6 @@ def _traverse_dotted(obj: object, dotted_key: str) -> object | None:
         else:
             return None
     return val
-
-
-def _walk_json(value: object):
-    yield value
-    if isinstance(value, dict):
-        for child in value.values():
-            yield from _walk_json(child)
-    elif isinstance(value, list):
-        for child in value:
-            yield from _walk_json(child)
-
-
-def _is_positive_id(value: object) -> bool:
-    if isinstance(value, bool):
-        return False
-    if isinstance(value, int):
-        return value > 0
-    return isinstance(value, str) and value.isdigit() and int(value) > 0
-
-
-def _collect_json_identifiers(value: object) -> set[int]:
-    identifiers: set[int] = set()
-    if isinstance(value, dict):
-        for key, child in value.items():
-            normalised = re.sub(r'[^a-z0-9]', '', str(key).lower())
-            key_is_identifier = normalised in {'id', 'ids'} or normalised.endswith(
-                (
-                    'identifier',
-                    'identifiers',
-                    'bohrid',
-                    'bohrids',
-                    'jobid',
-                    'jobids',
-                    'taskid',
-                    'taskids',
-                )
-            )
-            if key_is_identifier:
-                identifiers.update(
-                    int(candidate)
-                    for candidate in _walk_json(child)
-                    if _is_positive_id(candidate)
-                )
-            else:
-                identifiers.update(_collect_json_identifiers(child))
-    elif isinstance(value, list):
-        for child in value:
-            identifiers.update(_collect_json_identifiers(child))
-    return identifiers
 
 
 def check_json_file_schema(
@@ -152,10 +100,26 @@ def check_bohr_job_stop_record(
         data = json.loads(fpath.read_text(encoding='utf-8'))
     except ValueError as exc:
         return False, f'{filename} is not valid JSON: {exc}'
+    return check_bohr_job_stop_record_data(
+        filename,
+        data,
+        image=image,
+        machine_type=machine_type,
+        command=command,
+        job_name_prefix=job_name_prefix,
+    )
 
-    def _normalise_key(value: object) -> str:
-        return re.sub(r'[^a-z0-9]', '', str(value).lower())
 
+def check_bohr_job_stop_record_data(
+    filename: str,
+    data: object,
+    *,
+    image: str,
+    machine_type: str,
+    command: str,
+    job_name_prefix: str,
+) -> tuple[bool, str]:
+    """Record-level checks on already-parsed job-stop JSON."""
     strings = [value.strip() for value in _walk_json(data) if isinstance(value, str)]
     missing_values = [
         label
@@ -172,18 +136,7 @@ def check_bohr_job_stop_record(
         return False, f'{filename}: no job name starts with {job_name_prefix!r}'
 
     mappings = [value for value in _walk_json(data) if isinstance(value, dict)]
-    job_ids = {
-        int(value)
-        for mapping in mappings
-        for key, value in mapping.items()
-        if _is_positive_id(value)
-        and 'group' not in _normalise_key(key)
-        and (
-            _normalise_key(key).endswith('jobid')
-            or _normalise_key(key).endswith('taskid')
-        )
-    }
-    if not job_ids:
+    if not _collect_json_identifiers(data):
         return False, f'{filename}: no positive job/task ID evidence'
 
     raw_status_keys = {'status', 'statuscode'}
@@ -280,9 +233,29 @@ def check_bohr_job_upgrade_record(
         data = json.loads(fpath.read_text(encoding='utf-8'))
     except ValueError as exc:
         return False, f'{filename} is not valid JSON: {exc}'
+    return check_bohr_job_upgrade_record_data(
+        filename,
+        data,
+        seed_id=seed_id,
+        source_machine_pattern=source_machine_pattern,
+        target_machine_pattern=target_machine_pattern,
+        image=image,
+        command=command,
+    )
 
-    values = list(_walk_json(data))
-    strings = [value.strip() for value in values if isinstance(value, str)]
+
+def check_bohr_job_upgrade_record_data(
+    filename: str,
+    data: object,
+    *,
+    seed_id: int,
+    source_machine_pattern: str,
+    target_machine_pattern: str,
+    image: str,
+    command: str,
+) -> tuple[bool, str]:
+    """Record-level checks on already-parsed job-upgrade JSON."""
+    strings = [value.strip() for value in _walk_json(data) if isinstance(value, str)]
     identifiers = _collect_json_identifiers(data)
 
     if seed_id not in identifiers:
@@ -372,14 +345,14 @@ def check_bohr_parameter_sweep_record(
         data = json.loads(fpath.read_text(encoding='utf-8'))
     except ValueError as exc:
         return False, f'{filename} is not valid JSON: {exc}'
+    return check_bohr_parameter_sweep_record_data(filename, data)
 
-    def _normalise_key(value: object) -> str:
-        return re.sub(r'[^a-z0-9]', '', str(value).lower())
 
-    def _positive_int(value: object) -> int | None:
-        if not _is_positive_id(value):
-            return None
-        return int(value)
+def check_bohr_parameter_sweep_record_data(
+    filename: str,
+    data: object,
+) -> tuple[bool, str]:
+    """Record-level checks on already-parsed parameter-sweep JSON."""
 
     def _temperature(value: object) -> int | None:
         if isinstance(value, bool):

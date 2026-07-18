@@ -117,6 +117,16 @@ def test_bohr_job_stop_record_accepts_flat_document(tmp_path: Path) -> None:
     assert ok, reason
 
 
+def test_bohr_job_stop_record_accepts_bohr_id_key(tmp_path: Path) -> None:
+    record = _flat_record()
+    record['bohr_id'] = record.pop('job_id')
+    _write_record(tmp_path, record)
+
+    ok, reason = _check(tmp_path)
+
+    assert ok, reason
+
+
 def test_bohr_job_stop_record_accepts_nested_document(tmp_path: Path) -> None:
     _write_record(
         tmp_path,

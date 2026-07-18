@@ -8,50 +8,19 @@ import shlex
 from pathlib import Path
 
 from evaluation.core.evidence import BohrCliReceiptRecord
+from evaluation.validators._common import collect_positive_ids as _artifact_job_ids
+from evaluation.validators._common import normalise_key as _normalise_key
+from evaluation.validators._common import positive_int as _positive_int
+from evaluation.validators._common import resolve_file as _resolve_file
+from evaluation.validators._common import walk_json as _walk_json
 from evaluation.validators.json_file import (
-    check_bohr_job_stop_record,
-    check_bohr_job_upgrade_record,
-    check_bohr_parameter_sweep_record,
+    check_bohr_job_stop_record_data,
+    check_bohr_job_upgrade_record_data,
+    check_bohr_parameter_sweep_record_data,
 )
 
 
-def _normalise_key(value: object) -> str:
-    return re.sub(r'[^a-z0-9]', '', str(value).lower())
-
-
-def _positive_int(value: object) -> int | None:
-    if isinstance(value, bool):
-        return None
-    if isinstance(value, int) and value > 0:
-        return value
-    if isinstance(value, str) and value.isdigit() and int(value) > 0:
-        return int(value)
-    return None
-
-
-def _walk_json(value: object):
-    yield value
-    if isinstance(value, dict):
-        for child in value.values():
-            yield from _walk_json(child)
-    elif isinstance(value, list):
-        for child in value:
-            yield from _walk_json(child)
-
-
-def _resolve_file(root: Path, filename: str) -> Path | None:
-    direct = root / filename
-    if direct.is_file():
-        return direct
-    matches = sorted(path for path in root.rglob(filename) if path.is_file())
-    return matches[0] if len(matches) == 1 else None
-
-
-def _artifact_jobs(root: Path, filename: str) -> dict[int, int]:
-    path = _resolve_file(root, filename)
-    if path is None:
-        return {}
-    data = json.loads(path.read_text(encoding='utf-8'))
+def _artifact_temperature_jobs(data: dict) -> dict[int, int]:
     jobs: dict[int, int] = {}
     for node in _walk_json(data):
         if not isinstance(node, dict):
@@ -69,7 +38,7 @@ def _artifact_jobs(root: Path, filename: str) -> dict[int, int]:
 def _load_json_object(root: Path, filename: str) -> tuple[dict, str | None]:
     path = _resolve_file(root, filename)
     if path is None:
-        return {}, f'{filename}: file not found or ambiguous'
+        return {}, f'{filename} not found in workspace'
     try:
         data = json.loads(path.read_text(encoding='utf-8'))
     except (OSError, ValueError) as exc:
@@ -77,36 +46,6 @@ def _load_json_object(root: Path, filename: str) -> tuple[dict, str | None]:
     if not isinstance(data, dict):
         return {}, f'{filename}: top-level JSON value must be an object'
     return data, None
-
-
-def _artifact_job_ids(data: dict) -> set[int]:
-    identifiers: set[int] = set()
-    for node in _walk_json(data):
-        if not isinstance(node, dict):
-            continue
-        for raw_key, raw_value in node.items():
-            if _normalise_key(raw_key) not in {
-                'id',
-                'ids',
-                'identifier',
-                'identifiers',
-                'jobid',
-                'jobids',
-                'bohrid',
-                'bohrids',
-                'bohrjobid',
-                'bohrjobids',
-                'platformjobid',
-                'platformjobids',
-                'taskid',
-                'taskids',
-            }:
-                continue
-            for candidate in _walk_json(raw_value):
-                identifier = _positive_int(candidate)
-                if identifier is not None:
-                    identifiers.add(identifier)
-    return identifiers
 
 
 def _artifact_poll_count(data: dict) -> int:
@@ -335,9 +274,12 @@ def check_bohr_job_upgrade_execution(
     receipts: list[BohrCliReceiptRecord],
 ) -> tuple[bool, str]:
     """Validate one source-inspect, machine-query, A100-submit lifecycle."""
-    record_ok, record_reason = check_bohr_job_upgrade_record(
-        workspace_dir,
-        filename=filename,
+    artifact, artifact_error = _load_json_object(Path(workspace_dir), filename)
+    if artifact_error:
+        return False, artifact_error
+    record_ok, record_reason = check_bohr_job_upgrade_record_data(
+        filename,
+        artifact,
         seed_id=seed_id,
         source_machine_pattern=source_machine_pattern,
         target_machine_pattern=target_machine_pattern,
@@ -387,9 +329,6 @@ def check_bohr_job_upgrade_execution(
     if not machine_queries:
         return False, 'job-scene GPU machines were not queried before submission'
 
-    artifact, artifact_error = _load_json_object(Path(workspace_dir), filename)
-    if artifact_error:
-        return False, artifact_error
     artifact_ids = _artifact_job_ids(artifact)
     submitted_ids = set(submit.ids.job_ids)
     if seed_id not in artifact_ids:
@@ -420,9 +359,12 @@ def check_bohr_job_stop_execution(
     receipts: list[BohrCliReceiptRecord],
 ) -> tuple[bool, str]:
     """Validate one isolated submit-poll-stop-poll lifecycle and its record."""
-    record_ok, record_reason = check_bohr_job_stop_record(
-        workspace_dir,
-        filename=filename,
+    artifact, artifact_error = _load_json_object(Path(workspace_dir), filename)
+    if artifact_error:
+        return False, artifact_error
+    record_ok, record_reason = check_bohr_job_stop_record_data(
+        filename,
+        artifact,
         image=image,
         machine_type=machine_type,
         command=command,
@@ -494,9 +436,6 @@ def check_bohr_job_stop_execution(
     if lifecycle_control is None:
         return False, 'no successful stop of the submitted job between status queries'
 
-    artifact, artifact_error = _load_json_object(Path(workspace_dir), filename)
-    if artifact_error:
-        return False, artifact_error
     if not submitted_job_ids.intersection(_artifact_job_ids(artifact)):
         return False, f'{filename}: recorded job identifier does not match CLI receipts'
 
@@ -513,9 +452,11 @@ def check_bohr_parameter_sweep_execution(
     receipts: list[BohrCliReceiptRecord],
 ) -> tuple[bool, str]:
     """Cross-check a grouped parameter sweep against actual Bohr-CLI executions."""
-    artifact_ok, artifact_reason = check_bohr_parameter_sweep_record(
-        workspace_dir,
-        filename=filename,
+    artifact, artifact_error = _load_json_object(Path(workspace_dir), filename)
+    if artifact_error:
+        return False, artifact_error
+    artifact_ok, artifact_reason = check_bohr_parameter_sweep_record_data(
+        filename, artifact
     )
     if not artifact_ok:
         return False, artifact_reason
@@ -564,7 +505,7 @@ def check_bohr_parameter_sweep_execution(
             'submitted job group was not returned by the recorded group creation',
         )
 
-    artifact_jobs = _artifact_jobs(Path(workspace_dir), filename)
+    artifact_jobs = _artifact_temperature_jobs(artifact)
     expected_temperatures = set(range(300, 1001, 100))
     if set(by_temperature) != expected_temperatures:
         return False, 'execution receipts do not cover 300-1000 K by 100 K once'
@@ -597,7 +538,7 @@ def check_bohr_job_monitor_execution(
     if artifact_error:
         return False, artifact_error
     if _resolve_file(root, log_filename) is None:
-        return False, f'{log_filename}: file not found or ambiguous'
+        return False, f'{log_filename} not found in workspace'
 
     indexed_receipts = list(enumerate(receipts))
     submits = [
