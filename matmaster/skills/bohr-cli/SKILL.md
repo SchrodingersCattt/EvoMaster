@@ -294,4 +294,3 @@ bohr doctor [--offline]
 ```bash
 bohr api <METHOD> <PATH> [--data <json|@file>] [--params key=value]
 ```
-
