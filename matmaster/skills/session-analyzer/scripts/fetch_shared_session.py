@@ -17,13 +17,13 @@ import argparse
 import json
 import re
 import sys
+import time
 import urllib.error
 import urllib.request
 from typing import Any
 
 SHARE_URL_PATTERNS = [
-    re.compile(r"https?://[^/]+/matmaster/chat-evo/share/([a-f0-9]+)"),
-    re.compile(r"https?://[^/]+/share/([a-f0-9]+)"),
+    re.compile(r"https?://[^/]+/matmaster/chat/share/([a-f0-9]+)"),
 ]
 
 API_PATH_TEMPLATE = (
@@ -41,9 +41,7 @@ def parse_share_url(url_or_id: str) -> tuple[str, str]:
         m = pattern.search(url_or_id)
         if m:
             session_id = m.group(1)
-            base_end = url_or_id.find("/matmaster/chat-evo/share/")
-            if base_end == -1:
-                base_end = url_or_id.find("/share/")
+            base_end = url_or_id.find("/matmaster/chat/share/")
             base_url = url_or_id[:base_end]
             return base_url, session_id
     if re.fullmatch(r"[a-f0-9]{16,64}", url_or_id):
@@ -51,11 +49,15 @@ def parse_share_url(url_or_id: str) -> tuple[str, str]:
     raise ValueError(f"Cannot parse session ID from: {url_or_id}")
 
 
-def fetch_sse_events(base_url: str, session_id: str, timeout: int = 30) -> list[dict]:
+def fetch_sse_events(
+    base_url: str, session_id: str, timeout: int = 30, max_seconds: int = 120
+) -> list[dict]:
     """POST to the share stream endpoint and parse SSE events.
 
-    The endpoint returns a chunked SSE stream. We read line-by-line and stop
-    when we see a stream_closed/session_status(idle) event or the connection ends.
+    idle 会话：后端先推 session_status(idle)，随后一次性回放全部历史并在末尾关闭连接。
+    历史里录有每一轮 run 结尾的 stream_closed，不能当作流结束信号——多轮会话会被截断，
+    必须读到 EOF。active 会话：跟随 live run，遇到 live 的 stream_closed 才收尾。
+    max_seconds 是两种情况共用的墙钟上限，防止在长跑会话上挂死。
     """
     api_url = base_url + API_PATH_TEMPLATE.format(session_id=session_id)
     req = urllib.request.Request(
@@ -71,8 +73,12 @@ def fetch_sse_events(base_url: str, session_id: str, timeout: int = 30) -> list[
         raise RuntimeError(f"HTTP {e.code} from {api_url}: {error_body[:500]}") from e
 
     events: list[dict] = []
+    session_idle = False
+    started = time.monotonic()
     try:
         for raw_line in resp:
+            if time.monotonic() - started > max_seconds:
+                break
             line = raw_line.decode("utf-8", errors="replace").rstrip("\n\r")
             if not line.startswith("data: "):
                 continue
@@ -83,9 +89,10 @@ def fetch_sse_events(base_url: str, session_id: str, timeout: int = 30) -> list[
                 continue
             events.append(ev)
             ev_type = ev.get("type", "")
-            if ev_type == "stream_closed":
-                break
-            if ev_type == "session_status" and ev.get("status") == "idle":
+            if ev_type == "session_status" and len(events) == 1:
+                session_idle = ev.get("status") == "idle"
+                continue
+            if ev_type == "stream_closed" and not session_idle:
                 break
     except OSError:
         pass
@@ -310,6 +317,12 @@ def main():
         default=30,
         help="HTTP request timeout in seconds (default: 30)",
     )
+    parser.add_argument(
+        "--max-seconds",
+        type=int,
+        default=120,
+        help="Wall-clock cap on stream reading (default: 120)",
+    )
     args = parser.parse_args()
 
     try:
@@ -319,7 +332,9 @@ def main():
         sys.exit(1)
 
     try:
-        events = fetch_sse_events(base_url, session_id, timeout=args.timeout)
+        events = fetch_sse_events(
+            base_url, session_id, timeout=args.timeout, max_seconds=args.max_seconds
+        )
     except RuntimeError as e:
         print(json.dumps({"error": str(e)}), file=sys.stderr)
         sys.exit(1)
@@ -341,7 +356,7 @@ def main():
         result = format_raw(events, event_types, args.max_content_len)
 
     result["session_id"] = session_id
-    result["source_url"] = f"{base_url}/matmaster/chat-evo/share/{session_id}"
+    result["source_url"] = f"{base_url}/matmaster/chat/share/{session_id}"
     print(json.dumps(result, ensure_ascii=False, indent=2))
 
 
