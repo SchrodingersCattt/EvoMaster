@@ -382,6 +382,7 @@ class QuestionItem(BaseModel):
             "bohr_job_stop_execution",
             "bohr_job_upgrade_execution",
             "bohr_parameter_sweep_record",
+            "bohr_parameter_sweep_execution",
             "bohr_job_stop_record",
             "bohr_job_upgrade_record",
             "json_file_numeric_range",

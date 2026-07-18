@@ -147,6 +147,38 @@ def test_parameter_sweep_rejects_conflicting_group_ids(tmp_path: Path) -> None:
     assert 'conflicting' in reason
 
 
+def test_parameter_sweep_execution_without_reference_fails_cleanly() -> None:
+    from pydantic import ValidationError
+
+    from evaluation.core.schemas import QuestionBank
+
+    with pytest.raises(ValidationError, match='requires a matching reference_answers'):
+        QuestionBank.model_validate(
+            {
+                'version': 'v5',
+                'capability': 'workflow_orchestration',
+                'domain': 'agnostic',
+                'questions': [
+                    {
+                        'id': 'BWO_sweep_needs_ref_001',
+                        'capability': 'workflow_orchestration',
+                        'domain': 'agnostic',
+                        'intent': 'sweep execution requires a reference answer',
+                        'human_prompt_seed': 'run the sweep',
+                        'reference_answers': [],
+                        'scoring_checklist': [
+                            {
+                                'id': 'sweep_execution',
+                                'criterion': 'sweep receipts match the record',
+                                'verify': 'bohr_parameter_sweep_execution',
+                            }
+                        ],
+                    }
+                ],
+            }
+        )
+
+
 def test_parameter_sweep_checker_is_registered_with_evaluator(
     tmp_path: Path,
 ) -> None:
