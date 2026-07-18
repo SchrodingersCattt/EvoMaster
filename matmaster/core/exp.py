@@ -190,12 +190,15 @@ class Exp:
         has_session: bool,
         builtin_cfg: list[str],
         skills_enabled: bool,
+        excluded_builtin: frozenset[str] = frozenset(),
     ) -> frozenset:
         """Derive active tool planes from runtime capabilities.
 
         Always activates CONTROL_PLANE. Activates SESSION_SHELL and
         SESSION_FS when a session is present. Activates EXTERNAL_SERVICE
-        when skills are enabled or external-effect builtins are configured.
+        when skills are enabled or an external-effect builtin survives the
+        exclusion list — the same filter _init_builtin_tools applies, so the
+        declared planes match the registered tool catalog.
         """
         from matmaster.types.topology import ToolPlane
 
@@ -203,7 +206,12 @@ class Exp:
         if has_session:
             planes |= {ToolPlane.SESSION_SHELL, ToolPlane.SESSION_FS}
         cfg_set = set(builtin_cfg)
-        if skills_enabled or "*" in cfg_set or cfg_set & _EXTERNAL_EFFECT_TOOL_NAMES:
+        allow_all = "*" in cfg_set
+        has_external_effect_tool = any(
+            (allow_all or name in cfg_set) and name not in excluded_builtin
+            for name in _EXTERNAL_EFFECT_TOOL_NAMES
+        )
+        if skills_enabled or has_external_effect_tool:
             planes.add(ToolPlane.EXTERNAL_SERVICE)
         return frozenset(planes)
 
@@ -266,6 +274,7 @@ class Exp:
             has_session=env.session is not None,
             builtin_cfg=self._config.tools.builtin,
             skills_enabled=self._config.skills.enabled,
+            excluded_builtin=frozenset(excluded_builtin),
         )
 
         topology = RuntimeTopology(
