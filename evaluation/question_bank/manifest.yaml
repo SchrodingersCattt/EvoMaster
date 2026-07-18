@@ -229,7 +229,7 @@ banks:
 - path: platform/bohr_ec_agnostic.yaml
   capability: execution_contract
   domain: agnostic
-  questions: 9
+  questions: 11
 - path: input_generation/ig_semiconductor_abacus.yaml
   capability: input_generation
   domain: semiconductor
