@@ -44,13 +44,14 @@ from evaluation.core.evidence import (
     TokenUsage,
     ToolCallRecord,
 )
+from evaluation.core.question_tags import is_bohr_cli_question
 from evaluation.core.schemas import LLMRuntimeConfig, QuestionItem
-from evaluation.scripts.devshell.bohr_cli_audit import RECEIPTS_FILENAME
 from evaluation.scripts.baseline.score_baseline_tasks import (
     _build_evaluator_llm_cfg,
     _build_question_map,
     _load_eval_config,
 )
+from evaluation.scripts.devshell.bohr_cli_audit import RECEIPTS_FILENAME
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 _QUESTION_BANK_DIR = REPO_ROOT / "evaluation" / "question_bank"
@@ -184,8 +185,7 @@ def _required_execution_checks(
     evidence: EvidenceBundle,
 ) -> dict[str, tuple[bool, str]]:
     """Return tag-driven execution checks that are mandatory for binary pass."""
-    tags = {str(tag) for tag in question.tags}
-    if "bohr-cli" not in tags:
+    if not is_bohr_cli_question(question):
         return {}
 
     successful_receipts = [

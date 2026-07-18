@@ -48,3 +48,14 @@ class QuestionTag(StrEnum):
     char_battery_cycling = 'char_battery_cycling'
     # Bohrium CLI (bohr-cli skill)
     bohr_cli = 'bohr-cli'
+
+
+def is_bohr_cli_question(question: object) -> bool:
+    """Single policy for the bohr-cli tag.
+
+    Drives the audit shim, the Bohrium-tool exclusion, the receipt-schema
+    manifest entry, and the execution-contract scoring gate — keep them in
+    lockstep by routing every decision through this predicate.
+    """
+    tags = getattr(question, 'tags', ())
+    return any(str(tag) == QuestionTag.bohr_cli for tag in tags)

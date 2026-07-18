@@ -10,6 +10,7 @@ from evaluation.core.evidence import BohrCliReceiptRecord, EvidenceBundle
 from evaluation.core.runner import flatten_banks, load_question_banks
 from evaluation.validators.bohr_cli import check_bohr_job_upgrade_execution
 from evaluation.validators.json_file import check_bohr_job_upgrade_record
+from tests.evaluation.bohr_cli_receipt_helpers import make_receipt as _receipt
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 QUESTION_BANK_DIR = REPO_ROOT / 'evaluation' / 'question_bank'
@@ -19,17 +20,6 @@ COMMAND = "echo 'T4 test for eval E6' > result.txt"
 TARGET_MACHINE = 'c16_m60_1 * NVIDIA A100_80g'
 NEW_BOHR_JOB_ID = 20409999
 NEW_PLATFORM_JOB_ID = 23059999
-
-
-def _receipt(**values) -> BohrCliReceiptRecord:
-    return BohrCliReceiptRecord.model_validate(
-        {
-            'schema_version': 'bohr_cli_receipt_v1',
-            'exit_code': 0,
-            'ok': True,
-            **values,
-        }
-    )
 
 
 def _execution_receipts(

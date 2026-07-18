@@ -137,6 +137,7 @@ def main() -> int:
         load_dotenv(env_file, override=True)
 
     sys.path.insert(0, str(REPO_ROOT))
+    from evaluation.core.question_tags import is_bohr_cli_question
     from evaluation.scripts.devshell.bohr_cli_audit import (
         RECEIPT_SCHEMA,
         RECEIPTS_FILENAME,
@@ -318,10 +319,10 @@ def main() -> int:
         )
         for excluded in tooling_exclusions
     }
-    if len(eval_tooling_by_exclusions) == 1:
-        eval_tooling_snapshot = next(iter(eval_tooling_by_exclusions.values()))
-    else:
+    if () in eval_tooling_by_exclusions:
         eval_tooling_snapshot = eval_tooling_by_exclusions[()]
+    else:
+        eval_tooling_snapshot = next(iter(eval_tooling_by_exclusions.values()))
 
     manifest: dict[str, Any] = {
         "run_label": args.run_label,
@@ -336,7 +337,7 @@ def main() -> int:
         "eval_tooling": eval_tooling_snapshot,
     }
     has_bohr_cli_questions = any(
-        "bohr-cli" in {str(tag) for tag in item["question"].tags} for item in run_plan
+        is_bohr_cli_question(item["question"]) for item in run_plan
     )
     if has_bohr_cli_questions:
         manifest["bohr_cli_receipt_schema"] = RECEIPT_SCHEMA
@@ -411,7 +412,7 @@ def main() -> int:
 
         task_env = env
         bohr_audit_enabled = False
-        if "bohr-cli" in {str(tag) for tag in question.tags}:
+        if is_bohr_cli_question(question):
             task_env, bohr_audit_enabled = prepare_bohr_cli_audit_environment(
                 env,
                 receipt_path=log_dir / RECEIPTS_FILENAME,

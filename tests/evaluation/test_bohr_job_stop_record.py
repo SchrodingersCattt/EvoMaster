@@ -10,6 +10,7 @@ from evaluation.core.evidence import BohrCliReceiptRecord, EvidenceBundle
 from evaluation.core.runner import flatten_banks, load_question_banks
 from evaluation.validators.bohr_cli import check_bohr_job_stop_execution
 from evaluation.validators.json_file import check_bohr_job_stop_record
+from tests.evaluation.bohr_cli_receipt_helpers import make_receipt as _receipt
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 QUESTION_BANK_DIR = REPO_ROOT / 'evaluation' / 'question_bank'
@@ -19,17 +20,6 @@ COMMAND = 'echo "b9 started" > b9_started.txt && sleep 600'
 JOB_NAME = 'b9-stop-running-1721123456'
 BOHR_JOB_ID = 20400001
 PLATFORM_JOB_ID = 23050001
-
-
-def _receipt(**values) -> BohrCliReceiptRecord:
-    return BohrCliReceiptRecord.model_validate(
-        {
-            'schema_version': 'bohr_cli_receipt_v1',
-            'exit_code': 0,
-            'ok': True,
-            **values,
-        }
-    )
 
 
 def _execution_receipts(

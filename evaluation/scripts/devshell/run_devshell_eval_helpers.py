@@ -195,8 +195,9 @@ def _eval_tooling_snapshot_for_exp_cli(
 
 def excluded_builtin_tools_for_question(question: Any) -> tuple[str, ...]:
     """Return eval-only builtin exclusions implied by a question's tags."""
-    tags = {str(tag) for tag in getattr(question, "tags", ())}
-    if "bohr-cli" in tags:
+    from evaluation.core.question_tags import is_bohr_cli_question
+
+    if is_bohr_cli_question(question):
         return ("Bohrium",)
     return ()
 

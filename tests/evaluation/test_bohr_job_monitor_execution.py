@@ -8,6 +8,7 @@ from pathlib import Path
 from evaluation.core.evaluator import BinaryEvaluator
 from evaluation.core.evidence import BohrCliReceiptRecord, EvidenceBundle
 from evaluation.core.runner import flatten_banks, load_question_banks
+from tests.evaluation.bohr_cli_receipt_helpers import make_receipt as _receipt
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 QUESTION_BANK_DIR = REPO_ROOT / 'evaluation' / 'question_bank'
@@ -17,17 +18,6 @@ COMMAND = 'echo "hello from bohrium" | tee result.txt && sleep 60'
 EQUIVALENT_COMMAND = "echo 'hello from bohrium' | tee result.txt && sleep 60"
 BOHR_JOB_ID = 20402319
 PLATFORM_JOB_ID = 23053839
-
-
-def _receipt(**values) -> BohrCliReceiptRecord:
-    return BohrCliReceiptRecord.model_validate(
-        {
-            'schema_version': 'bohr_cli_receipt_v1',
-            'exit_code': 0,
-            'ok': True,
-            **values,
-        }
-    )
 
 
 def _execution_receipts(
