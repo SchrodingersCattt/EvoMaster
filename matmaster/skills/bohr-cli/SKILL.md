@@ -46,7 +46,7 @@ bohr job submit -i job.json [--input_directory ./input]
 bohr job submit --project_id <pid> --image_address <img> --command <cmd> --machine_type <type>
 bohr job log -j <jobId> [--out ./logs]
 bohr job download -j <jobId> [--out ./results]
-bohr job terminate <job_id>           # 优雅停止，保留结果
+bohr job terminate <job_id>           # 优雅停止，保留结果（默认优先）
 bohr job kill <job_id>                # 强制终止，不保证结果
 bohr job delete <job_id>              # 删除记录（不可恢复）
 ```
@@ -70,7 +70,7 @@ submit 配置文件格式：
 ```json
 {
   "project_id": 12345, "job_type": "container",
-  "job_name": "...", "image_address": "registry.dp.tech/...",
+  "job_name": "...", "image_address": "registry.dp.tech/...",   // 镜像必须写完整地址，不能只写短名
   "machine_type": "c8_m32_1*A100", "command": "...",
   "log_file": "run.log", "result_path": "./results/"
 }
@@ -94,13 +94,16 @@ bohr job_group terminate <job_group_id>
 bohr job_group delete <job_group_id>
 ```
 
+`list` 按日期过滤时 `--start` 和 `--end` 必须同时指定。
+
 ## 开发机 (node)
 
 ```bash
 bohr node list [--started] [--paused] [--quiet]
 bohr node resources                   # 可用机型列表
 bohr node get <id>                    # 详情（含 SSH 信息）
-bohr node create -n <name> -p <pid> -i <image> -m <machine> [-d <disk_gb>] [-t <hours>]   # GPU 机型见下方避坑
+bohr node create -n <name> -P <pid> -i <image> -m <machine> [-d <disk_gb>] [-t <hours>]   # GPU 机型见下方避坑
+bohr node create -f config.json       # 从 JSON 配置创建（GPU 机型用这个）
 bohr node start <id>
 bohr node stop <id>
 bohr node restart <id>
@@ -110,7 +113,7 @@ bohr node delete <id>                 # 不可恢复
 
 状态码：-1=Paused, 0=Waiting, 1=Pending, 2=Started, 3=Starting
 
-GPU 机型避坑：`node resources` 返回的 GPU 标识带空格（如 `c16_m62_1 * NVIDIA T4`），直接传给 `node create -m` 会在首个空格处截断、报 `unknown machine type`。GPU 机型改用 `-f config.json`，在文件里写 `machine_type`（完整标签）或 `skuId`（取自 `resources` 的 `value`，如 T4=372）；不要用 `-m`。CPU 机型标识无空格（如 `c2_m4_cpu`），`-m` 可正常使用。
+GPU 机型避坑：`node resources` 返回的 GPU 标识带空格（如 `c16_m62_1 * NVIDIA T4`），直接传给 `node create -m` 会在首个空格处截断、报 `unknown machine type`。GPU 机型改用 `-f config.json`，在文件里写 `machine_type`（完整标签）或 `skuId`（取自 `resources` 的 `value`，如 T4=372）；不要用 `-m`。CPU 机型标识无空格（如 `c2_m4_cpu`），`-m` 可正常使用。配置字段名是蛇形 `machine_type`——写成驼峰 `machineType` 会被静默忽略并报 "machine_type is required"。
 
 ## 沙箱 (sandbox)
 
@@ -142,13 +145,16 @@ bohr sandbox delete <id> [--yes]
 bohr file list [path] [--project-id <pid>] [--limit 50]
 bohr file stat <path>
 bohr file mkdir <path>
-bohr file copy <src> <dst> [--recursive]
+bohr file upload <local_file> [remote_path] [--space personal|share] [--project-id <pid>]   # 2.2.19+，本地 → 盘
+bohr file download <path>
+bohr file copy <src> <dst> [--recursive]   # 仅盘内复制，本地文件用 upload
 bohr file move <src> <dst>
 bohr file delete <path> [--recursive]
 ```
 
 路径体系：`personal/...`（个人盘，project-id=0）、`share/...`（共享盘，需 project-id）
-⚠️ 目录操作 copy/move/delete 必须显式加 `--recursive`
+⚠️ 目录操作 copy/move/delete 必须显式加 `--recursive`；路径含空格时用引号包裹
+⚠️ `stat` 查不存在的路径也返回 `ok:true`，存在性以 `data.exist` 字段为准
 
 ## 数据集 (dataset)
 
@@ -213,9 +219,12 @@ bohr wiki graph <id>
 ```bash
 bohr kb list
 bohr kb create "<name>"
+bohr kb upload <local_file> --kb-id <id> [--parent-id <node>] [--name <显示名>] [--wait]   # 2.2.19+，--wait 等待索引完成
 bohr kb search <kb_id> "<query>" [--top-k 5]
 bohr kb delete <id>
 ```
+
+上传后需索引完成才能被 search 命中；无按 document ID 查询/删除的入口。
 
 ## PDF 解析 (pdf)
 
@@ -224,7 +233,17 @@ bohr pdf parse --url "<pdf_url>" [--sync] [--textual 1] [--table 1]
 bohr pdf result "<token>"             # 查询异步结果
 ```
 
-计费约 0.05 元/页。
+计费约 0.05 元/页。仅支持 `--url`，无本地文件直接入口。配额耗尽时返回 429 `quota_exceeded`（账号配额问题），重试无效，如实报告即可。
+
+## 聚合物文献数据库 (database)
+
+```bash
+bohr database tables <db_ak>
+bohr database schema <db_ak> <table_ak>
+bohr database query <db_ak> <table_ak> [--filter '<json>'] [--limit 20] [--offset 0]
+```
+
+只读；`db_ak` 需外部提供（CLI 无枚举入口），内容为聚合物文献数据。
 
 ## 科学工具 (tools)
 
@@ -276,12 +295,3 @@ bohr doctor [--offline]
 bohr api <METHOD> <PATH> [--data <json|@file>] [--params key=value]
 ```
 
-## 常见陷阱
-
-1. **目录操作忘加 --recursive**：copy/move/delete 目录必须显式加
-2. **job_group list 日期**：`--start` 和 `--end` 必须同时指定
-3. **镜像地址要完整**：必须含 `registry.dp.tech/...`，不能只写短名
-4. **批量提交串行**：多任务提交不可并发，逐个 submit
-5. **沙箱用完要删**：`bohr sandbox delete <id>` 否则持续计费
-6. **kill vs terminate**：默认优先用 terminate（保留结果）
-7. **文件路径含空格**：用引号包裹整个路径
