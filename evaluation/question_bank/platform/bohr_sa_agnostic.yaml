@@ -156,10 +156,9 @@ questions:
     value:
       max: 12
   - key: pdf_parsed_via_cli
-    tool_name: Bash
-    tool_arg: command
     value:
-      pattern: '(?:^|[\n;&|]\s*)(?:[^\s;&|]+/)?bohr\s+pdf\s+\+?parse\b'
+      operations:
+      - pdf.parse
       min_matches: 1
   scoring_checklist:
   - id: artifact
@@ -185,7 +184,7 @@ questions:
   - id: pdf_parsed_via_cli
     criterion: PDF parse was invoked through bohr-cli.
     axis: grounding
-    verify: tool_args_regex
+    verify: bohr_cli_operation_invoked
   - id: turn_budget
     criterion: Agent completes within turn budget.
     axis: efficiency
@@ -579,11 +578,11 @@ questions:
       pattern: transport|conduct|输运|电导
       flags: i
   - key: mentor_queried_via_cli
-    tool_name: Bash
-    tool_arg: command
     value:
-      pattern: '(?:^|[\n;&|]\s*)(?:[^\s;&|]+/)?bohr\s+mentor\b'
+      operations:
+      - mentor
       min_matches: 1
+      require_ok: false
   - key: turn_budget
     value:
       max: 6
@@ -605,9 +604,9 @@ questions:
     axis: correctness
     verify: text_file_regex
   - id: mentor_queried_via_cli
-    criterion: Mentor was queried through bohr-cli.
+    criterion: Mentor was queried through bohr-cli (invocation; service may error).
     axis: grounding
-    verify: tool_args_regex
+    verify: bohr_cli_operation_invoked
   - id: turn_budget
     criterion: Agent completes within turn budget.
     axis: efficiency
@@ -850,10 +849,10 @@ questions:
             - type: object
               minProperties: 1
   - key: paper_searched_via_cli
-    tool_name: Bash
-    tool_arg: command
     value:
-      pattern: '(?:^|[\n;&|]\s*)(?:[^\s;&|]+/)?bohr\s+(?:paper|lkm)\s+\+?search\b'
+      operations:
+      - paper.search
+      - lkm.search
       min_matches: 1
   - key: lkm_queried_via_cli
     tool_name: Bash
@@ -874,9 +873,9 @@ questions:
     axis: correctness
     verify: json_file_schema
   - id: paper_searched_via_cli
-    criterion: Paper search was invoked through bohr-cli.
+    criterion: Paper or LKM search was invoked through bohr-cli.
     axis: grounding
-    verify: tool_args_regex
+    verify: bohr_cli_operation_invoked
   - id: lkm_queried_via_cli
     criterion: LKM graph or reasoning was queried through bohr-cli.
     axis: grounding

@@ -7,6 +7,9 @@ from typing import Any
 from evaluation.validators.abacus_input import check_abacus_input
 from evaluation.validators.answer_text import check_answer_json_numeric
 from evaluation.validators.bohr_cli import (
+    check_bohr_cli_operation_invoked as _check_bohr_cli_operation_invoked,
+)
+from evaluation.validators.bohr_cli import (
     check_bohr_job_monitor_execution as _check_bohr_job_monitor_execution,
 )
 from evaluation.validators.bohr_cli import (
@@ -166,6 +169,23 @@ def check_bohr_job_stop_record(
         machine_type=cfg.get("machine_type", ""),
         command=cfg.get("command", ""),
         job_name_prefix=cfg.get("job_name_prefix", ""),
+    )
+
+
+def check_bohr_cli_operation_invoked(
+    *, evidence: EvidenceBundle | None, ref: ReferenceAnswer
+) -> tuple[bool, str]:
+    if evidence is None:
+        return False, "no evidence"
+    cfg = ref.value if isinstance(ref.value, dict) else {}
+    operations = cfg.get("operations") or []
+    if isinstance(operations, str):
+        operations = [operations]
+    return _check_bohr_cli_operation_invoked(
+        receipts=evidence.bohr_cli_receipts,
+        operations=list(operations),
+        min_matches=int(cfg.get("min_matches", 1)),
+        require_ok=bool(cfg.get("require_ok", True)),
     )
 
 

@@ -366,7 +366,7 @@ def test_grounding_patterns_accept_plus_shortcut_subcommands() -> None:
             "bohr file +upload ./test -d /personal/tmp-x",
             "bohr file upload ./test -d /personal/tmp-x",
         ),
-        ("BSA_lkm_deep_chain_013_20260717", "paper_searched_via_cli"): (
+        ("BSA_paper_mn_invar_001_20260715", "paper_searched_via_cli"): (
             "bohr paper +search perovskite -o json",
             "bohr paper search perovskite -o json",
         ),

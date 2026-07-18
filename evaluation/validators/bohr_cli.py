@@ -212,6 +212,54 @@ def _successful_mutation(receipt: BohrCliReceiptRecord, operation: str) -> bool:
     )
 
 
+def check_bohr_cli_operation_invoked(
+    *,
+    receipts: list[BohrCliReceiptRecord],
+    operations: list[str],
+    min_matches: int = 1,
+    require_ok: bool = True,
+) -> tuple[bool, str]:
+    """Ground a step on execution receipts rather than command-string regex.
+
+    Counts Bohr-CLI invocations whose launcher-parsed ``operation`` is in the
+    allow-list. Unlike ``tool_args_regex`` this is agnostic to flags, quoting,
+    pipes, env prefixes, ``+shortcut`` forms and command synonyms, and (with the
+    default ``require_ok``) proves the command actually ran and exited cleanly.
+    Help and dry-run invocations never count.
+
+    Matching is exact or prefix: an entry ``noun`` also matches ``noun.<x>``.
+    This lets a bare noun (e.g. ``mentor``) cover positional-argument commands
+    whose parsed operation embeds the argument (``mentor.<question text>``),
+    while a fully qualified entry (``pdf.parse``) stays exact.
+    """
+    wanted = {str(operation).strip() for operation in operations if str(operation).strip()}
+    if not wanted:
+        return False, 'bohr_cli_operation_invoked: no operations configured'
+
+    def _matches(operation: str) -> bool:
+        return any(
+            operation == entry or operation.startswith(f'{entry}.') for entry in wanted
+        )
+
+    matched = 0
+    observed: set[str] = set()
+    for receipt in receipts:
+        if not _matches(receipt.operation):
+            continue
+        if receipt.help_requested or receipt.dry_run:
+            continue
+        if require_ok and not (receipt.ok and receipt.exit_code == 0):
+            continue
+        matched += 1
+        observed.add(receipt.operation)
+    ok_note = 'ok' if require_ok else 'any-exit'
+    return (
+        matched >= min_matches,
+        f'operation receipts matched={matched} ({ok_note}) '
+        f'for {sorted(wanted)}; observed={sorted(observed)}; expected>={min_matches}',
+    )
+
+
 def _successful_terminal_status(value: int | str | None) -> bool:
     if value == 2:
         return True

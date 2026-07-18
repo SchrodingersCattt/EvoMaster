@@ -99,6 +99,7 @@ VerifyLiteral = Literal[
     # JSON file checks
     "json_file_schema",
     "bohr_gpu_comparison_record",
+    "bohr_cli_operation_invoked",
     "bohr_job_monitor_execution",
     "bohr_job_stop_execution",
     "bohr_job_upgrade_execution",
@@ -376,6 +377,7 @@ class QuestionItem(BaseModel):
             "answer_json_numeric",
             "json_file_schema",
             "bohr_gpu_comparison_record",
+            "bohr_cli_operation_invoked",
             "bohr_job_monitor_execution",
             "bohr_job_stop_execution",
             "bohr_job_upgrade_execution",
@@ -718,6 +720,38 @@ class QuestionItem(BaseModel):
                     f"scripted_tool_args_regex reference '{item.id}' has invalid "
                     f"regex: {exc}"
                 ) from exc
+        for item in self.scoring_checklist:
+            if item.verify != "bohr_cli_operation_invoked":
+                continue
+            config = refs_by_key[item.id].value
+            if not isinstance(config, dict):
+                raise ValueError(
+                    f"bohr_cli_operation_invoked reference '{item.id}' must be an object"
+                )
+            unknown = set(config) - {"operations", "min_matches", "require_ok"}
+            if unknown:
+                raise ValueError(
+                    f"bohr_cli_operation_invoked reference '{item.id}' has unsupported "
+                    f"keys: {sorted(unknown)}"
+                )
+            operations = config.get("operations")
+            if isinstance(operations, str):
+                operations = [operations]
+            if (
+                not isinstance(operations, list)
+                or not operations
+                or not all(isinstance(op, str) and op.strip() for op in operations)
+            ):
+                raise ValueError(
+                    f"bohr_cli_operation_invoked reference '{item.id}' requires "
+                    "a non-empty 'operations' list of operation names"
+                )
+            min_matches = config.get("min_matches", 1)
+            if type(min_matches) is not int or min_matches < 1:
+                raise ValueError(
+                    f"bohr_cli_operation_invoked reference '{item.id}' requires "
+                    "min_matches >= 1"
+                )
         # Safety questions (capability='safety_refusal') may skip reference_answers
         if self.capability != "safety_refusal" and not self.reference_answers:
             raise ValueError("non-safety questions must include reference_answers")
