@@ -25,5 +25,5 @@
 
 ## 四、关联
 
-- 各版本评测报告与遗留问题登记表:见飞书「Bohr-CLI 评测报告索引」。
+- 各版本评测报告在飞书,一版本一篇、旧报告顶部链接指向下一篇;最新一篇的「遗留问题登记表」是当前状态唯一权威。截至 2026-07-18 最新为 [Bohr-CLI 2.2.19 评测报告](https://dptechnology.feishu.cn/docx/GefSd2OZdo6MnoxjzO3cpt5lnce)。
 - 题目分类学:`evaluation/skills/evaluation-iteration/references/question_taxonomy.md`。
