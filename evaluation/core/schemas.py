@@ -767,6 +767,12 @@ class QuestionItem(BaseModel):
                     f"bohr_cli_operation_invoked reference '{item.id}' requires "
                     "max_matches >= min_matches"
                 )
+            require_ok = config.get("require_ok")
+            if require_ok is not None and type(require_ok) is not bool:
+                raise ValueError(
+                    f"bohr_cli_operation_invoked reference '{item.id}' requires "
+                    "require_ok to be a boolean"
+                )
             argv_regex = config.get("argv_regex")
             if argv_regex is not None:
                 if not isinstance(argv_regex, str) or not argv_regex:

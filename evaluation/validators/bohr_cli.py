@@ -178,7 +178,9 @@ def check_bohr_cli_operation_invoked(
     matches by searching the space-joined **redacted** argv — flags are
     preserved verbatim while secret values and auth positionals appear as
     ``<redacted>``, so patterns must key on flags (e.g. ``--device``), never on
-    values.
+    values. Whitespace inside a single argv token is replaced with ``_`` before
+    joining, so flag-shaped text embedded in a free-text value cannot straddle
+    token boundaries and spuriously match a flag-keyed pattern.
     """
     wanted = {
         str(operation).strip() for operation in operations if str(operation).strip()
@@ -207,7 +209,7 @@ def check_bohr_cli_operation_invoked(
         if require_ok and not (receipt.ok and receipt.exit_code == 0):
             continue
         if argv_pattern is not None and not argv_pattern.search(
-            ' '.join(receipt.argv)
+            ' '.join(re.sub(r'\s+', '_', token) for token in receipt.argv)
         ):
             continue
         matched += 1

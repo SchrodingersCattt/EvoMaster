@@ -112,7 +112,7 @@ ssh -p $PORT $USER@$HOST "ps aux | grep 'run_devshell_eval\|run_devshell_agent_l
 **2b.** Start recurring monitoring — run this command directly (replace `$PORT/$USER/$HOST` with actual values):
 
 ```
-/loop 10m Run: ssh -p $PORT $USER@$HOST "ps aux | grep 'run_devshell_eval\|run_devshell_agent_loop' | grep -v grep | wc -l && echo '---' && wc -l \$(ls -dt /root/matmaster-evo/results/*/ | head -1)raw_runs.jsonl && echo '---' && tail -3 /tmp/eval_run.log". Extract PROCS (first line) and TASKS (number before raw_runs.jsonl). Then run: osascript -e "tell application \"System Events\" to display dialog \"已完成 TASKS 条，PROCS 个进程活跃中\" with title \"Eval Progress\" buttons {\"OK\"} default button \"OK\" giving up after 5". If PROCS=0, notify "Eval 已完成！共 TASKS 条结果" and run scoring: ssh -p $PORT $USER@$HOST "cd /root/matmaster-evo && set -a && . ./.env && set +a && export http_proxy='http://ga.xdptech.com:8118' && export https_proxy='http://ga.xdptech.com:8118' && export no_proxy='localhost,127.0.0.1,.dp.tech,.bohrium.com,.npmjs.org' && export NO_PROXY=\"\$no_proxy\" && uv run python evaluation/scripts/devshell/score_devshell_tasks.py --run-dir \$(ls -dt results/*/ | head -1) --submit"
+/loop 10m Run: ssh -p $PORT $USER@$HOST "ps aux | grep 'run_devshell_eval\|run_devshell_agent_loop' | grep -v grep | wc -l && echo '---' && wc -l \$(ls -t /root/matmaster-evo/results/*/raw_runs.jsonl | head -1) && echo '---' && tail -3 /tmp/eval_run.log". Extract PROCS (first line) and TASKS (number before raw_runs.jsonl). Then run: osascript -e "tell application \"System Events\" to display dialog \"已完成 TASKS 条，PROCS 个进程活跃中\" with title \"Eval Progress\" buttons {\"OK\"} default button \"OK\" giving up after 5". If PROCS=0, notify "Eval 已完成！共 TASKS 条结果" and run scoring: ssh -p $PORT $USER@$HOST "cd /root/matmaster-evo && set -a && . ./.env && set +a && export http_proxy='http://ga.xdptech.com:8118' && export https_proxy='http://ga.xdptech.com:8118' && export no_proxy='localhost,127.0.0.1,.dp.tech,.bohrium.com,.npmjs.org' && export NO_PROXY=\"\$no_proxy\" && uv run python evaluation/scripts/devshell/score_devshell_tasks.py --run-dir \$(ls -t results/*/raw_runs.jsonl | head -1 | xargs dirname) --submit"
 ```
 
 Each tick: SSH check → macOS popup (auto-dismiss 5s) → if PROCS=0, auto-score and cancel loop.
@@ -131,10 +131,10 @@ ssh -p $PORT $USER@$HOST "cd /root/matmaster-evo && \
   export http_proxy='http://ga.xdptech.com:8118' && export https_proxy='http://ga.xdptech.com:8118' && \
   export no_proxy='localhost,127.0.0.1,.dp.tech,.bohrium.com,.npmjs.org' && export NO_PROXY=\"\$no_proxy\" && \
   uv run python evaluation/scripts/devshell/score_devshell_tasks.py \
-    --run-dir \$(ls -dt results/*/ | head -1) --submit"
+    --run-dir \$(ls -t results/*/raw_runs.jsonl | head -1 | xargs dirname) --submit"
 ```
 
-`ls -dt results/*/` 取**最新**批次目录（兼容 `--run-label` 自定义前缀）；`--no-clean-results` 场景下 results/ 里有多个批次，确认选中的是本轮目录再打分。
+按最新 `raw_runs.jsonl` 反推批次目录（兼容 `--run-label` 前缀，且不会误选 results/ 下的非批次目录）；`--no-clean-results` 场景下 results/ 里有多个批次，打分前仍应确认选中的是本轮目录。
 
 Without this step, the frontend shows NO checklist-level pass/fail data. Same `.venv/bin/python` fallback applies.
 

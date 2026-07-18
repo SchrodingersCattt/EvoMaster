@@ -170,6 +170,22 @@ def test_argv_regex_matches_redacted_flags() -> None:
     assert passed is False
 
 
+def test_argv_regex_does_not_match_across_token_boundaries() -> None:
+    # Flag-shaped text inside one free-text value token must not satisfy a
+    # flag-keyed pattern after joining; intra-token whitespace becomes "_".
+    embedded = _receipt("mentor.q", argv=["mentor", "retry --no-wait mode"])
+    real_flag = _receipt("auth.login", argv=["auth", "login", "--no-wait"])
+    pattern = r"--no-wait(?:\s|$)"
+    passed, _ = check_bohr_cli_operation_invoked(
+        receipts=[embedded], operations=["mentor"], argv_regex=pattern
+    )
+    assert passed is False
+    passed, _ = check_bohr_cli_operation_invoked(
+        receipts=[real_flag], operations=["auth.login"], argv_regex=pattern
+    )
+    assert passed is True
+
+
 def test_argv_regex_invalid_pattern_fails_closed() -> None:
     receipts = [_receipt("auth.login")]
     passed, reason = check_bohr_cli_operation_invoked(
@@ -200,6 +216,7 @@ def test_reference_requires_operations_list() -> None:
         {"operations": ["lkm.search"], "max_matches": "2"},
         {"operations": ["lkm.search"], "argv_regex": ""},
         {"operations": ["lkm.search"], "argv_regex": "(["},
+        {"operations": ["lkm.search"], "require_ok": "false"},
     ):
         with pytest.raises(
             PydanticValidationError, match="bohr_cli_operation_invoked reference"

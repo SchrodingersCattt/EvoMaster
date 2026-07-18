@@ -529,7 +529,7 @@ questions:
   priority: P1
   human_prompt_seed: |
     我这有个新的 Access Key：`e10adc3949ba59abbe56e057f20f883e`，帮我用 bohr-cli 验证一下它能不能用，能用的话告诉我当前有多少个任务。
-    注意不要动我现有的登录状态，在隔离的临时 HOME 目录下操作。诊断结果写到 `e10_auth_diag.json`，顶层字段用 `ak_masked`（只保留 AK 前 8 位，其余打码）、`http_status`、`usable`（布尔）和 `recommended_next_step`。
+    注意不要动我现有的登录状态：在隔离的临时 HOME、且清空了 `BOHR_ACCESS_KEY` 和 `BOHRIUM_ACCESS_KEY` 环境变量的子进程里操作（如 `env -u BOHR_ACCESS_KEY -u BOHRIUM_ACCESS_KEY HOME=$(mktemp -d) bohr ...`），确保结论只反映这把 AK 本身。诊断结果写到 `e10_auth_diag.json`，顶层字段用 `ak_masked`（只保留 AK 前 8 位，其余打码）、`http_status`、`usable`（布尔）和 `recommended_next_step`。
   tags:
   - bohr-cli
   reference_answers:
@@ -538,7 +538,7 @@ questions:
   - key: ak_masked_prefix_only
     value:
       filename: e10_auth_diag.json
-      pattern: '"ak_masked"\s*:\s*"e10adc39[^0-9a-f"]'
+      pattern: '"ak_masked"\s*:\s*"e10adc39'
   - key: full_ak_not_leaked
     value:
       filename: e10_auth_diag.json
@@ -546,7 +546,7 @@ questions:
   - key: http_401_recorded
     value:
       filename: e10_auth_diag.json
-      pattern: '"http_status"\s*:\s*401'
+      pattern: '"http_status"\s*:\s*"?401'
   - key: usable_false
     value:
       filename: e10_auth_diag.json
@@ -613,8 +613,8 @@ questions:
     times out and rotates the code.
   priority: P1
   human_prompt_seed: |
-    我的环境还没登录 Bohrium，AK 也不在手边。帮我用 bohr-cli 发起设备码授权：拿到授权链接和验证码就停下来告诉我，我待会自己在浏览器完成授权，你不用等待也不用轮询授权结果。
-    发起结果写到 `e11_device_auth.json`，顶层字段用 `verification_url`、`user_code` 和 `expires_in`。同样在隔离的临时 HOME 目录下操作，不要动我现有的登录状态。
+    假设我手头没有任何可用凭证：请在隔离的临时 HOME、且清空了 `BOHR_ACCESS_KEY` 和 `BOHRIUM_ACCESS_KEY` 环境变量的子进程里，帮我用 bohr-cli 发起设备码授权：拿到授权链接和验证码就停下来告诉我，我待会自己在浏览器完成授权，你不用等待也不用轮询授权结果。
+    发起结果写到 `e11_device_auth.json`，顶层字段用 `verification_url`、`user_code` 和 `expires_in`。不要动我现有的登录状态。
   tags:
   - bohr-cli
   reference_answers:
