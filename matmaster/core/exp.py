@@ -190,12 +190,15 @@ class Exp:
         has_session: bool,
         builtin_cfg: list[str],
         skills_enabled: bool,
+        excluded_builtin: frozenset[str] = frozenset(),
     ) -> frozenset:
         """Derive active tool planes from runtime capabilities.
 
         Always activates CONTROL_PLANE. Activates SESSION_SHELL and
         SESSION_FS when a session is present. Activates EXTERNAL_SERVICE
-        when skills are enabled or external-effect builtins are configured.
+        when skills are enabled or an external-effect builtin survives the
+        exclusion list — the same filter _init_builtin_tools applies, so the
+        declared planes match the registered tool catalog.
         """
         from matmaster.types.topology import ToolPlane
 
@@ -203,7 +206,12 @@ class Exp:
         if has_session:
             planes |= {ToolPlane.SESSION_SHELL, ToolPlane.SESSION_FS}
         cfg_set = set(builtin_cfg)
-        if skills_enabled or "*" in cfg_set or cfg_set & _EXTERNAL_EFFECT_TOOL_NAMES:
+        allow_all = "*" in cfg_set
+        has_external_effect_tool = any(
+            (allow_all or name in cfg_set) and name not in excluded_builtin
+            for name in _EXTERNAL_EFFECT_TOOL_NAMES
+        )
+        if skills_enabled or has_external_effect_tool:
             planes.add(ToolPlane.EXTERNAL_SERVICE)
         return frozenset(planes)
 
@@ -236,12 +244,14 @@ class Exp:
 
         registry = ToolRegistry()
         builtin_cfg = self._config.tools.builtin
+        excluded_builtin = set(self._config.tools.excluded_builtin)
         path_access_roots = derive_path_access_roots(env)
         if builtin_cfg:
             self._init_builtin_tools(
                 ctx,
                 registry,
                 builtin_cfg,
+                excluded_builtin=excluded_builtin,
                 spawn_id=spawn_id,
                 path_access_roots=path_access_roots,
             )
@@ -264,6 +274,7 @@ class Exp:
             has_session=env.session is not None,
             builtin_cfg=self._config.tools.builtin,
             skills_enabled=self._config.skills.enabled,
+            excluded_builtin=frozenset(excluded_builtin),
         )
 
         topology = RuntimeTopology(
@@ -297,7 +308,7 @@ class Exp:
         # When allow_spawn is False (child Exp), spawn_fn is None, which causes
         # AgentTool to set exposed_to_model=False (hidden from LLM but still
         # in catalog).
-        if "Agent" in builtin_cfg or "*" in builtin_cfg:
+        if self._config.tools.allows_builtin("Agent"):
             from matmaster.config.loader import list_model_visible_exps
             from matmaster.tools.builtin import AgentTool
 
@@ -649,6 +660,7 @@ class Exp:
         registry: ToolRegistry,
         builtin_cfg: list[str],
         *,
+        excluded_builtin: set[str] | frozenset[str] = frozenset(),
         spawn_id: str | None = None,
         path_access_roots: tuple[Any, ...] = (),
     ) -> None:
@@ -673,7 +685,7 @@ class Exp:
         allowed: set[str] | None = None if allow_all else set(builtin_cfg)
 
         def _want(name: str) -> bool:
-            return allowed is None or name in allowed
+            return (allowed is None or name in allowed) and name not in excluded_builtin
 
         from matmaster.tools.builtin import (
             AskQuestionTool,
@@ -843,13 +855,10 @@ class Exp:
             if isinstance(cfg, dict) and cfg.get("sync_tools")
         }
 
-        builtin_cfg = self._config.tools.builtin or []
-        allow_builtin_all = "*" in builtin_cfg
-        allowed_builtin = set(builtin_cfg) if not allow_builtin_all else None
         if (
-            allow_builtin_all
-            or (allowed_builtin is not None and "PaperSearch" in allowed_builtin)
-        ) and "PaperSearch" not in registry:
+            self._config.tools.allows_builtin("PaperSearch")
+            and "PaperSearch" not in registry
+        ):
             from matmaster.tools.builtin.paper_search_tool import PaperSearchTool
 
             paper_tool = PaperSearchTool(

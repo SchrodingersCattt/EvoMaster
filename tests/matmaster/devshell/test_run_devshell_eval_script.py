@@ -4,13 +4,57 @@ from __future__ import annotations
 
 import importlib
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
 from typing import Any
 
+import pytest
+
 REPO_ROOT = Path(__file__).resolve().parents[3]
 SCRIPT = REPO_ROOT / "evaluation" / "scripts" / "devshell" / "run_devshell_eval.py"
+
+
+def test_bohrium_prod_env_override_is_scoped(tmp_path) -> None:
+    mod = importlib.import_module("evaluation.scripts.devshell.run_devshell_eval")
+    (tmp_path / ".env.prod").write_text(
+        "\n".join(
+            (
+                "BOHRIUM_ACCESS_KEY=prod-ak",
+                "BOHRIUM_PROJECT_ID=123",
+                "BOHRIUM_USER_ID=456",
+                "MYSQL_PASSWORD=must-not-be-loaded",
+            )
+        ),
+        encoding="utf-8",
+    )
+    env = {
+        "SERVICE_ENV": "test",
+        "BOHRIUM_ACCESS_KEY": "test-ak",
+        "BOHRIUM_ORG_ID": "test-org",
+        "BOHRIUM_USE_SANDBOX": "1",
+        "MYSQL_PASSWORD": "test-db-password",
+    }
+
+    mod._apply_bohrium_env_override(env, repo_root=tmp_path, environment="prod")
+
+    assert env["SERVICE_ENV"] == "test"
+    assert env["BOHRIUM_ACCESS_KEY"] == "prod-ak"
+    assert env["BOHRIUM_PROJECT_ID"] == "123"
+    assert env["BOHRIUM_USER_ID"] == "456"
+    assert "BOHRIUM_ORG_ID" not in env
+    assert env["BOHRIUM_BASE_URL"] == "https://openapi.dp.tech"
+    assert env["BOHRIUM_USE_SANDBOX"] == "1"
+    assert env["MYSQL_PASSWORD"] == "test-db-password"
+
+
+def test_bohrium_env_override_requires_access_key(tmp_path) -> None:
+    mod = importlib.import_module("evaluation.scripts.devshell.run_devshell_eval")
+    (tmp_path / ".env.prod").write_text("BOHRIUM_PROJECT_ID=123\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="BOHRIUM_ACCESS_KEY"):
+        mod._apply_bohrium_env_override({}, repo_root=tmp_path, environment="prod")
 
 
 def test_devshell_eval_dry_run_limit_one() -> None:
@@ -141,6 +185,7 @@ def test_devshell_eval_verbose_is_on_by_default(tmp_path, monkeypatch) -> None:
     cmd0 = [str(x) for x in captured[0]]
     assert "--verbose" in cmd0
     assert "--exp" not in cmd0
+    assert "--exclude-builtin-tool" not in cmd0
     assert "--model" in cmd0
     assert cmd0[cmd0.index("--model") + 1] == "bedrock-claude-opus"
     man = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
@@ -148,6 +193,82 @@ def test_devshell_eval_verbose_is_on_by_default(tmp_path, monkeypatch) -> None:
     assert "matmaster_exp" not in man
     assert man.get("model") == "bedrock-claude-opus"
     assert man.get("fallback_model") == "global.anthropic.claude-opus-4-6-v1"
+
+
+def test_devshell_eval_bohr_cli_excludes_bohrium(tmp_path, monkeypatch) -> None:
+    mod = importlib.import_module("evaluation.scripts.devshell.run_devshell_eval")
+    out = (tmp_path / "bohr_cli_tools").resolve()
+    captured: list[list[str | Path]] = []
+    captured_envs: list[dict[str, str]] = []
+    real_bin_dir = tmp_path / "real_bin"
+    real_bin_dir.mkdir()
+    real_bohr = real_bin_dir / "bohr"
+    real_bohr.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    real_bohr.chmod(0o755)
+    monkeypatch.setenv(
+        "PATH",
+        f'{real_bin_dir}{os.pathsep}{os.environ.get("PATH", "")}',
+    )
+
+    def fake_run_devshell_task(
+        *,
+        cmd,
+        env,
+        summary_file,
+        **kwargs: Any,
+    ):
+        captured.append(list(cmd))
+        captured_envs.append(env)
+        summary = {
+            "status": "completed",
+            "reason": "natural",
+            "final_content": "ok",
+            "num_turns": 1,
+            "usage": {"total_tokens": 1},
+        }
+        summary_file.write_text(
+            json.dumps(summary, ensure_ascii=False) + "\n",
+            encoding="utf-8",
+        )
+        return 0, 123, summary
+
+    monkeypatch.setattr(mod, "_run_devshell_task", fake_run_devshell_task)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            str(SCRIPT),
+            "--slices",
+            "@bohr-cli",
+            "--k",
+            "1",
+            "--limit",
+            "1",
+            "--output-dir",
+            str(out),
+            "--no-clean-results",
+            "--no-eval-ingest",
+            "--no-export-review",
+        ],
+    )
+
+    rc = mod.main()
+
+    assert rc == 0
+    cmd0 = [str(x) for x in captured[0]]
+    index = cmd0.index("--exclude-builtin-tool")
+    assert cmd0[index + 1] == "Bohrium"
+    manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["eval_tooling"]["tools_builtin_excluded"] == ["Bohrium"]
+    assert "Bohrium" not in manifest["eval_tooling"]["builtin_tool_names"]
+    assert manifest["bohr_cli_receipt_schema"] == "bohr_cli_receipt_v1"
+    assert captured_envs[0]["BOHR_EVAL_REAL_BIN"] == str(real_bohr)
+    assert captured_envs[0]["BOHR_EVAL_RECEIPT_PATH"].endswith(
+        "/bohr_cli_receipts.jsonl"
+    )
+    assert captured_envs[0]["PATH"].split(os.pathsep)[0] == str(out / "_eval_bin")
+    row = json.loads((out / "raw_runs.jsonl").read_text(encoding="utf-8"))
+    assert row["eval_tooling"] == manifest["eval_tooling"]
 
 
 def test_devshell_eval_no_verbose_disables_forwarding(tmp_path, monkeypatch) -> None:

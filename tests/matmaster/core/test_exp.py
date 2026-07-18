@@ -797,6 +797,34 @@ async def test_build_runtime_registers_bohrium_without_session(tmp_path: Path) -
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("builtin", [["Bohrium"], ["*"]])
+async def test_build_runtime_excludes_bohrium_builtin(
+    tmp_path: Path,
+    builtin: list[str],
+) -> None:
+    exp = Exp(
+        ExpConfig(
+            name="test",
+            tools=ExpToolsConfig(
+                builtin=builtin,
+                excluded_builtin=["Bohrium"],
+            ),
+        )
+    )
+    ctx = _make_ctx(
+        workdir=tmp_path,
+        execution_workdir=str(tmp_path / "exec"),
+        session=None,
+        with_llm=True,
+    )
+
+    with patch("matmaster.core.agent.AgentKernel"):
+        runtime = await exp.build_runtime(ctx)
+
+    assert runtime.kernel_runtime.resources.tool_catalog.get_tool("Bohrium") is None
+
+
+@pytest.mark.asyncio
 async def test_build_runtime_registers_ask_question_when_bridge_available(
     tmp_path: Path,
 ) -> None:

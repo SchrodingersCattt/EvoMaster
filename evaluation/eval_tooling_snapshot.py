@@ -59,7 +59,10 @@ def _matmaster_config_session_type(repo_root: Path) -> str | None:
     return str(t).strip() if t else None
 
 
-def _resolve_builtin_tool_names(builtin_cfg: list[str]) -> list[str]:
+def _resolve_builtin_tool_names(
+    builtin_cfg: list[str],
+    excluded_builtin: set[str] | frozenset[str] = frozenset(),
+) -> list[str]:
     """Resolve configured builtin list to evaluation-facing tool names."""
     if not builtin_cfg:
         return []
@@ -68,7 +71,7 @@ def _resolve_builtin_tool_names(builtin_cfg: list[str]) -> list[str]:
     )
     out: list[str] = []
     for name in raw_names:
-        if name == "*":
+        if name == "*" or name in excluded_builtin:
             continue
         if name not in out:
             out.append(name)
@@ -156,7 +159,8 @@ def _build_eval_tooling_dict(
     session_type = _matmaster_config_session_type(repo_root) or "local"
 
     builtin_cfg = list(exp_cfg.tools.builtin)
-    builtin_names = _resolve_builtin_tool_names(builtin_cfg)
+    excluded_builtin = set(exp_cfg.tools.excluded_builtin)
+    builtin_names = _resolve_builtin_tool_names(builtin_cfg, excluded_builtin)
 
     skill_names: list[str] = []
     skills_roots_str: list[str] = []
@@ -187,6 +191,7 @@ def _build_eval_tooling_dict(
         "exp_config_name": exp_cfg.name,
         "max_turns": exp_cfg.max_turns,
         "tools_builtin_config": builtin_cfg,
+        "tools_builtin_excluded": list(exp_cfg.tools.excluded_builtin),
         "tools_mcp_pattern": exp_cfg.tools.mcp,
         "builtin_tool_names": builtin_names,
         "tool_names_surface": surface_tools,
@@ -202,12 +207,15 @@ def snapshot_eval_tooling(
     *,
     repo_root: Path,
     exp_name: str = "direct",
+    excluded_builtin_tools: list[str] | tuple[str, ...] = (),
 ) -> dict[str, Any]:
     """Snapshot from ``matmaster/exps/{exp_name}.toml`` (production-aligned)."""
+    from matmaster.config.exp import with_excluded_builtin_tools
     from matmaster.config.loader import load_exp_config
 
     name = exp_name.strip()
     exp_cfg = load_exp_config(name)
+    exp_cfg = with_excluded_builtin_tools(exp_cfg, excluded_builtin_tools)
     return _build_eval_tooling_dict(
         repo_root=repo_root,
         exp_cfg=exp_cfg,

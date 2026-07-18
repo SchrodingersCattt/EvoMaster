@@ -8,8 +8,11 @@ stages data files per task workspace, then invokes (inherit terminal; ``--json-o
 
 Aggregate output: ``raw_runs.jsonl`` + ``manifest.json`` + by default ``claude_review.md`` (for Cursor @-review).
 ``manifest.json`` carries ``eval_tooling`` (default: same as interactive ``mm-devshell`` without ``--exp`` —
-``direct`` from ``matmaster/exps/direct.toml``).
-The same snapshot is attached to each ingest item as ``extra.eval_tooling`` for downstream analysis.
+``direct`` from ``matmaster/exps/direct.toml``). Questions tagged ``bohr-cli`` automatically exclude the
+builtin ``Bohrium`` tool so the skill must use the CLI through ``Bash``. The effective per-task snapshot is
+attached to each raw row and ingest item as ``eval_tooling`` / ``extra.eval_tooling`` for downstream analysis.
+Tagged tasks also place a transparent ``bohr`` audit launcher ahead of the real binary and write narrow
+process receipts to ``logs/<task_id>/bohr_cli_receipts.jsonl``.
 When ``logs/<task_id>/events_*.jsonl`` exists, ingest ``extra`` also includes ``events_timeline`` (ordered
 labels: tool names from ``tool_call``, ``response``, ``run_result``; ``tool_result`` lines are omitted).
 
@@ -83,6 +86,45 @@ def _run_devshell_task(*args: Any, **kwargs: Any) -> tuple[int, int, dict[str, A
     return _impl(*args, **kwargs)
 
 
+_BOHRIUM_IDENTITY_ENV_KEYS = (
+    "BOHRIUM_ACCESS_KEY",
+    "BOHRIUM_PROJECT_ID",
+    "BOHRIUM_USER_ID",
+    "BOHRIUM_USER_NO",
+    "BOHRIUM_ORG_ID",
+)
+
+
+def _apply_bohrium_env_override(
+    env: dict[str, str], *, repo_root: Path, environment: str
+) -> None:
+    """Overlay only Bohrium credentials without switching the service environment."""
+    from dotenv import dotenv_values
+
+    env_file = repo_root / f".env.{environment}"
+    if not env_file.is_file():
+        raise ValueError(f"Bohrium environment file not found: {env_file}")
+    values = dotenv_values(env_file)
+    access_key = str(values.get("BOHRIUM_ACCESS_KEY") or "").strip()
+    if not access_key:
+        raise ValueError(f"BOHRIUM_ACCESS_KEY is missing from {env_file}")
+
+    for key in _BOHRIUM_IDENTITY_ENV_KEYS:
+        value = values.get(key)
+        if value is None or not str(value).strip():
+            env.pop(key, None)
+        else:
+            env[key] = str(value)
+
+    explicit_base_url = str(values.get("BOHRIUM_BASE_URL") or "").strip()
+    if explicit_base_url:
+        env["BOHRIUM_BASE_URL"] = explicit_base_url
+    elif environment == "prod":
+        env["BOHRIUM_BASE_URL"] = "https://openapi.dp.tech"
+    else:
+        env["BOHRIUM_BASE_URL"] = f"https://openapi.{environment}.dp.tech"
+
+
 def main() -> int:
     # Load .env files so OSS / SERVICE_ENV / etc. are available to post-processing
     # (same logic as matmaster.devshell.cli)
@@ -95,6 +137,12 @@ def main() -> int:
         load_dotenv(env_file, override=True)
 
     sys.path.insert(0, str(REPO_ROOT))
+    from evaluation.core.question_tags import is_bohr_cli_question
+    from evaluation.scripts.devshell.bohr_cli_audit import (
+        RECEIPT_SCHEMA,
+        RECEIPTS_FILENAME,
+        prepare_bohr_cli_audit_environment,
+    )
     from evaluation.scripts.devshell.eval_model_routes import (
         DEFAULT_DEVSHELL_FALLBACK_MODEL_ROUTE,
         DEFAULT_DEVSHELL_MODEL_ROUTE,
@@ -109,6 +157,18 @@ def main() -> int:
         default_fallback_model_route=DEFAULT_DEVSHELL_FALLBACK_MODEL_ROUTE,
     )
     args = parser.parse_args()
+
+    child_env = os.environ.copy()
+    if args.bohrium_env is not None:
+        try:
+            _apply_bohrium_env_override(
+                child_env,
+                repo_root=REPO_ROOT,
+                environment=args.bohrium_env,
+            )
+        except ValueError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
 
     if args.no_eval_ingest and args.eval_ingest_pending_only:
         print(
@@ -140,6 +200,7 @@ def main() -> int:
         _normalize_mm_devshell_exp_cli,
         build_mm_devshell_run_cmd,
         devshell_console_indicates_provider_fallback,
+        excluded_builtin_tools_for_question,
     )
 
     slices_override = None
@@ -247,9 +308,21 @@ def main() -> int:
     git_commit = git_head_commit(REPO_ROOT)
 
     exp_cli = _normalize_mm_devshell_exp_cli(args.exp)
-    eval_tooling_snapshot = _eval_tooling_snapshot_for_exp_cli(
-        repo_root=REPO_ROOT, exp_cli=exp_cli
+    tooling_exclusions = sorted(
+        {excluded_builtin_tools_for_question(item["question"]) for item in run_plan}
     )
+    eval_tooling_by_exclusions = {
+        excluded: _eval_tooling_snapshot_for_exp_cli(
+            repo_root=REPO_ROOT,
+            exp_cli=exp_cli,
+            excluded_builtin_tools=excluded,
+        )
+        for excluded in tooling_exclusions
+    }
+    if () in eval_tooling_by_exclusions:
+        eval_tooling_snapshot = eval_tooling_by_exclusions[()]
+    else:
+        eval_tooling_snapshot = next(iter(eval_tooling_by_exclusions.values()))
 
     manifest: dict[str, Any] = {
         "run_label": args.run_label,
@@ -263,9 +336,18 @@ def main() -> int:
         "dry_run": False,
         "eval_tooling": eval_tooling_snapshot,
     }
+    has_bohr_cli_questions = any(
+        is_bohr_cli_question(item["question"]) for item in run_plan
+    )
+    if has_bohr_cli_questions:
+        manifest["bohr_cli_receipt_schema"] = RECEIPT_SCHEMA
+    if len(eval_tooling_by_exclusions) > 1:
+        manifest["eval_tooling_variants"] = list(eval_tooling_by_exclusions.values())
     fb = (args.fallback_model or "").strip()
     if fb:
         manifest["fallback_model"] = fb
+    if args.bohrium_env is not None:
+        manifest["bohrium_env"] = args.bohrium_env
     if ingest_url:
         manifest["eval_ingest_url"] = ingest_url
         manifest["eval_ingest_run_id"] = eval_ingest_run_id
@@ -307,13 +389,14 @@ def main() -> int:
 
     any_failed = False
     ingest_failed = False
-    env = os.environ.copy()
+    env = child_env
     # Child stdout is a pipe (not a TTY) → CPython uses block buffering; streaming
     # from DevStreamHook would not appear until buffer fills unless unbuffered.
     env.setdefault("PYTHONUNBUFFERED", "1")
     # Ensure subprocess finds matmaster_config / .env relative to cwd
     cwd = str(REPO_ROOT)
     prepared_tasks: list[dict[str, Any]] = []
+    bohr_audit_unavailable = False
     for item in run_plan:
         question = item["question"]
         mode: str = item["mode"]
@@ -326,6 +409,16 @@ def main() -> int:
         workspace_path.mkdir(parents=True, exist_ok=True)
         log_dir = run_dir / "logs" / task_id
         log_dir.mkdir(parents=True, exist_ok=True)
+
+        task_env = env
+        bohr_audit_enabled = False
+        if is_bohr_cli_question(question):
+            task_env, bohr_audit_enabled = prepare_bohr_cli_audit_environment(
+                env,
+                receipt_path=log_dir / RECEIPTS_FILENAME,
+                shim_dir=run_dir / "_eval_bin",
+            )
+            bohr_audit_unavailable = bohr_audit_unavailable or not bohr_audit_enabled
 
         prompt = stage_data_files(question, bank_dir, workspace_path, prompt)
 
@@ -340,6 +433,8 @@ def main() -> int:
             if getattr(question, 'inject_bohrium_failure', False)
             else None
         )
+        excluded_builtin_tools = excluded_builtin_tools_for_question(question)
+        task_eval_tooling = eval_tooling_by_exclusions[excluded_builtin_tools]
         cmd = build_mm_devshell_run_cmd(
             py=py,
             workspace_path=workspace_path,
@@ -350,6 +445,7 @@ def main() -> int:
             exp_cli=exp_cli,
             verbose=bool(args.verbose),
             exclude_subagents=args.exclude_subagents,
+            exclude_builtin_tools=excluded_builtin_tools,
             inject_bohrium_failure=inject_failure,
             billing_mode="eval",
             invocation_id=task_id,
@@ -368,13 +464,24 @@ def main() -> int:
                 "summary_file": summary_file,
                 "console_log_file": console_log_file,
                 "cmd": cmd,
+                "env": task_env,
+                "bohr_cli_audit_enabled": bohr_audit_enabled,
                 "primary_model": primary_route,
                 "fallback_model": fb or None,
                 "mm_py": py,
                 "exp_cli": exp_cli,
                 "verbose": bool(args.verbose),
+                "excluded_builtin_tools": excluded_builtin_tools,
+                "eval_tooling": task_eval_tooling,
                 "inject_bohrium_failure": inject_failure,
             }
+        )
+
+    if bohr_audit_unavailable:
+        print(
+            "warning: Bohr-CLI was not found on PATH; tagged tasks cannot emit "
+            "execution receipts",
+            file=sys.stderr,
         )
 
     if args.prepare_cc_baseline:
@@ -419,7 +526,7 @@ def main() -> int:
         rc, duration_ms, summary = _run_devshell_task(
             cmd=prepared["cmd"],
             cwd=cwd,
-            env=env,
+            env=prepared["env"],
             summary_file=summary_file,
             console_log_file=console_log_file,
             timeout_sec=args.task_timeout,
@@ -452,6 +559,14 @@ def main() -> int:
                     summary_file.unlink()
             except OSError:
                 pass
+            # The audit launcher appends receipts; drop the aborted attempt's
+            # lines or the exactly-one-lifecycle execution checks see doubles.
+            receipts_file = Path(prepared["log_dir"]) / RECEIPTS_FILENAME
+            try:
+                if receipts_file.is_file():
+                    receipts_file.unlink()
+            except OSError:
+                pass
             console_log_file.parent.mkdir(parents=True, exist_ok=True)
             with console_log_file.open("a", encoding="utf-8") as bf:
                 bf.write(
@@ -469,6 +584,7 @@ def main() -> int:
                 exp_cli=prepared["exp_cli"],
                 verbose=bool(prepared["verbose"]),
                 exclude_subagents=args.exclude_subagents,
+                exclude_builtin_tools=prepared["excluded_builtin_tools"],
                 inject_bohrium_failure=prepared.get("inject_bohrium_failure"),
                 billing_mode="eval",
                 invocation_id=task_id,
@@ -476,7 +592,7 @@ def main() -> int:
             rc2, d2, summary2 = _run_devshell_task(
                 cmd=cmd_fb,
                 cwd=cwd,
-                env=env,
+                env=prepared["env"],
                 summary_file=summary_file,
                 console_log_file=console_log_file,
                 timeout_sec=args.task_timeout,
@@ -510,6 +626,7 @@ def main() -> int:
             "llm_route_attempts": attempts,
             "llm_model_route_used": attempts[-1]["model_route"],
             "llm_provider_fallback_used": used_fallback,
+            "eval_tooling": prepared["eval_tooling"],
         }
 
         ingest_status: dict[str, Any] | None = None
@@ -526,7 +643,7 @@ def main() -> int:
                 summary=summary if isinstance(summary, dict) else {},
                 duration_ms=duration_ms,
                 artifact=artifact,
-                eval_tooling=eval_tooling_snapshot,
+                eval_tooling=prepared["eval_tooling"],
                 events_timeline=events_tl,
             )
             if pending_only:

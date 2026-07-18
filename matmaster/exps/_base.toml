@@ -44,7 +44,7 @@ For irreversible or shared-state actions (deleting data, submitting HPC jobs, mo
 
 Tool commands run on a remote Linux node: Ubuntu 24.04 (x86_64), Bash, Python 3.12. Preinstalled and usable directly without availability checks:
 
-- Materials & chemistry: ase, pymatgen, dpdata, rdkit, openbabel (`obabel` CLI), packmol, molcrys-kit, mendeleev, matminer, cp2k-input-tools, `vaspkit` CLI.
+- Materials & chemistry: ase, pymatgen, dpdata, rdkit, openbabel (`obabel` CLI), packmol, molcrys-kit (`mck` CLI for molecular crystals), mendeleev, matminer, cp2k-input-tools, `vaspkit` CLI.
 - Data & ML: numpy (2.x API), scipy, pandas, scikit-learn, xgboost (CPU-only), lightgbm, scikit-image, pint.
 - Documents & plotting: matplotlib, openpyxl, python-docx, pymupdf, cairosvg; LaTeX toolchain (`latexmk`, pdflatex) and Noto CJK fonts (usable for Chinese labels in matplotlib and LaTeX).
 - General: requests, tmux, wget, curl, file, node/npm, lark (Feishu CLI).

@@ -1,14 +1,16 @@
 """Verify-handler registrations for :class:`BinaryEvaluator`.
 
 The verify-registry refactor moved per-verify-type checks from a giant
-``if/elif`` to a registry decorated via ``@_R(...)``. The handler block was
-originally inlined in ``evaluator.py`` but pushed that file past the
-1000-line limit enforced by ``.pre-commit/check_file_lines.py``.
+``if/elif`` to a registry decorated via ``@_R(...)``. Handler implementations
+live here so ``evaluator.py`` can focus on orchestration.
 
 Importing this module has the side effect of populating
 ``BinaryEvaluator._VERIFY_REGISTRY``. ``evaluator.py`` performs that import
 at module bottom; do not import this file from anywhere else.
 """
+
+import re
+from pathlib import PurePath
 
 from evaluation.validators.dpgen_dargs import check_dpgen_dargs
 from evaluation.validators.gpumd_run_in import check_gpumd_run_in
@@ -28,6 +30,15 @@ from .evaluator_wiring import (
     _make_domain_check_handler,
     check_abacus_input_from_evidence,
     check_answer_json_numeric_from_ref,
+    check_bohr_cli_operation_invoked,
+    check_bohr_gpu_comparison_record,
+    check_bohr_job_monitor_execution,
+    check_bohr_job_stop_execution,
+    check_bohr_job_stop_record,
+    check_bohr_job_upgrade_execution,
+    check_bohr_job_upgrade_record,
+    check_bohr_parameter_sweep_execution,
+    check_bohr_parameter_sweep_record,
     check_checkcif_alerts,
     check_csv_row_count_from_evidence,
     check_duration_budget,
@@ -131,6 +142,214 @@ def _h_tool_call_exists(ctx):
     return False, f"no tool call matching {names} in {len(evidence.tool_calls)} calls"
 
 
+@_R("tool_args_regex")
+def _h_tool_args_regex(ctx):
+    """Count regex matches in one argument across matching tool calls."""
+    ref = ctx["ref"]
+    if not ref.tool_name or not ref.tool_arg:
+        return False, "tool_args_regex requires tool_name and tool_arg"
+    names = [name.strip() for name in ref.tool_name.split("|") if name.strip()]
+    config = ref.value
+    if isinstance(config, str):
+        pattern = config
+        min_matches, max_matches = 1, None
+    elif isinstance(config, dict):
+        pattern = config.get("pattern")
+        min_matches = config.get("min_matches", 1)
+        max_matches = config.get("max_matches")
+    else:
+        return False, "tool_args_regex value must be a string or object"
+    try:
+        regex = re.compile(str(pattern))
+        minimum = int(min_matches)
+        maximum = int(max_matches) if max_matches is not None else None
+    except (re.error, TypeError, ValueError) as exc:
+        return False, f"invalid tool_args_regex configuration: {exc}"
+
+    count = 0
+    calls_inspected = 0
+    for call in ctx["tool_calls"]:
+        if call.get("tool_name") not in names:
+            continue
+        args = call.get("tool_args", {})
+        actual = args.get(ref.tool_arg) if isinstance(args, dict) else None
+        if not isinstance(actual, str):
+            continue
+        calls_inspected += 1
+        count += sum(1 for _ in regex.finditer(actual))
+
+    passed = count >= minimum and (maximum is None or count <= maximum)
+    expected = f">={minimum}" if maximum is None else f"[{minimum},{maximum}]"
+    return (
+        passed,
+        f"regex matches={count}, expected={expected}, "
+        f"matching tool calls inspected={calls_inspected}",
+    )
+
+
+_SCRIPT_EXECUTOR_TEMPLATE = (
+    r"(?:^|[\n;&|]\s*)(?:[^\s;&|]+/)?"
+    r"(?:python(?:3(?:\.\d+)*)?|bash|sh)\s+"
+    r"(?:[^\s;&|]+/)?{script}(?=$|[\s;&|])"
+)
+_INLINE_SCRIPT_EXECUTOR_RE = re.compile(
+    r"(?:^|[\n;&|]\s*)(?:[^\s;&|]+/)?" r"(?:python(?:3(?:\.\d+)*)?|bash|sh)\s+[^\s;&|]+"
+)
+_HEREDOC_OPENER_RE = re.compile(
+    r"(?m)(?:^|[;&|(])[ \t]*cat\b[^\n]*<<-?[ \t]*(?P<quote>['\"]?)"
+    r"(?P<tag>[A-Za-z_][A-Za-z0-9_]*)(?P=quote)[^\n]*$"
+)
+_HEREDOC_REDIRECT_RE = re.compile(
+    r"(?<![<\d])>{1,2}[ \t]*(?P<quote>['\"]?)" r"(?P<path>[^'\"\s;&|]+)(?P=quote)"
+)
+
+
+def _find_heredoc_scripts(command: str) -> list[tuple[str, str, int, int]]:
+    """Return path, body, and body span for ``cat ... <<TAG`` writes."""
+    scripts: list[tuple[str, str, int, int]] = []
+    for opener in _HEREDOC_OPENER_RE.finditer(command):
+        redirect = _HEREDOC_REDIRECT_RE.search(opener.group(0))
+        if redirect is None:
+            continue
+        content_start = opener.end()
+        if command[content_start : content_start + 2] == "\r\n":
+            content_start += 2
+        elif command[content_start : content_start + 1] == "\n":
+            content_start += 1
+        terminator = re.search(
+            rf"(?m)^[ \t]*{re.escape(opener.group('tag'))}[ \t]*$",
+            command[content_start:],
+        )
+        if terminator is None:
+            continue
+        content_end = content_start + terminator.start()
+        terminator_end = content_start + terminator.end()
+        scripts.append(
+            (
+                redirect.group("path"),
+                command[content_start:content_end],
+                content_start,
+                terminator_end,
+            )
+        )
+    return scripts
+
+
+def _mask_heredoc_bodies(command: str, scripts: list[tuple[str, str, int, int]]) -> str:
+    """Hide heredoc data while preserving newlines and subsequent shell commands."""
+    masked = list(command)
+    for _path, _content, start, end in scripts:
+        for index in range(start, end):
+            if masked[index] not in "\r\n":
+                masked[index] = " "
+    return "".join(masked)
+
+
+@_R("scripted_tool_args_regex")
+def _h_scripted_tool_args_regex(ctx):
+    """Accept direct commands or a written script that is subsequently executed.
+
+    Repeated work performed inside a helper script is intentionally counted as one
+    grounded execution path.  Output artifacts remain responsible for proving the
+    number and semantics of the repeated operations.
+    """
+    ref = ctx["ref"]
+    if not ref.tool_name or not ref.tool_arg:
+        return False, "scripted_tool_args_regex requires tool_name and tool_arg"
+    config = ref.value
+    if not isinstance(config, dict):
+        return False, "scripted_tool_args_regex value must be an object"
+    try:
+        direct_regex = re.compile(str(config.get("direct_pattern")))
+        script_regex = re.compile(str(config.get("script_pattern")))
+        minimum = int(config.get("min_matches", 1))
+        raw_maximum = config.get("max_matches")
+        maximum = int(raw_maximum) if raw_maximum is not None else None
+    except (re.error, TypeError, ValueError) as exc:
+        return False, f"invalid scripted_tool_args_regex configuration: {exc}"
+
+    names = {name.strip() for name in ref.tool_name.split("|") if name.strip()}
+    tool_calls = ctx["tool_calls"]
+    direct_matches = 0
+    inline_scripts = 0
+    executor_calls: list[tuple[int, str]] = []
+    written_scripts: list[tuple[int, str, str]] = []
+
+    for index, call in enumerate(tool_calls):
+        tool_name = call.get("tool_name")
+        args = call.get("tool_args", {})
+        if not isinstance(args, dict):
+            continue
+        if tool_name in names:
+            command = args.get(ref.tool_arg)
+            if not isinstance(command, str):
+                continue
+            heredoc_scripts = _find_heredoc_scripts(command)
+            executable_command = _mask_heredoc_bodies(command, heredoc_scripts)
+            executor_calls.append((index, executable_command))
+            command_direct = sum(1 for _ in direct_regex.finditer(executable_command))
+            direct_matches += command_direct
+            matching_heredocs = [
+                (path, content)
+                for path, content, _start, _end in heredoc_scripts
+                if script_regex.search(content)
+            ]
+            heredoc_executed_inline = any(
+                re.search(
+                    _SCRIPT_EXECUTOR_TEMPLATE.replace(
+                        "{script}",
+                        re.escape(PurePath(path.replace("\\", "/")).name),
+                    ),
+                    executable_command,
+                )
+                for path, _content in matching_heredocs
+            )
+            # The weak text-plus-executor path only counts when the command
+            # produced no direct match; with overlapping direct/script
+            # patterns it would otherwise count one execution twice.
+            if heredoc_executed_inline or (
+                command_direct == 0
+                and script_regex.search(executable_command)
+                and _INLINE_SCRIPT_EXECUTOR_RE.search(executable_command)
+            ):
+                inline_scripts += 1
+            written_scripts.extend(
+                (index, path, content) for path, content in matching_heredocs
+            )
+        elif tool_name == "Write":
+            path = args.get("file_path")
+            content = args.get("content")
+            if (
+                isinstance(path, str)
+                and isinstance(content, str)
+                and script_regex.search(content)
+            ):
+                written_scripts.append((index, path, content))
+
+    linked_scripts = 0
+    for write_index, path, _content in written_scripts:
+        basename = PurePath(path.replace("\\", "/")).name
+        if not basename:
+            continue
+        executor_regex = re.compile(
+            _SCRIPT_EXECUTOR_TEMPLATE.replace("{script}", re.escape(basename))
+        )
+        if any(
+            call_index > write_index and executor_regex.search(command)
+            for call_index, command in executor_calls
+        ):
+            linked_scripts += 1
+
+    count = direct_matches + inline_scripts + linked_scripts
+    passed = count >= minimum and (maximum is None or count <= maximum)
+    expected = f">={minimum}" if maximum is None else f"[{minimum},{maximum}]"
+    return (
+        passed,
+        f"grounded paths={count}, expected={expected}, direct={direct_matches}, "
+        f"linked_scripts={linked_scripts}, inline_scripts={inline_scripts}",
+    )
+
+
 @_R("artifact_exists")
 def _h_artifact_exists(ctx):
     return BinaryEvaluator._check_artifact_exists(
@@ -180,6 +399,25 @@ def _h_molcrys_env(ctx):
     )
 
 
+@_R("molcrys_molecule_formulas")
+def _h_molcrys_mol_formulas(ctx):
+    from evaluation.core.evaluator_wiring import _cfg, _get_workspace
+    from evaluation.validators.structure_molcrys import (
+        check_molcrys_molecule_formulas,
+    )
+
+    ws, err = _get_workspace(ctx["evidence"])
+    if err:
+        return False, err
+    cfg = _cfg(ctx["ref"])
+    return check_molcrys_molecule_formulas(
+        ws,
+        filename=cfg.get("filename", "*.cif"),
+        expected_formulas=list(cfg.get("expected_formulas", [])),
+        all_frames=bool(cfg.get("all_frames", False)),
+    )
+
+
 @_R("checkcif_no_a_alerts")
 def _h_checkcif(ctx):
     return check_checkcif_alerts(evidence=ctx["evidence"], ref=ctx["ref"])
@@ -187,8 +425,8 @@ def _h_checkcif(ctx):
 
 # ---------------------------------------------------------------------------
 # Domain-specific validators wired via the factory in evaluator_wiring.
-# vasp_incar and gpumd_run_in are generated here (not in evaluator_wiring)
-# to keep that file under the 1000-line limit.
+# vasp_incar and gpumd_run_in are generated here to keep the wiring module
+# focused on shared adapters.
 # ---------------------------------------------------------------------------
 
 check_vasp_incar_from_evidence = _make_domain_check_handler(
@@ -225,8 +463,7 @@ check_dpgen_dargs_from_evidence = _make_domain_check_handler(
 
 
 def check_struct_file_planarity(*, evidence, ref):
-    """Conjugated-core planarity check (lives in its own validator module to
-    keep evaluator_wiring under the 1000-line file limit)."""
+    """Run the specialized conjugated-core planarity validator."""
     from evaluation.core.evaluator_wiring import _cfg, _get_workspace
     from evaluation.validators.structure_planarity import check_planarity
 
@@ -289,6 +526,15 @@ for _name, _fn in [
     ("text_file_regex", check_text_file_regex_from_evidence),
     ("text_file_regex_absent", check_text_file_regex_absent_from_evidence),
     ("json_file_schema", check_json_file_schema),
+    ("bohr_gpu_comparison_record", check_bohr_gpu_comparison_record),
+    ("bohr_cli_operation_invoked", check_bohr_cli_operation_invoked),
+    ("bohr_job_monitor_execution", check_bohr_job_monitor_execution),
+    ("bohr_job_stop_execution", check_bohr_job_stop_execution),
+    ("bohr_job_upgrade_execution", check_bohr_job_upgrade_execution),
+    ("bohr_parameter_sweep_execution", check_bohr_parameter_sweep_execution),
+    ("bohr_parameter_sweep_record", check_bohr_parameter_sweep_record),
+    ("bohr_job_stop_record", check_bohr_job_stop_record),
+    ("bohr_job_upgrade_record", check_bohr_job_upgrade_record),
     ("json_file_key_values", check_json_file_key_values),
     ("json_file_numeric_range", check_json_file_numeric_range),
     ("json_file_artifacts", check_json_file_artifacts),

@@ -188,6 +188,9 @@ def _format_exp_tools_summary(cfg: ExpConfig) -> str:
     else:
         builtin_text = "Builtin: none"
 
+    if cfg.tools.excluded_builtin:
+        builtin_text += f" (excluding {', '.join(cfg.tools.excluded_builtin)})"
+
     if cfg.tools.mcp == "*":
         mcp_text = "MCP: all"
     elif cfg.tools.mcp:

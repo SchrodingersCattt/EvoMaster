@@ -1,12 +1,34 @@
 ---
 name: sandbox-proxy
-description: "Toggle the sandbox HTTP proxy (pai.ga.op.xdptech.com:3128) for overseas access (GitHub, HuggingFace, PyPI pypi.org, Google Drive). Use when sandbox cannot reach overseas sites or access is unstable. Provides proxy-on / proxy-off snippets and per-command bypass."
+description: "Resolve sandbox outbound-network and package-source failures. Use when pip/conda/GitHub/HuggingFace downloads time out. Provides domestic mirror fallback, proxy on/off, and per-command bypass for overseas resources."
 ---
 
 # Sandbox Network Proxy
 
 Sandbox 默认**无出站 HTTP 代理**。镜像自带 `/etc/pip.conf` 阿里云源，国内 PyPI 已经很快。
 当需要访问海外站点（GitHub、HuggingFace、pypi.org、Google Drive 等）时，启用代理；用完立即关闭以保持国内源速度。
+
+不要让用户选择镜像或代理。除非用户明确指定，否则按以下顺序自动恢复。
+
+## 恢复顺序
+
+1. 先使用沙箱默认配置执行一次。对于 pip，可先确认实际配置：
+
+   ```bash
+   python -m pip config list -v
+   python -m pip install <package>
+   ```
+
+2. 常规 PyPI 包出现超时或连接错误时，不开海外代理，仅对当前命令切换国内备用源：
+
+   ```bash
+   HTTP_PROXY= HTTPS_PROXY= http_proxy= https_proxy= \
+     python -m pip install --proxy '' \
+     --index-url https://pypi.tuna.tsinghua.edu.cn/simple <package>
+   ```
+
+3. 仅当目标资源必须从海外站点获取时，再按下文启用代理。完成后立即关闭。
+4. 代理或镜像失败时最多重试 1-2 次；仍失败则保留原始错误并说明网络阻塞。
 
 ## Proxy On — 启用代理
 
@@ -86,4 +108,4 @@ HTTP_PROXY= HTTPS_PROXY= http_proxy= https_proxy= <your-cmd>
 
 1. **先开代理** → 执行海外操作（git clone / pip install 海外包 / wget HuggingFace 模型）→ **立即关代理**
 2. 如果遇到 503 或超时，重试 1-2 次即可
-3. 国内源操作（pip install 常规包）无需开代理
+3. 国内源操作（pip install 常规包）无需开代理，默认源失败时按“恢复顺序”切换单次镜像

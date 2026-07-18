@@ -10,6 +10,8 @@ from __future__ import annotations
 import fnmatch
 from pathlib import Path
 
+from evaluation.validators._common import resolve_file
+
 # Lazy optional-dep imports (numpy, pymatgen)
 
 _NP_AVAILABLE = False
@@ -34,27 +36,7 @@ _IMPORT_MSG = "pymatgen not installed; install with: uv sync --extra calculation
 # File resolution helpers
 
 
-def _resolve_file(workspace: Path, pattern: str) -> Path | None:
-    """Return the best-matching file inside *workspace* for *pattern*.
-
-    Resolution order:
-    1. Exact filename match (case-sensitive).
-    2. **Recursive** ``fnmatch`` glob expansion – newest file wins.
-       The pattern is matched against the *basename* so that files inside
-       subdirectories (e.g. ``calc_001/POSCAR``) are found too.
-    """
-    exact = workspace / pattern
-    if exact.is_file():
-        return exact
-
-    hits = [
-        p
-        for p in workspace.rglob("*")
-        if p.is_file() and fnmatch.fnmatch(p.name, pattern)
-    ]
-    if not hits:
-        return None
-    return max(hits, key=lambda p: p.stat().st_mtime)
+_resolve_file = resolve_file
 
 
 def _resolve_files(workspace: Path, pattern: str) -> list[Path]:
@@ -77,11 +59,29 @@ def _resolve_files(workspace: Path, pattern: str) -> list[Path]:
 
 
 def _load_structure(path: Path) -> Structure | Molecule:
-    """Read a CIF / POSCAR / XYZ / … file via pymatgen auto-detection."""
+    """Read a CIF / POSCAR / XYZ / ExtXYZ file via pymatgen auto-detection.
+
+    For ``.extxyz`` files (not natively supported by pymatgen), ASE is used
+    to read the first frame and the result is converted to a pymatgen object.
+    """
     suffix = path.suffix.lower()
+    # Two-part suffix check for .extxyz
+    if path.name.endswith('.extxyz'):
+        return _load_extxyz_first_frame(path)
     if suffix in {".xyz"}:
         return Molecule.from_file(str(path))
     return Structure.from_file(str(path))
+
+
+def _load_extxyz_first_frame(path: Path) -> Structure | Molecule:
+    """Read the first frame of an ExtXYZ file via ASE → pymatgen."""
+    import ase.io
+    from pymatgen.io.ase import AseAtomsAdaptor
+
+    atoms = ase.io.read(str(path), index=0)
+    if any(atoms.pbc):
+        return AseAtomsAdaptor.get_structure(atoms)
+    return AseAtomsAdaptor.get_molecule(atoms)
 
 
 # 1. Atom count

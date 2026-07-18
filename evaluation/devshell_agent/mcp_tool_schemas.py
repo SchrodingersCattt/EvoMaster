@@ -1,4 +1,4 @@
-"""JSON schemas for MatmasterEvalMcpToolkit (split from ``sdk_tools.py`` for line limits)."""
+"""JSON schemas for MatmasterEvalMcpToolkit."""
 
 from __future__ import annotations
 

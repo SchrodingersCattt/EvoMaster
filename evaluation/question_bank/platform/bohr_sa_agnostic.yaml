@@ -1,0 +1,886 @@
+version: v5
+capability: scientific_analysis
+domain: agnostic
+questions:
+- id: BSA_paper_mn_invar_001_20260715
+  capability: scientific_analysis
+  domain: agnostic
+  scope: platform
+  intent: Test agent can use bohr paper search with English keywords and present structured results.
+  human_prompt_seed: |
+    利用 bohr-cli，看一眼文献到底有没有人做过Mn掺杂的Invar合金？效果怎么样？
+    把搜索结果保存到 `a1_result.json`，包含论文列表和研究现状总结。JSON 中论文列表每项含 `title`，研究现状总结记为 `summary`。
+  tags:
+  - bohr-cli
+  reference_answers:
+  - key: artifact
+    value: a1_result.json
+  - key: has_papers
+    value:
+      filename: a1_result.json
+      pattern: '"title"\s*:\s*"[^"]+"'
+  - key: english_keyword
+    value:
+      filename: a1_result.json
+      pattern: Invar|invar|Fe-Ni|FeNi
+      flags: i
+  - key: has_summary
+    value:
+      filename: a1_result.json
+      pattern: '"summary"\s*:\s*"[^"]{20,}"'
+  - key: turn_budget
+    value:
+      max: 8
+  - key: paper_searched_via_cli
+    tool_name: Bash
+    tool_arg: command
+    value:
+      pattern: '(?:^|[\n;&|]\s*)(?:[^\s;&|]+/)?bohr\s+paper\s+\+?search\b'
+      min_matches: 1
+  scoring_checklist:
+  - id: artifact
+    criterion: a1_result.json written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: has_papers
+    criterion: Result contains at least one paper entry with title.
+    axis: correctness
+    verify: text_file_regex
+  - id: english_keyword
+    criterion: Search used English keywords related to Invar alloy.
+    axis: grounding
+    verify: text_file_regex
+  - id: has_summary
+    criterion: Summary field is non-trivial (>=20 chars).
+    axis: correctness
+    verify: text_file_regex
+  - id: paper_searched_via_cli
+    criterion: Paper search was invoked through bohr-cli.
+    axis: grounding
+    verify: tool_args_regex
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+
+- id: BSA_paper_invar_mech_002_20260715
+  capability: scientific_analysis
+  domain: agnostic
+  scope: platform
+  intent: Test agent can synthesize multiple literature sources on Invar effect mechanisms.
+  human_prompt_seed: |
+    利用 bohr-cli，Invar合金的低热膨胀机理都有什么机理？文献都是怎么说的？
+    整理成 `a2_mechanisms.md`，每种机理一个二级标题（## 机理名称），下面写解释和对应文献。
+  tags:
+  - bohr-cli
+  reference_answers:
+  - key: artifact
+    value: a2_mechanisms.md
+  - key: multiple_sections
+    value:
+      filename: a2_mechanisms.md
+      pattern: (?m)^## .+
+  - key: mechanism_keyword
+    value:
+      filename: a2_mechanisms.md
+      pattern: magn|Weiss|体积效应|volume|2γ|two-state
+      flags: i
+  - key: turn_budget
+    value:
+      max: 10
+  - key: paper_searched_via_cli
+    tool_name: Bash
+    tool_arg: command
+    value:
+      pattern: '(?:^|[\n;&|]\s*)(?:[^\s;&|]+/)?bohr\s+paper\s+\+?search\b'
+      min_matches: 1
+  scoring_checklist:
+  - id: artifact
+    criterion: a2_mechanisms.md written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: multiple_sections
+    criterion: File has at least 2 second-level headings (## ...).
+    axis: correctness
+    verify: text_file_regex
+  - id: mechanism_keyword
+    criterion: Content mentions known Invar mechanisms (magnetic, Weiss, volume effect).
+    axis: correctness
+    verify: text_file_regex
+  - id: paper_searched_via_cli
+    criterion: Paper search was invoked through bohr-cli.
+    axis: grounding
+    verify: tool_args_regex
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+
+- id: BSA_pdf_crystal_003_20260715
+  capability: scientific_analysis
+  domain: agnostic
+  scope: platform
+  intent: Test agent can extract crystallographic data from PDFs using bohr pdf parse.
+  human_prompt_seed: |
+    利用 bohr-cli，这两篇文献的晶体学数据整理成表格，要求包含化学式、空间群、晶胞参数。
+    输出为 `a3_crystal_data.json`，记录每篇文献中提取到的化学式、空间群和晶胞参数。JSON 中每篇文献记录含 `paper`、`formula`、`space_group` 和 `cell_params`。
+  tags:
+  - bohr-cli
+  data_files:
+  - key: pdf_conform1
+    path: data/bohr_cli/conform_074503_1_online.pdf
+    description: Crystallographic paper on organic-inorganic hybrid phase transition.
+  - key: pdf_conform2
+    path: data/bohr_cli/conform_han-et-al-2017.pdf
+    description: Lead-free hybrid material with chair-to-boat phase transition.
+  reference_answers:
+  - key: artifact
+    value: a3_crystal_data.json
+  - key: has_entries
+    value:
+      filename: a3_crystal_data.json
+      pattern: '"paper"'
+  - key: has_space_group
+    value:
+      filename: a3_crystal_data.json
+      pattern: '"space_group"\s*:\s*(?:"[^"]+"|\{\s*")'
+  - key: has_formula
+    value:
+      filename: a3_crystal_data.json
+      pattern: '"formula"\s*:\s*"[^"]+"'
+  - key: has_cell
+    value:
+      filename: a3_crystal_data.json
+      pattern: '"cell_params"\s*:\s*(?:"[^"]+"|\{\s*")'
+  - key: turn_budget
+    value:
+      max: 12
+  - key: pdf_parsed_via_cli
+    value:
+      operations:
+      - pdf.parse
+      min_matches: 1
+  scoring_checklist:
+  - id: artifact
+    criterion: a3_crystal_data.json written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: has_entries
+    criterion: JSON contains at least one paper entry.
+    axis: correctness
+    verify: text_file_regex
+  - id: has_space_group
+    criterion: Space group field extracted and non-empty.
+    axis: correctness
+    verify: text_file_regex
+  - id: has_formula
+    criterion: Chemical formula field extracted and non-empty.
+    axis: correctness
+    verify: text_file_regex
+  - id: has_cell
+    criterion: Cell parameters extracted.
+    axis: correctness
+    verify: text_file_regex
+  - id: pdf_parsed_via_cli
+    criterion: PDF parse was invoked through bohr-cli.
+    axis: grounding
+    verify: bohr_cli_operation_invoked
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+
+- id: BSA_scholar_compare_004_20260715
+  capability: scientific_analysis
+  domain: agnostic
+  scope: platform
+  intent: Test agent can search and compare two scholars using bohr scholar.
+  human_prompt_seed: |
+    利用 bohr-cli，帮我查一下 Jörg Behler 和 Michele Parrinello 两位学者的合作关系和各自研究重点有什么区别。
+    输出为 `a4_scholars.json`，记录两位学者的背景和研究重点对比。JSON 中每位学者的研究重点用 `research_focus`，整体对比用 `comparison`。
+  tags:
+  - bohr-cli
+  reference_answers:
+  - key: artifact
+    value: a4_scholars.json
+  - key: both_names
+    value:
+      filename: a4_scholars.json
+      tokens:
+      - Behler
+      - Parrinello
+  - key: has_focus
+    value:
+      filename: a4_scholars.json
+      pattern: '"research_focus"\s*:\s*[\["]'
+  - key: has_comparison
+    value:
+      filename: a4_scholars.json
+      pattern: '"comparison"\s*:\s*(?:"[^"]{50,}"|\{\s*")'
+  - key: turn_budget
+    value:
+      max: 8
+  - key: scholars_queried_via_cli
+    tool_name: Bash
+    tool_arg: command
+    value:
+      pattern: '(?:^|[\n;&|]\s*)(?:[^\s;&|]+/)?bohr\s+scholar\s+\+?(search|get)\b'
+      min_matches: 2
+  scoring_checklist:
+  - id: artifact
+    criterion: a4_scholars.json written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: both_names
+    criterion: Both scholar names appear in the file.
+    axis: correctness
+    verify: text_file_contains_all
+  - id: has_focus
+    criterion: research_focus array present.
+    axis: correctness
+    verify: text_file_regex
+  - id: has_comparison
+    criterion: Comparison field is substantive (>=50 chars).
+    axis: correctness
+    verify: text_file_regex
+  - id: scholars_queried_via_cli
+    criterion: Scholar search or get was invoked through bohr-cli at least twice.
+    axis: grounding
+    verify: tool_args_regex
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+
+- id: BSA_roadmap_topo_005_20260715_v2
+  capability: scientific_analysis
+  domain: agnostic
+  scope: platform
+  intent: Test agent can combine wiki+scholar+paper for a learning roadmap.
+  human_prompt_seed: |
+    利用 bohr-cli，我现在要入门"拓扑绝缘体表面态"，给我一个入门路线图：核心概念 → 关键人物 → 推荐论文。
+    输出为 `a5_roadmap.json`，记录核心概念、关键人物及其贡献、推荐论文及推荐理由。JSON 顶层使用 `concepts`、`key_figures` 和 `papers`；`key_figures` 为数组，每项含 `name` 和 `contribution`；`papers` 为数组，每项含 `title`、`year` 和 `why`。
+  tags:
+  - bohr-cli
+  reference_answers:
+  - key: artifact
+    value: a5_roadmap.json
+  - key: roadmap_schema
+    value:
+      filename: a5_roadmap.json
+      schema:
+        type: object
+        required:
+        - concepts
+        - key_figures
+        - papers
+        properties:
+          concepts:
+            type: array
+            minItems: 1
+            items:
+              oneOf:
+              - type: string
+                minLength: 1
+              - type: object
+                minProperties: 1
+          key_figures:
+            type: array
+            minItems: 1
+            items:
+              type: object
+              required:
+              - name
+              - contribution
+              properties:
+                name:
+                  type: string
+                  minLength: 1
+                contribution:
+                  type: string
+                  minLength: 1
+          papers:
+            type: array
+            minItems: 1
+            items:
+              type: object
+              required:
+              - title
+              - year
+              - why
+              properties:
+                title:
+                  type: string
+                  minLength: 1
+                year:
+                  type: integer
+                why:
+                  type: string
+                  minLength: 1
+  - key: topo_keyword
+    value:
+      filename: a5_roadmap.json
+      pattern: topological|surface.state|拓扑|表面态
+      flags: i
+  - key: turn_budget
+    value:
+      max: 12
+  scoring_checklist:
+  - id: artifact
+    criterion: a5_roadmap.json written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: roadmap_schema
+    criterion: Roadmap JSON contains non-empty concepts, key figures with contributions, and papers with title, year, and rationale.
+    axis: correctness
+    verify: json_file_schema
+  - id: topo_keyword
+    criterion: Content mentions topological/surface state keywords.
+    axis: grounding
+    verify: text_file_regex
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+
+- id: BSA_patent_sodium_006_20260715
+  capability: scientific_analysis
+  domain: agnostic
+  scope: platform
+  intent: Test agent uses both paper patent and paper search endpoints.
+  human_prompt_seed: |
+    利用 bohr-cli，有个专利是做钠离子电池正极的，搜一下这块还有什么相关专利和学术论文。
+    结果保存到 `a6_result.json`，分别记录专利和论文。JSON 顶层使用 `patents` 和 `papers`。
+  tags:
+  - bohr-cli
+  reference_answers:
+  - key: artifact
+    value: a6_result.json
+  - key: has_patents
+    value:
+      filename: a6_result.json
+      pattern: '"patents"\s*:\s*\[\s*\{'
+  - key: has_papers
+    value:
+      filename: a6_result.json
+      pattern: '"papers"\s*:\s*\[\s*\{'
+  - key: sodium_keyword
+    value:
+      filename: a6_result.json
+      pattern: sodium|Na|钠
+      flags: i
+  - key: turn_budget
+    value:
+      max: 8
+  scoring_checklist:
+  - id: artifact
+    criterion: a6_result.json written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: has_patents
+    criterion: patents array has entries.
+    axis: correctness
+    verify: text_file_regex
+  - id: has_papers
+    criterion: papers array has entries.
+    axis: correctness
+    verify: text_file_regex
+  - id: sodium_keyword
+    criterion: Results relate to sodium-ion batteries.
+    axis: grounding
+    verify: text_file_regex
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+
+- id: BSA_gnn_nature_007_20260715
+  capability: scientific_analysis
+  domain: agnostic
+  scope: platform
+  intent: Test agent applies year and journal filters in paper search.
+  human_prompt_seed: |
+    利用 bohr-cli，找几篇 GNN 做分子性质预测的文章，要 Nature 系列的，最近两年的。
+    保存到 `a7_papers.json`，记录每篇论文的标题、期刊、年份和相关性说明。JSON 中每篇论文的年份字段用 `year`。
+  tags:
+  - bohr-cli
+  reference_answers:
+  - key: artifact
+    value: a7_papers.json
+  - key: recent_years
+    value:
+      filename: a7_papers.json
+      pattern: '"year"\s*:\s*(2024|2025|2026)'
+  - key: nature_journal
+    value:
+      filename: a7_papers.json
+      pattern: '[Nn]ature'
+  - key: gnn_relevant
+    value:
+      filename: a7_papers.json
+      pattern: GNN|[Gg]raph|[Nn]eural|molecular
+      flags: i
+  - key: turn_budget
+    value:
+      max: 8
+  scoring_checklist:
+  - id: artifact
+    criterion: a7_papers.json written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: recent_years
+    criterion: Papers include recent years (2024+).
+    axis: correctness
+    verify: text_file_regex
+  - id: nature_journal
+    criterion: Results include Nature-family journals.
+    axis: correctness
+    verify: text_file_regex
+  - id: gnn_relevant
+    criterion: Results are GNN/graph-neural-network related.
+    axis: grounding
+    verify: text_file_regex
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+
+- id: BSA_mof_co2_008_20260715
+  capability: scientific_analysis
+  domain: agnostic
+  scope: platform
+  intent: Test agent can search and summarize 5 papers with key points.
+  human_prompt_seed: |
+    利用 bohr-cli，下周组会我要讲"MOF催化CO2还原"，帮我快速整理 5 篇核心文献的要点。
+    保存到 `a8_review.json`，记录每篇的标题和关键要点，要求至少5篇。JSON 中每篇的关键要点用 `key_points`。
+  tags:
+  - bohr-cli
+  reference_answers:
+  - key: artifact
+    value: a8_review.json
+  - key: mof_keyword
+    value:
+      filename: a8_review.json
+      tokens:
+      - MOF
+  - key: has_key_points
+    value:
+      filename: a8_review.json
+      pattern: '"key_points"\s*:\s*\['
+  - key: co2_keyword
+    value:
+      filename: a8_review.json
+      pattern: CO.?2|carbon dioxide
+      flags: i
+  - key: turn_budget
+    value:
+      max: 10
+  scoring_checklist:
+  - id: artifact
+    criterion: a8_review.json written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: mof_keyword
+    criterion: Results contain MOF keyword.
+    axis: grounding
+    verify: text_file_contains_all
+  - id: has_key_points
+    criterion: Papers have key_points arrays.
+    axis: correctness
+    verify: text_file_regex
+  - id: co2_keyword
+    criterion: Results relate to CO2 reduction.
+    axis: grounding
+    verify: text_file_regex
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+
+- id: BSA_wiki_phonon_009_20260715
+  capability: scientific_analysis
+  domain: agnostic
+  scope: platform
+  intent: Test agent uses bohr wiki for scientific encyclopedia lookup.
+  human_prompt_seed: |
+    利用 bohr-cli，声子色散和热导率到底什么关系？平台上有没有相关科普？
+    写到 `a9_wiki.md`，要求包含"## 物理关系"和"## 平台资源"两节。
+  tags:
+  - bohr-cli
+  reference_answers:
+  - key: artifact
+    value: a9_wiki.md
+  - key: physics_section
+    value:
+      filename: a9_wiki.md
+      pattern: (?m)^## .*物理|^## .*关系|^## .*phonon|^## .*Physics
+      flags: i
+  - key: platform_section
+    value:
+      filename: a9_wiki.md
+      pattern: (?m)^## .*平台|^## .*资源|^## .*[Pp]latform
+      flags: i
+  - key: phonon_keyword
+    value:
+      filename: a9_wiki.md
+      pattern: phonon|声子
+      flags: i
+  - key: turn_budget
+    value:
+      max: 6
+  scoring_checklist:
+  - id: artifact
+    criterion: a9_wiki.md written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: physics_section
+    criterion: Has a section about physics/relationship.
+    axis: correctness
+    verify: text_file_regex
+  - id: platform_section
+    criterion: Has a section about platform resources.
+    axis: correctness
+    verify: text_file_regex
+  - id: phonon_keyword
+    criterion: Content mentions phonon/声子.
+    axis: grounding
+    verify: text_file_regex
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+
+- id: BSA_mentor_gnr_010_20260715
+  capability: scientific_analysis
+  domain: agnostic
+  scope: platform
+  intent: Test agent uses bohr mentor for deep research Q&A with citations.
+  human_prompt_seed: |
+    利用 bohr-cli，给我深入浅出讲解一下：石墨烯纳米带的边缘效应怎么影响电子输运的？引用要标出来。
+    保存到 `a10_mentor.md`，引用标注格式为 [1] [2]...
+  tags:
+  - bohr-cli
+  reference_answers:
+  - key: artifact
+    value: a10_mentor.md
+  - key: has_citations
+    value:
+      filename: a10_mentor.md
+      pattern: \[\d+\]
+  - key: edge_types
+    value:
+      filename: a10_mentor.md
+      pattern: zigzag|armchair
+      flags: i
+  - key: transport_keyword
+    value:
+      filename: a10_mentor.md
+      pattern: transport|conduct|输运|电导
+      flags: i
+  - key: mentor_queried_via_cli
+    value:
+      operations:
+      - mentor
+      min_matches: 1
+      require_ok: false
+  - key: turn_budget
+    value:
+      max: 6
+  scoring_checklist:
+  - id: artifact
+    criterion: a10_mentor.md written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: has_citations
+    criterion: Content has numbered citation markers [N].
+    axis: correctness
+    verify: text_file_regex
+  - id: edge_types
+    criterion: Discusses zigzag or armchair edge types.
+    axis: correctness
+    verify: text_file_regex
+  - id: transport_keyword
+    criterion: Discusses electron transport/conductance.
+    axis: correctness
+    verify: text_file_regex
+  - id: mentor_queried_via_cli
+    criterion: Mentor was queried through bohr-cli (invocation; service may error).
+    axis: grounding
+    verify: bohr_cli_operation_invoked
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+
+- id: BSA_lkm_mxene_011_20260715
+  capability: scientific_analysis
+  domain: agnostic
+  scope: platform
+  intent: Test agent uses bohr lkm for literature knowledge mining with stance analysis.
+  human_prompt_seed: |
+    利用 bohr-cli，关于 MXene 表面官能团和电化学性能关系的讨论都是怎么样的？哪些结论是相互印证和冲突的，列个表。
+    输出到 `a11_mxene.json`，记录各观点的来源、内容和立场（支持/冲突），以及总结。JSON 中各观点记录在 `claims` 数组，每项立场用 `stance`。
+  tags:
+  - bohr-cli
+  reference_answers:
+  - key: artifact
+    value: a11_mxene.json
+  - key: has_claims
+    value:
+      filename: a11_mxene.json
+      pattern: '"claims"\s*:\s*\[\s*\{'
+  - key: has_stance
+    value:
+      filename: a11_mxene.json
+      pattern: '"stance"\s*:\s*"(support|conflict)"'
+  - key: functional_groups
+    value:
+      filename: a11_mxene.json
+      pattern: -O|-OH|-F|oxygen|hydroxyl|fluorine
+      flags: i
+  - key: turn_budget
+    value:
+      max: 10
+  scoring_checklist:
+  - id: artifact
+    criterion: a11_mxene.json written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: has_claims
+    criterion: claims array has entries.
+    axis: correctness
+    verify: text_file_regex
+  - id: has_stance
+    criterion: Each claim has support/conflict stance annotation.
+    axis: correctness
+    verify: text_file_regex
+  - id: functional_groups
+    criterion: Content mentions MXene functional groups (-O, -OH, -F).
+    axis: grounding
+    verify: text_file_regex
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+
+- id: BSA_tools_docking_012_20260715_v2
+  capability: scientific_analysis
+  domain: agnostic
+  scope: platform
+  intent: Test agent discovers docking tools and grounds an onboarding guide in one tool's platform details.
+  human_prompt_seed: |
+    利用 bohr-cli，我想做小分子和蛋白的 docking，帮我在平台上找几个合适的工具，选一个介绍清楚它能做什么、当前版本以及怎么开始用。只查资料，不要创建资源。
+    把结果保存到工作区根目录的 `a12_tools.json`，记录搜索关键词、候选工具列表和选定工具的详细信息。JSON 顶层使用 `query`、`candidates` 和 `selected_tool`；`candidates` 为数组，每项含 `name`、`tool_unique_key` 和 `repo_url`；`selected_tool` 包含 `name`、`tool_unique_key`、`version`、`description`、`usage_entry_command`、`help_urls` 和 `usage_steps`。
+  tags:
+  - bohr-cli
+  reference_answers:
+  - key: artifact
+    value: a12_tools.json
+    workspace_resolve: root
+  - key: tools_schema
+    value:
+      filename: a12_tools.json
+      schema:
+        type: object
+        required:
+        - query
+        - candidates
+        - selected_tool
+        properties:
+          query:
+            oneOf:
+            - type: string
+              pattern: (?i:dock|对接)
+            - type: object
+              minProperties: 1
+          candidates:
+            type: array
+            minItems: 3
+            uniqueItems: true
+            items:
+              type: object
+              required:
+              - name
+              - tool_unique_key
+              - repo_url
+              properties:
+                name:
+                  type: string
+                  minLength: 1
+                tool_unique_key:
+                  type: string
+                  minLength: 1
+                repo_url:
+                  type: string
+                  minLength: 1
+              additionalProperties: false
+          selected_tool:
+            type: object
+            required:
+            - name
+            - tool_unique_key
+            - version
+            - description
+            - usage_entry_command
+            - help_urls
+            - usage_steps
+            properties:
+              name:
+                type: string
+                minLength: 1
+              tool_unique_key:
+                type: string
+                minLength: 1
+              version:
+                type: string
+                minLength: 1
+              description:
+                type: string
+                minLength: 20
+              usage_entry_command:
+                type: string
+                minLength: 3
+              help_urls:
+                type: array
+                minItems: 1
+                uniqueItems: true
+                items:
+                  type: string
+                  minLength: 1
+              usage_steps:
+                type: array
+                minItems: 3
+                items:
+                  oneOf:
+                  - type: string
+                    minLength: 5
+                  - type: object
+                    minProperties: 1
+            additionalProperties: false
+        additionalProperties: false
+    workspace_resolve: root
+  - key: tools_searched_via_cli
+    tool_name: Bash
+    tool_arg: command
+    value:
+      pattern: '(?:^|[\n;&|]\s*)(?:(?:env|sudo)(?:\s+[^\s;&|]+)*\s+)?(?:[^\s;&|]+/)?bohr\s+tools\s+\+?search\b(?=[^\n;&|]*(?i:dock|对接))'
+      min_matches: 1
+  - key: tool_details_queried_via_cli
+    tool_name: Bash
+    tool_arg: command
+    value:
+      pattern: '(?:^|[\n;&|]\s*)(?:(?:env|sudo)(?:\s+[^\s;&|]+)*\s+)?(?:[^\s;&|]+/)?bohr\s+tools\s+info\s+(?:''[^''\n]+_[^''\n]+''|"[^"\n]+_[^"\n]+"|[A-Za-z0-9.-]+_[A-Za-z0-9._-]+)'
+      min_matches: 1
+  - key: turn_budget
+    value:
+      max: 10
+  scoring_checklist:
+  - id: artifact
+    criterion: a12_tools.json written to workspace root.
+    axis: correctness
+    verify: artifact_exists
+  - id: tools_schema
+    criterion: The result contains multiple docking candidates and a detailed, actionable introduction grounded in one selected tool.
+    axis: correctness
+    verify: json_file_schema
+  - id: tools_searched_via_cli
+    criterion: Docking tools were searched through bohr-cli.
+    axis: grounding
+    verify: tool_args_regex
+  - id: tool_details_queried_via_cli
+    criterion: Platform details for a selected search result were queried through bohr-cli.
+    axis: grounding
+    verify: tool_args_regex
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+
+- id: BSA_lkm_deep_chain_013_20260717
+  capability: scientific_analysis
+  domain: agnostic
+  scope: platform
+  intent: Test agent uses LKM deep chain — search, graph, and reasoning in sequence.
+  human_prompt_seed: |
+    利用 bohr-cli，帮我调研一下"钙钛矿太阳能电池的离子迁移机制"：先检索相关文献，选一篇核心论文，读取它在知识图谱中的关联，再查询相关推理链看看有什么延伸结论。
+    把完整的调研链路保存到 `a13_lkm_chain.json`，记录检索结果、选中的论文、图谱关联和推理链内容。JSON 顶层使用 `search_results`、`selected_paper`、`graph_relations` 和 `reasoning_chain`；`selected_paper` 包含 `title`。
+  tags:
+  - bohr-cli
+  reference_answers:
+  - key: artifact
+    value: a13_lkm_chain.json
+  - key: chain_schema
+    value:
+      filename: a13_lkm_chain.json
+      schema:
+        type: object
+        required:
+        - search_results
+        - selected_paper
+        - graph_relations
+        - reasoning_chain
+        properties:
+          search_results:
+            oneOf:
+            - type: array
+              minItems: 1
+            - type: object
+              minProperties: 1
+          selected_paper:
+            type: object
+            required:
+            - title
+            properties:
+              title:
+                type: string
+                minLength: 1
+          graph_relations:
+            oneOf:
+            - type: array
+              minItems: 1
+            - type: object
+              minProperties: 1
+          reasoning_chain:
+            oneOf:
+            - type: array
+              minItems: 1
+            - type: string
+              minLength: 10
+            - type: object
+              minProperties: 1
+  - key: paper_searched_via_cli
+    value:
+      operations:
+      - paper.search
+      - lkm.search
+      min_matches: 1
+  - key: lkm_queried_via_cli
+    tool_name: Bash
+    tool_arg: command
+    value:
+      pattern: '(?:^|[\n;&|]\s*)(?:[^\s;&|]+/)?bohr\s+lkm\s+\+?(graph|reasoning)\b'
+      min_matches: 1
+  - key: turn_budget
+    value:
+      max: 15
+  scoring_checklist:
+  - id: artifact
+    criterion: a13_lkm_chain.json written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: chain_schema
+    criterion: Records search results, selected paper, graph relations, and reasoning chain.
+    axis: correctness
+    verify: json_file_schema
+  - id: paper_searched_via_cli
+    criterion: Paper or LKM search was invoked through bohr-cli.
+    axis: grounding
+    verify: bohr_cli_operation_invoked
+  - id: lkm_queried_via_cli
+    criterion: LKM graph or reasoning was queried through bohr-cli.
+    axis: grounding
+    verify: tool_args_regex
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget

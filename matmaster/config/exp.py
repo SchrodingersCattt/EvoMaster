@@ -12,6 +12,7 @@ Usage::
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -29,7 +30,13 @@ class ExpToolsConfig(BaseModel):
 
     # Default "*" means "all tools". Explicit list of tool names also supported.
     builtin: list[str] = Field(default_factory=lambda: ["*"])
+    excluded_builtin: list[str] = Field(default_factory=list)
     mcp: str = "*"
+
+    def allows_builtin(self, name: str) -> bool:
+        return name not in self.excluded_builtin and (
+            "*" in self.builtin or name in self.builtin
+        )
 
 
 class ExpSkillsConfig(BaseModel):
@@ -94,6 +101,22 @@ class ExpConfig(BaseModel):
     llm: str | None = None
 
     model_config = ConfigDict(extra="forbid")
+
+
+def with_excluded_builtin_tools(
+    config: ExpConfig,
+    tool_names: Iterable[str],
+) -> ExpConfig:
+    """Return *config* with additional builtin tools excluded by exact name."""
+    excluded = list(config.tools.excluded_builtin)
+    for raw_name in tool_names:
+        name = str(raw_name).strip()
+        if name and name not in excluded:
+            excluded.append(name)
+    if excluded == config.tools.excluded_builtin:
+        return config
+    tools = config.tools.model_copy(update={"excluded_builtin": excluded})
+    return config.model_copy(update={"tools": tools})
 
 
 # UI-level mode whitelist. `POST /chat/.../stream` 的 ChatSendRequest.mode 必须

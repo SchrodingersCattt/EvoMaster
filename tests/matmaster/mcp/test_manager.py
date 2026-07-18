@@ -103,13 +103,13 @@ class TestMCPToolManagerInstantiation:
             max_inflight=1,
             max_pending_requests=8,
         )
-        m.concurrency_by_server["mat_doc"] = MCPConcurrencyPolicy(
+        m.concurrency_by_server["mat_struct_db"] = MCPConcurrencyPolicy(
             mode="multiplex",
             max_inflight=3,
             max_pending_requests=12,
         )
 
-        policy = m._resolve_policy("mat_doc", "HTTP")
+        policy = m._resolve_policy("mat_struct_db", "HTTP")
 
         assert policy == MCPConcurrencyPolicy(
             mode="multiplex",

@@ -76,6 +76,7 @@ class DevRunner:
         stream_hook: DevStreamHook | None = None,
         exp_config: ExpConfig | None = None,
         exclude_subagents: list[str] | None = None,
+        exclude_builtin_tools: list[str] | None = None,
         inject_bohrium_failure: str | None = None,
     ) -> None:
         self._config = config
@@ -113,6 +114,13 @@ class DevRunner:
         self._exp_config = (
             exp_config if exp_config is not None else self._build_exp_config(config)
         )
+        if exclude_builtin_tools:
+            from matmaster.config.exp import with_excluded_builtin_tools
+
+            self._exp_config = with_excluded_builtin_tools(
+                self._exp_config,
+                exclude_builtin_tools,
+            )
         # Local devshell is not Bohrium SSH; avoid model defaulting to /share from tool hints.
         if config.session.type == "local":
             wd = str(workdir.resolve())

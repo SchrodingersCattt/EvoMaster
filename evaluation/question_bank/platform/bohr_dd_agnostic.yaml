@@ -1,0 +1,675 @@
+version: v5
+capability: data_diagnosis
+domain: agnostic
+questions:
+- id: BDD_cleanup_plan_001_20260715
+  capability: data_diagnosis
+  domain: agnostic
+  scope: platform
+  intent: Test agent navigates file system to find large/old files and plans cleanup.
+  human_prompt_seed: |
+    利用 bohr-cli，储存快满了，帮我找找哪些文件又大又久没动过的，规划一下清理列表。不要直接删，先给我看方案。
+    清理规划保存到 `c1_cleanup_plan.json`，列出大文件及处理建议。JSON 顶层使用 `files`；`files` 为数组，每项含 `size_mb` 和 `recommendation`，`recommendation` 取 `delete`、`keep` 或 `archive`。
+  tags:
+  - bohr-cli
+  reference_answers:
+  - key: artifact
+    value: c1_cleanup_plan.json
+  - key: has_files
+    value:
+      filename: c1_cleanup_plan.json
+      pattern: '"files"\s*:\s*\[\s*\{'
+  - key: has_size
+    value:
+      filename: c1_cleanup_plan.json
+      pattern: '"size_mb"\s*:\s*[\d.]'
+  - key: has_recommendation
+    value:
+      filename: c1_cleanup_plan.json
+      pattern: '"recommendation"\s*:\s*"(delete|keep|archive)"'
+  - key: turn_budget
+    value:
+      max: 10
+  - key: files_listed_via_cli
+    tool_name: Bash
+    tool_arg: command
+    value:
+      pattern: '(?:^|[\n;&|]\s*)(?:[^\s;&|]+/)?bohr\s+file\s+\+?(list|stat)\b'
+      min_matches: 1
+  scoring_checklist:
+  - id: artifact
+    criterion: c1_cleanup_plan.json written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: has_files
+    criterion: Files array populated with discovered files.
+    axis: correctness
+    verify: text_file_regex
+  - id: has_size
+    criterion: File sizes reported in MB.
+    axis: correctness
+    verify: text_file_regex
+  - id: has_recommendation
+    criterion: Each file has delete/keep/archive recommendation.
+    axis: correctness
+    verify: text_file_regex
+  - id: files_listed_via_cli
+    criterion: File list or stat was invoked through bohr-cli.
+    axis: grounding
+    verify: tool_args_regex
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+
+- id: BDD_share_dataset_002_20260715
+  capability: data_diagnosis
+  domain: agnostic
+  scope: platform
+  intent: Test agent understands dataset sharing via project mechanism.
+  human_prompt_seed: |
+    利用 bohr-cli，数据集怎么分享给同一个项目组的其他人？
+    说明保存到 `c2_guide.md`。
+  tags:
+  - bohr-cli
+  reference_answers:
+  - key: artifact
+    value: c2_guide.md
+  - key: mentions_project
+    value:
+      filename: c2_guide.md
+      pattern: project|项目
+      flags: i
+  - key: mentions_share
+    value:
+      filename: c2_guide.md
+      pattern: share|共享|分享|project.id
+      flags: i
+  - key: turn_budget
+    value:
+      max: 4
+  scoring_checklist:
+  - id: artifact
+    criterion: c2_guide.md written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: mentions_project
+    criterion: Mentions project-based sharing.
+    axis: correctness
+    verify: text_file_regex
+  - id: mentions_share
+    criterion: Explains sharing mechanism.
+    axis: correctness
+    verify: text_file_regex
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+
+- id: BDD_copy_results_003_20260715
+  capability: data_diagnosis
+  domain: agnostic
+  scope: platform
+  intent: Test agent downloads job results and copies to personal storage.
+  human_prompt_seed: |
+    利用 bohr-cli，看看最近完成的任务有没有结果文件，帮我拷到 personal 盘存着。
+    操作记录保存到 `c3_transfer.json`，记录拷贝了哪些文件以及是否成功。JSON 顶层使用 `transferred` 和 `success`；`transferred` 为数组，每项为一条文件拷贝记录。
+  tags:
+  - bohr-cli
+  reference_answers:
+  - key: artifact
+    value: c3_transfer.json
+  - key: has_transferred
+    value:
+      filename: c3_transfer.json
+      pattern: '"transferred"\s*:\s*\[\s*\{'
+  - key: personal_path
+    value:
+      filename: c3_transfer.json
+      tokens:
+      - personal
+  - key: has_success
+    value:
+      filename: c3_transfer.json
+      pattern: '"success"\s*:\s*true'
+  - key: turn_budget
+    value:
+      max: 10
+  - key: files_copied_via_cli
+    tool_name: Bash
+    tool_arg: command
+    value:
+      pattern: '(?:^|[\n;&|]\s*)(?:[^\s;&|]+/)?bohr\s+(file\s+copy|job\s+(download|result))\b'
+      min_matches: 1
+  scoring_checklist:
+  - id: artifact
+    criterion: c3_transfer.json written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: has_transferred
+    criterion: Transferred array populated.
+    axis: correctness
+    verify: text_file_regex
+  - id: personal_path
+    criterion: Destination is personal storage.
+    axis: correctness
+    verify: text_file_contains_all
+  - id: has_success
+    criterion: At least one successful transfer.
+    axis: correctness
+    verify: text_file_regex
+  - id: files_copied_via_cli
+    criterion: File copy or job download was invoked through bohr-cli.
+    axis: grounding
+    verify: tool_args_regex
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+
+- id: BDD_mkdir_structure_004_20260715
+  capability: data_diagnosis
+  domain: agnostic
+  scope: platform
+  intent: Test agent creates directory structure on personal storage.
+  human_prompt_seed: |
+    利用 bohr-cli，personal 盘里建个 "2026_experiments" 文件夹，下面分 A、B、C 三个子目录。
+    创建完成后确认目录结构，把实际状态保存到 `c4_verify.json`。
+  tags:
+  - bohr-cli
+  reference_answers:
+  - key: artifact
+    value: c4_verify.json
+  - key: has_parent
+    value:
+      filename: c4_verify.json
+      pattern: 2026_experiments
+  - key: has_A
+    value:
+      filename: c4_verify.json
+      pattern: /A
+  - key: has_B
+    value:
+      filename: c4_verify.json
+      pattern: /B
+  - key: has_C
+    value:
+      filename: c4_verify.json
+      pattern: /C
+  - key: turn_budget
+    value:
+      max: 8
+  - key: mkdir_via_cli
+    tool_name: Bash
+    tool_arg: command
+    value:
+      pattern: '(?:^|[\n;&|]\s*)(?:[^\s;&|]+/)?bohr\s+file\s+\+?mkdir\b'
+      min_matches: 1
+  scoring_checklist:
+  - id: artifact
+    criterion: c4_verify.json written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: has_parent
+    criterion: Parent directory 2026_experiments created.
+    axis: correctness
+    verify: text_file_regex
+  - id: has_A
+    criterion: Subdirectory A created.
+    axis: correctness
+    verify: text_file_regex
+  - id: has_B
+    criterion: Subdirectory B created.
+    axis: correctness
+    verify: text_file_regex
+  - id: has_C
+    criterion: Subdirectory C created.
+    axis: correctness
+    verify: text_file_regex
+  - id: mkdir_via_cli
+    criterion: File mkdir was invoked through bohr-cli.
+    axis: grounding
+    verify: tool_args_regex
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+
+- id: BDD_upload_strategy_005_20260715
+  capability: data_diagnosis
+  domain: agnostic
+  scope: platform
+  intent: Test agent understands large file upload capabilities and strategies.
+  human_prompt_seed: |
+    利用 bohr-cli，我这有个 500M 的文件能传吗？怎么传最快？
+    方案保存到 `c5_upload_guide.md`。
+  tags:
+  - bohr-cli
+  reference_answers:
+  - key: artifact
+    value: c5_upload_guide.md
+  - key: mentions_size
+    value:
+      filename: c5_upload_guide.md
+      pattern: 500|大文件|large
+      flags: i
+  - key: mentions_method
+    value:
+      filename: c5_upload_guide.md
+      pattern: upload|上传|bohr file|dataset
+      flags: i
+  - key: turn_budget
+    value:
+      max: 4
+  scoring_checklist:
+  - id: artifact
+    criterion: c5_upload_guide.md written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: mentions_size
+    criterion: Addresses the 500M file size question.
+    axis: correctness
+    verify: text_file_regex
+  - id: mentions_method
+    criterion: Describes upload method.
+    axis: correctness
+    verify: text_file_regex
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+
+- id: BDD_dataset_versions_006_20260715
+  capability: data_diagnosis
+  domain: agnostic
+  scope: platform
+  intent: Test agent inspects dataset versions and manages lifecycle.
+  human_prompt_seed: |
+    利用 bohr-cli，看看我有哪些数据集，哪个版本最多，查查各版本什么时候建的、多大。
+    操作记录保存到 `c6_dataset_ops.json`，记录各数据集及版本最多那个的详细版本信息。JSON 顶层使用 `datasets`、`most_versions_dataset` 和 `version_count`；`datasets` 为数组。
+  tags:
+  - bohr-cli
+  reference_answers:
+  - key: artifact
+    value: c6_dataset_ops.json
+  - key: has_datasets
+    value:
+      filename: c6_dataset_ops.json
+      pattern: '"datasets"\s*:\s*\['
+  - key: has_version_count
+    value:
+      filename: c6_dataset_ops.json
+      pattern: '"version_count"\s*:\s*\d'
+  - key: has_most_versions
+    value:
+      filename: c6_dataset_ops.json
+      pattern: '"most_versions_dataset"'
+  - key: turn_budget
+    value:
+      max: 10
+  - key: dataset_queried_via_cli
+    tool_name: Bash
+    tool_arg: command
+    value:
+      pattern: '(?:^|[\n;&|]\s*)(?:[^\s;&|]+/)?bohr\s+dataset\s+\+?(list|get|versions)\b'
+      min_matches: 2
+  scoring_checklist:
+  - id: artifact
+    criterion: c6_dataset_ops.json written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: has_datasets
+    criterion: Datasets listed.
+    axis: correctness
+    verify: text_file_regex
+  - id: has_version_count
+    criterion: Version counts reported.
+    axis: correctness
+    verify: text_file_regex
+  - id: has_most_versions
+    criterion: Identified dataset with most versions.
+    axis: correctness
+    verify: text_file_regex
+  - id: dataset_queried_via_cli
+    criterion: Dataset list, get, or versions was invoked through bohr-cli at least twice.
+    axis: grounding
+    verify: tool_args_regex
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+
+- id: BDD_upload_list_007_20260715
+  capability: data_diagnosis
+  domain: agnostic
+  scope: platform
+  intent: Test agent uploads file and lists directory contents sorted by size.
+  human_prompt_seed: |
+    利用 bohr-cli，先往 personal 盘的 test_upload/ 目录传个小文件（内容随意），然后看一下该目录里都有什么，按文件大小排一下。
+    结果保存到 `c7_listing.json`，记录上传路径和目录文件列表。JSON 顶层使用 `uploaded_path` 和 `files`；`files` 为数组，每项含 `size_bytes`。
+  tags:
+  - bohr-cli
+  reference_answers:
+  - key: artifact
+    value: c7_listing.json
+  - key: has_uploaded_path
+    value:
+      filename: c7_listing.json
+      pattern: '"uploaded_path"\s*:\s*"personal/'
+  - key: has_files
+    value:
+      filename: c7_listing.json
+      pattern: '"files"\s*:\s*\[\s*\{'
+  - key: has_size
+    value:
+      filename: c7_listing.json
+      pattern: '"size_bytes"\s*:\s*\d'
+  - key: file_listed_via_cli
+    tool_name: Bash
+    tool_arg: command
+    value:
+      pattern: '(?:^|[\n;&|]\s*)(?:[^\s;&|]+/)?bohr\s+file\s+\+?list\b'
+      min_matches: 1
+  - key: turn_budget
+    value:
+      max: 8
+  scoring_checklist:
+  - id: artifact
+    criterion: c7_listing.json written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: has_uploaded_path
+    criterion: Upload path on personal storage recorded.
+    axis: correctness
+    verify: text_file_regex
+  - id: has_files
+    criterion: File listing populated.
+    axis: correctness
+    verify: text_file_regex
+  - id: has_size
+    criterion: File sizes in bytes reported.
+    axis: correctness
+    verify: text_file_regex
+  - id: file_listed_via_cli
+    criterion: File listing was invoked through bohr-cli.
+    axis: grounding
+    verify: tool_args_regex
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+
+- id: BDD_kb_upload_search_008_20260715
+  capability: data_diagnosis
+  domain: agnostic
+  scope: platform
+  intent: Test agent uploads PDF with spaces in filename to knowledge base and searches for thermal decomposition data.
+  human_prompt_seed: |
+    利用 bohr-cli，把这篇文献传到知识库里去，然后搜一下里面纳米样品的DSC热分解峰温是多少摄氏度。
+    结果保存到 `c8_kb_search.json`，记录文件名、知识库 ID、上传状态、热分解温度和搜索结果。JSON 顶层使用 `filename`、`kb_id`、`upload_success`、`nano_thermal_decomposition_celsius` 和 `search_results`。
+  tags:
+  - bohr-cli
+  data_files:
+  - key: pdf_perovskite
+    path: "data/bohr_cli/Fabrication and characterization of Nano  H2dabco  K ClO4 3  molecular Perovskite by ball milling.pdf"
+    description: PDF with spaces in filename. Energetic molecular perovskite paper, nano sample DSC peak at 384.5°C.
+  reference_answers:
+  - key: artifact
+    value: c8_kb_search.json
+  - key: upload_success
+    value:
+      filename: c8_kb_search.json
+      pattern: '"upload_success"\s*:\s*(true|false)'
+  - key: has_kb_id
+    value:
+      filename: c8_kb_search.json
+      pattern: '"kb_id"\s*:\s*(\d+|null)'
+  - key: thermal_decomp
+    value:
+      filename: c8_kb_search.json
+      key: nano_thermal_decomposition_celsius
+      min: 382.0
+      max: 387.0
+  - key: has_filename_with_spaces
+    value:
+      filename: c8_kb_search.json
+      pattern: Fabrication.*characterization|H2dabco
+      flags: i
+  - key: kb_queried_via_cli
+    tool_name: Bash
+    tool_arg: command
+    value:
+      pattern: '(?:^|[\n;&|]\s*)(?:[^\s;&|]+/)?bohr\s+kb\s+\+?(upload|search)\b'
+      min_matches: 1
+  - key: turn_budget
+    value:
+      max: 12
+  scoring_checklist:
+  - id: artifact
+    criterion: c8_kb_search.json written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: upload_success
+    criterion: PDF upload status reported (true or false).
+    axis: correctness
+    verify: text_file_regex
+  - id: has_kb_id
+    criterion: Knowledge base ID recorded (numeric or null).
+    axis: correctness
+    verify: text_file_regex
+  - id: thermal_decomp
+    criterion: Nano sample thermal decomposition temperature within 382-387°C (expected ~384.5°C).
+    axis: correctness
+    verify: json_file_numeric_range
+    weight: 2.0
+  - id: has_filename_with_spaces
+    criterion: Filename with spaces correctly handled and recorded.
+    axis: correctness
+    verify: text_file_regex
+  - id: kb_queried_via_cli
+    criterion: Knowledge base was accessed through bohr-cli.
+    axis: grounding
+    verify: tool_args_regex
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+
+- id: BDD_file_lifecycle_009_20260716
+  capability: data_diagnosis
+  domain: agnostic
+  scope: platform
+  intent: Test agent performs full file lifecycle (mkdir, upload, list, move, delete) on a unique temp directory.
+  human_prompt_seed: |
+    利用 bohr-cli，帮我在 personal 盘上做一轮文件管理验证：建一个名称带唯一时间戳的临时目录，把工作区里的 `test` 文件传进去，确认存在后把文件移到同目录的子文件夹里，最后把整个临时目录连同内容一起删掉。
+    把每一步操作的动作和前后目录状态记录下来，保存到 `c9_lifecycle.json`。JSON 顶层使用 `steps` 和 `final_cleaned`；`steps` 为数组，每项含 `action` 和 `listing`，其中 `listing` 为数组。
+  tags:
+  - bohr-cli
+  data_files:
+  - key: test_file
+    path: data/bohr_cli/test
+    description: Small test file for upload lifecycle verification.
+  reference_answers:
+  - key: artifact
+    value: c9_lifecycle.json
+  - key: lifecycle_schema
+    value:
+      filename: c9_lifecycle.json
+      schema:
+        type: object
+        required:
+        - steps
+        - final_cleaned
+        properties:
+          steps:
+            type: array
+            minItems: 4
+            items:
+              type: object
+              required:
+              - action
+              - listing
+              properties:
+                action:
+                  type: string
+                  minLength: 1
+                listing:
+                  type: array
+          final_cleaned:
+            type: boolean
+            const: true
+  - key: mkdir_via_cli
+    tool_name: Bash
+    tool_arg: command
+    value:
+      pattern: '(?:^|[\n;&|]\s*)(?:[^\s;&|]+/)?bohr\s+file\s+\+?mkdir\b'
+      min_matches: 1
+  - key: upload_via_cli
+    tool_name: Bash
+    tool_arg: command
+    value:
+      pattern: '(?:^|[\n;&|]\s*)(?:[^\s;&|]+/)?bohr\s+file\s+\+?upload\b'
+      min_matches: 1
+  - key: list_via_cli
+    tool_name: Bash
+    tool_arg: command
+    value:
+      pattern: '(?:^|[\n;&|]\s*)(?:[^\s;&|]+/)?bohr\s+file\s+\+?(list|stat)\b'
+      min_matches: 2
+  - key: move_via_cli
+    tool_name: Bash
+    tool_arg: command
+    value:
+      pattern: '(?:^|[\n;&|]\s*)(?:[^\s;&|]+/)?bohr\s+file\s+\+?move\b'
+      min_matches: 1
+  - key: delete_via_cli
+    tool_name: Bash
+    tool_arg: command
+    value:
+      pattern: '(?:^|[\n;&|]\s*)(?:[^\s;&|]+/)?bohr\s+file\s+\+?(delete|rm)\b'
+      min_matches: 1
+  - key: turn_budget
+    value:
+      max: 25
+  scoring_checklist:
+  - id: artifact
+    criterion: c9_lifecycle.json written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: lifecycle_schema
+    criterion: Records at least 4 steps with action and listing, and confirms final cleanup.
+    axis: correctness
+    verify: json_file_schema
+  - id: mkdir_via_cli
+    criterion: Directory creation was invoked through bohr-cli.
+    axis: grounding
+    verify: tool_args_regex
+  - id: upload_via_cli
+    criterion: File upload was invoked through bohr-cli.
+    axis: grounding
+    verify: tool_args_regex
+  - id: list_via_cli
+    criterion: Directory listing or stat was invoked through bohr-cli at least twice.
+    axis: grounding
+    verify: tool_args_regex
+  - id: move_via_cli
+    criterion: File move was invoked through bohr-cli.
+    axis: grounding
+    verify: tool_args_regex
+  - id: delete_via_cli
+    criterion: File or directory deletion was invoked through bohr-cli.
+    axis: grounding
+    verify: tool_args_regex
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+
+- id: BDD_database_readonly_010_20260717
+  capability: data_diagnosis
+  domain: agnostic
+  scope: platform
+  intent: Test agent performs read-only database queries — tables, schema, and conditional query.
+  human_prompt_seed: |
+    利用 bohr-cli，帮我看看平台数据库里有哪些表，找个跟任务记录相关的表看下结构，再查最近 5 条记录。只读不写。
+    结果保存到 `c10_db_query.json`，记录表清单、选中表的结构和查询结果。JSON 顶层使用 `tables`、`selected_table` 和 `query_results`；`tables` 为数组，`selected_table` 包含 `name` 和 `columns`，`query_results` 为数组。
+  tags:
+  - bohr-cli
+  reference_answers:
+  - key: artifact
+    value: c10_db_query.json
+  - key: db_schema
+    value:
+      filename: c10_db_query.json
+      schema:
+        type: object
+        required:
+        - tables
+        - selected_table
+        - query_results
+        properties:
+          tables:
+            type: array
+            minItems: 1
+          selected_table:
+            type: object
+            required:
+            - name
+            - columns
+            properties:
+              name:
+                type: string
+                minLength: 1
+              columns:
+                type: array
+                minItems: 1
+          query_results:
+            type: array
+            minItems: 1
+            maxItems: 5
+  - key: tables_queried_via_cli
+    tool_name: Bash
+    tool_arg: command
+    value:
+      pattern: '(?:^|[\n;&|]\s*)(?:[^\s;&|]+/)?bohr\s+database\s+\+?tables\b'
+      min_matches: 1
+  - key: schema_queried_via_cli
+    tool_name: Bash
+    tool_arg: command
+    value:
+      pattern: '(?:^|[\n;&|]\s*)(?:[^\s;&|]+/)?bohr\s+database\s+\+?schema\b'
+      min_matches: 1
+  - key: query_executed_via_cli
+    tool_name: Bash
+    tool_arg: command
+    value:
+      pattern: '(?:^|[\n;&|]\s*)(?:[^\s;&|]+/)?bohr\s+database\s+\+?query\b'
+      min_matches: 1
+  - key: turn_budget
+    value:
+      max: 12
+  scoring_checklist:
+  - id: artifact
+    criterion: c10_db_query.json written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: db_schema
+    criterion: Records table list, selected table schema with columns, and up to 5 query results.
+    axis: correctness
+    verify: json_file_schema
+  - id: tables_queried_via_cli
+    criterion: Database tables were listed through bohr-cli.
+    axis: grounding
+    verify: tool_args_regex
+  - id: schema_queried_via_cli
+    criterion: Table schema was queried through bohr-cli.
+    axis: grounding
+    verify: tool_args_regex
+  - id: query_executed_via_cli
+    criterion: Database query was executed through bohr-cli.
+    axis: grounding
+    verify: tool_args_regex
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget

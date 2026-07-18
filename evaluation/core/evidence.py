@@ -29,7 +29,7 @@ import json
 import logging
 from enum import Enum
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import yaml
 from pydantic import BaseModel, Field
@@ -143,6 +143,57 @@ class ArtifactRecord(BaseModel):
         description="E.g. 'cif', 'csv', 'json', 'log', 'plot'",
     )
     size_bytes: int | None = Field(default=None)
+
+
+class BohrCliRequestRecord(BaseModel):
+    """Allow-listed request fields snapshotted immediately before Bohr-CLI runs."""
+
+    input_path: str | None = Field(default=None)
+    project_id: str | None = Field(default=None)
+    job_group_ids: list[int] = Field(default_factory=list)
+    bohr_job_ids: list[int] = Field(default_factory=list)
+    platform_job_ids: list[int] = Field(default_factory=list)
+    image_address: str | None = Field(default=None)
+    machine_type: str | None = Field(default=None)
+    command: str | None = Field(default=None)
+    job_name: str | None = Field(default=None)
+    temperatures_k: list[int] = Field(default_factory=list)
+
+
+class BohrCliResponseIds(BaseModel):
+    """Identifiers parsed from a captured JSON Bohr-CLI response."""
+
+    job_ids: list[int] = Field(default_factory=list)
+    bohr_job_ids: list[int] = Field(default_factory=list)
+    platform_job_ids: list[int] = Field(default_factory=list)
+    group_ids: list[int] = Field(default_factory=list)
+
+
+class BohrCliJobStateRecord(BaseModel):
+    """Allow-listed lifecycle fields parsed from a job-description response."""
+
+    status: int | str | None = Field(default=None)
+    web_status: int | str | None = Field(default=None)
+    exit_code: int | None = Field(default=None)
+    end_time: str | None = Field(default=None)
+
+
+class BohrCliReceiptRecord(BaseModel):
+    """One process-level Bohr-CLI execution receipt emitted by the eval shim."""
+
+    schema_version: Literal["bohr_cli_receipt_v1"]
+    started_at_utc: str = Field(default='')
+    duration_ms: int = Field(default=0)
+    operation: str
+    argv: list[str] = Field(default_factory=list)
+    exit_code: int
+    ok: bool
+    help_requested: bool = Field(default=False)
+    dry_run: bool = Field(default=False)
+    captured_json: bool = Field(default=False)
+    request: BohrCliRequestRecord = Field(default_factory=BohrCliRequestRecord)
+    ids: BohrCliResponseIds = Field(default_factory=BohrCliResponseIds)
+    job_state: BohrCliJobStateRecord = Field(default_factory=BohrCliJobStateRecord)
 
 
 class TokenUsage(BaseModel):
@@ -299,6 +350,19 @@ class EvidenceBundle(BaseModel):
     artifacts: list[ArtifactRecord] = Field(
         default_factory=list,
         description='Output files / artefacts',
+    )
+    bohr_cli_receipts: list[BohrCliReceiptRecord] = Field(
+        default_factory=list,
+        description=(
+            'Process-level Bohr-CLI execution receipts emitted by the evaluation shim.'
+        ),
+    )
+    bohr_cli_receipt_lines_skipped: int = Field(
+        default=0,
+        description=(
+            'Receipt-file lines that failed to parse or validate; non-zero means '
+            'the receipt evidence is incomplete and must not silently degrade.'
+        ),
     )
     model_name: str | None = Field(
         default=None,

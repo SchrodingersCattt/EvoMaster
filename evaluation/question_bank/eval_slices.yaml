@@ -167,4 +167,10 @@ slices:
       - scientific_analysis
     count: 7
 
+  - target: "Skill: bohr-cli"
+    type: skill
+    slices:
+      - "@bohr-cli"
+    count: 46
+
   # ── Cross-cutting ───────────────────────────────────────────────────

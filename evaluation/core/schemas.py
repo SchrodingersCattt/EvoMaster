@@ -19,9 +19,12 @@ Scoring model:
 - Raw pass counts preserved for backward compatibility and debugging
 """
 
+import re
 from datetime import datetime, timezone
 from typing import Any, Literal
 
+from jsonschema.exceptions import SchemaError
+from jsonschema.validators import validator_for
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from evaluation.core.question_tags import QuestionTag
@@ -38,6 +41,8 @@ VerifyLiteral = Literal[
     "numerical_range",
     "contains_all",
     "tool_args_match",
+    "tool_args_regex",
+    "scripted_tool_args_regex",
     "tool_observation_field",
     "event_type_called",
     "call_count_range",
@@ -48,6 +53,7 @@ VerifyLiteral = Literal[
     "duration_budget",
     "molcrys_slab_molecular_integrity",
     "molcrys_local_env",
+    "molcrys_molecule_formulas",
     "sc005_disorder_formulas",
     "llm_binary_judge",
     # pymatgen-backed structure-file checks
@@ -92,6 +98,15 @@ VerifyLiteral = Literal[
     "answer_json_numeric",
     # JSON file checks
     "json_file_schema",
+    "bohr_gpu_comparison_record",
+    "bohr_cli_operation_invoked",
+    "bohr_job_monitor_execution",
+    "bohr_job_stop_execution",
+    "bohr_job_upgrade_execution",
+    "bohr_parameter_sweep_execution",
+    "bohr_parameter_sweep_record",
+    "bohr_job_stop_record",
+    "bohr_job_upgrade_record",
     "json_file_key_values",
     "json_file_numeric_range",
     "json_file_artifacts",
@@ -339,6 +354,8 @@ class QuestionItem(BaseModel):
             "numerical_range",
             "contains_all",
             "tool_args_match",
+            "tool_args_regex",
+            "scripted_tool_args_regex",
             "tool_observation_field",
             "event_type_called",
             "call_count_range",
@@ -346,6 +363,7 @@ class QuestionItem(BaseModel):
             "turn_budget",
             "molcrys_slab_molecular_integrity",
             "molcrys_local_env",
+            "molcrys_molecule_formulas",
             "struct_file_parsable",
             "struct_file_all_occupancy_one",
             "struct_file_space_group",
@@ -358,6 +376,15 @@ class QuestionItem(BaseModel):
             "text_file_regex",
             "answer_json_numeric",
             "json_file_schema",
+            "bohr_gpu_comparison_record",
+            "bohr_cli_operation_invoked",
+            "bohr_job_monitor_execution",
+            "bohr_job_stop_execution",
+            "bohr_job_upgrade_execution",
+            "bohr_parameter_sweep_record",
+            "bohr_parameter_sweep_execution",
+            "bohr_job_stop_record",
+            "bohr_job_upgrade_record",
             "json_file_numeric_range",
             "json_file_artifacts",
             "stru_file_check",
@@ -374,6 +401,357 @@ class QuestionItem(BaseModel):
                 raise ValueError(
                     f"scoring_checklist item '{item.id}' (verify={item.verify}) "
                     "requires a matching reference_answers entry with the same key"
+                )
+        refs_by_key = {item.key: item for item in self.reference_answers}
+        for item in self.scoring_checklist:
+            if item.verify != "json_file_schema":
+                continue
+            value = refs_by_key[item.id].value
+            if not isinstance(value, dict):
+                raise ValueError(
+                    f"json_file_schema reference '{item.id}' must be an object"
+                )
+            unknown_keys = set(value) - {"filename", "schema"}
+            if unknown_keys:
+                raise ValueError(
+                    f"json_file_schema reference '{item.id}' has unsupported keys: "
+                    f"{sorted(unknown_keys)}"
+                )
+            filename = value.get("filename")
+            if not isinstance(filename, str) or not filename:
+                raise ValueError(
+                    f"json_file_schema reference '{item.id}' requires filename"
+                )
+            schema = value.get("schema")
+            if not isinstance(schema, (dict, bool)):
+                raise ValueError(
+                    f"json_file_schema reference '{item.id}' requires a JSON Schema"
+                )
+            validator_cls = validator_for(schema)
+            try:
+                validator_cls.check_schema(schema)
+            except SchemaError as exc:
+                raise ValueError(
+                    f"json_file_schema reference '{item.id}' has an invalid "
+                    f"JSON Schema: {exc.message}"
+                ) from exc
+        for item in self.scoring_checklist:
+            if item.verify != "bohr_gpu_comparison_record":
+                continue
+            value = refs_by_key[item.id].value
+            if not isinstance(value, dict):
+                raise ValueError(
+                    f"bohr_gpu_comparison_record reference '{item.id}' must be an object"
+                )
+            unknown_keys = set(value) - {"filename"}
+            if unknown_keys:
+                raise ValueError(
+                    f"bohr_gpu_comparison_record reference '{item.id}' has unsupported "
+                    f"keys: {sorted(unknown_keys)}"
+                )
+            filename = value.get("filename")
+            if not isinstance(filename, str) or not filename:
+                raise ValueError(
+                    f"bohr_gpu_comparison_record reference '{item.id}' requires filename"
+                )
+        for item in self.scoring_checklist:
+            if item.verify != "bohr_parameter_sweep_record":
+                continue
+            value = refs_by_key[item.id].value
+            if not isinstance(value, dict):
+                raise ValueError(
+                    f"bohr_parameter_sweep_record reference '{item.id}' must be an object"
+                )
+            unknown_keys = set(value) - {"filename"}
+            if unknown_keys:
+                raise ValueError(
+                    f"bohr_parameter_sweep_record reference '{item.id}' has unsupported "
+                    f"keys: {sorted(unknown_keys)}"
+                )
+            filename = value.get("filename")
+            if not isinstance(filename, str) or not filename:
+                raise ValueError(
+                    f"bohr_parameter_sweep_record reference '{item.id}' requires filename"
+                )
+        for item in self.scoring_checklist:
+            if item.verify != "bohr_job_monitor_execution":
+                continue
+            value = refs_by_key[item.id].value
+            if not isinstance(value, dict):
+                raise ValueError(
+                    f"bohr_job_monitor_execution reference '{item.id}' "
+                    "must be an object"
+                )
+            expected_keys = {
+                "filename",
+                "log_filename",
+                "image",
+                "machine_type",
+                "command",
+            }
+            unknown_keys = set(value) - expected_keys
+            if unknown_keys:
+                raise ValueError(
+                    f"bohr_job_monitor_execution reference '{item.id}' has "
+                    f"unsupported keys: {sorted(unknown_keys)}"
+                )
+            missing_keys = [
+                key
+                for key in sorted(expected_keys)
+                if not isinstance(value.get(key), str) or not value[key]
+            ]
+            if missing_keys:
+                raise ValueError(
+                    f"bohr_job_monitor_execution reference '{item.id}' requires "
+                    f"non-empty string values for: {missing_keys}"
+                )
+        for item in self.scoring_checklist:
+            if item.verify != "bohr_parameter_sweep_execution":
+                continue
+            value = refs_by_key[item.id].value
+            if not isinstance(value, dict):
+                raise ValueError(
+                    f"bohr_parameter_sweep_execution reference '{item.id}' "
+                    "must be an object"
+                )
+            unknown_keys = set(value) - {"filename"}
+            if unknown_keys:
+                raise ValueError(
+                    f"bohr_parameter_sweep_execution reference '{item.id}' has "
+                    f"unsupported keys: {sorted(unknown_keys)}"
+                )
+            filename = value.get("filename")
+            if not isinstance(filename, str) or not filename:
+                raise ValueError(
+                    f"bohr_parameter_sweep_execution reference '{item.id}' "
+                    "requires filename"
+                )
+        for item in self.scoring_checklist:
+            if item.verify not in {
+                "bohr_job_stop_execution",
+                "bohr_job_stop_record",
+            }:
+                continue
+            value = refs_by_key[item.id].value
+            if not isinstance(value, dict):
+                raise ValueError(
+                    f"{item.verify} reference '{item.id}' must be an object"
+                )
+            expected_keys = {
+                "filename",
+                "image",
+                "machine_type",
+                "command",
+                "job_name_prefix",
+            }
+            unknown_keys = set(value) - expected_keys
+            if unknown_keys:
+                raise ValueError(
+                    f"{item.verify} reference '{item.id}' has unsupported "
+                    f"keys: {sorted(unknown_keys)}"
+                )
+            missing_keys = [
+                key
+                for key in sorted(expected_keys)
+                if not isinstance(value.get(key), str) or not value[key]
+            ]
+            if missing_keys:
+                raise ValueError(
+                    f"{item.verify} reference '{item.id}' requires non-empty "
+                    f"string values for: {missing_keys}"
+                )
+        for item in self.scoring_checklist:
+            if item.verify not in {
+                "bohr_job_upgrade_execution",
+                "bohr_job_upgrade_record",
+            }:
+                continue
+            value = refs_by_key[item.id].value
+            if not isinstance(value, dict):
+                raise ValueError(
+                    f"{item.verify} reference '{item.id}' must be an object"
+                )
+            expected_keys = {
+                "filename",
+                "seed_id",
+                "source_machine_pattern",
+                "target_machine_pattern",
+                "image",
+                "command",
+            }
+            unknown_keys = set(value) - expected_keys
+            if unknown_keys:
+                raise ValueError(
+                    f"{item.verify} reference '{item.id}' has unsupported "
+                    f"keys: {sorted(unknown_keys)}"
+                )
+            string_keys = expected_keys - {"seed_id"}
+            missing_keys = [
+                key
+                for key in sorted(string_keys)
+                if not isinstance(value.get(key), str) or not value[key]
+            ]
+            if (
+                missing_keys
+                or type(value.get("seed_id")) is not int
+                or value["seed_id"] <= 0
+            ):
+                raise ValueError(
+                    f"{item.verify} reference '{item.id}' requires a positive "
+                    f"seed_id and non-empty strings for: {sorted(string_keys)}"
+                )
+            for key in ("source_machine_pattern", "target_machine_pattern"):
+                try:
+                    re.compile(value[key])
+                except re.error as exc:
+                    raise ValueError(
+                        f"{item.verify} reference '{item.id}' has invalid "
+                        f"{key}: {exc}"
+                    ) from exc
+        for item in self.scoring_checklist:
+            if item.verify != "tool_args_regex":
+                continue
+            ref = refs_by_key[item.id]
+            if not ref.tool_name or not ref.tool_arg:
+                raise ValueError(
+                    f"tool_args_regex reference '{item.id}' requires "
+                    "tool_name and tool_arg"
+                )
+            config = ref.value
+            if isinstance(config, str):
+                pattern = config
+                min_matches, max_matches = 1, None
+            elif isinstance(config, dict):
+                unknown = set(config) - {
+                    "pattern",
+                    "min_matches",
+                    "max_matches",
+                }
+                if unknown:
+                    raise ValueError(
+                        f"tool_args_regex reference '{item.id}' has unsupported "
+                        f"keys: {sorted(unknown)}"
+                    )
+                pattern = config.get("pattern")
+                min_matches = config.get("min_matches", 1)
+                max_matches = config.get("max_matches")
+            else:
+                raise ValueError(
+                    f"tool_args_regex reference '{item.id}' must be a regex "
+                    "string or configuration object"
+                )
+            if not isinstance(pattern, str) or not pattern:
+                raise ValueError(
+                    f"tool_args_regex reference '{item.id}' requires pattern"
+                )
+            if type(min_matches) is not int or min_matches < 1:
+                raise ValueError(
+                    f"tool_args_regex reference '{item.id}' requires "
+                    "min_matches >= 1"
+                )
+            if max_matches is not None and (
+                type(max_matches) is not int or max_matches < min_matches
+            ):
+                raise ValueError(
+                    f"tool_args_regex reference '{item.id}' requires "
+                    "max_matches >= min_matches"
+                )
+            try:
+                re.compile(pattern)
+            except re.error as exc:
+                raise ValueError(
+                    f"tool_args_regex reference '{item.id}' has invalid regex: {exc}"
+                ) from exc
+        for item in self.scoring_checklist:
+            if item.verify != "scripted_tool_args_regex":
+                continue
+            ref = refs_by_key[item.id]
+            if not ref.tool_name or not ref.tool_arg:
+                raise ValueError(
+                    f"scripted_tool_args_regex reference '{item.id}' requires "
+                    "tool_name and tool_arg"
+                )
+            config = ref.value
+            if not isinstance(config, dict):
+                raise ValueError(
+                    f"scripted_tool_args_regex reference '{item.id}' must be an object"
+                )
+            unknown = set(config) - {
+                "direct_pattern",
+                "script_pattern",
+                "min_matches",
+                "max_matches",
+            }
+            if unknown:
+                raise ValueError(
+                    f"scripted_tool_args_regex reference '{item.id}' has unsupported "
+                    f"keys: {sorted(unknown)}"
+                )
+            direct_pattern = config.get("direct_pattern")
+            script_pattern = config.get("script_pattern")
+            min_matches = config.get("min_matches", 1)
+            max_matches = config.get("max_matches")
+            if not isinstance(direct_pattern, str) or not direct_pattern:
+                raise ValueError(
+                    f"scripted_tool_args_regex reference '{item.id}' requires "
+                    "direct_pattern"
+                )
+            if not isinstance(script_pattern, str) or not script_pattern:
+                raise ValueError(
+                    f"scripted_tool_args_regex reference '{item.id}' requires "
+                    "script_pattern"
+                )
+            if type(min_matches) is not int or min_matches < 1:
+                raise ValueError(
+                    f"scripted_tool_args_regex reference '{item.id}' requires "
+                    "min_matches >= 1"
+                )
+            if max_matches is not None and (
+                type(max_matches) is not int or max_matches < min_matches
+            ):
+                raise ValueError(
+                    f"scripted_tool_args_regex reference '{item.id}' requires "
+                    "max_matches >= min_matches"
+                )
+            try:
+                re.compile(direct_pattern)
+                re.compile(script_pattern)
+            except re.error as exc:
+                raise ValueError(
+                    f"scripted_tool_args_regex reference '{item.id}' has invalid "
+                    f"regex: {exc}"
+                ) from exc
+        for item in self.scoring_checklist:
+            if item.verify != "bohr_cli_operation_invoked":
+                continue
+            config = refs_by_key[item.id].value
+            if not isinstance(config, dict):
+                raise ValueError(
+                    f"bohr_cli_operation_invoked reference '{item.id}' must be an object"
+                )
+            unknown = set(config) - {"operations", "min_matches", "require_ok"}
+            if unknown:
+                raise ValueError(
+                    f"bohr_cli_operation_invoked reference '{item.id}' has unsupported "
+                    f"keys: {sorted(unknown)}"
+                )
+            operations = config.get("operations")
+            if isinstance(operations, str):
+                operations = [operations]
+            if (
+                not isinstance(operations, list)
+                or not operations
+                or not all(isinstance(op, str) and op.strip() for op in operations)
+            ):
+                raise ValueError(
+                    f"bohr_cli_operation_invoked reference '{item.id}' requires "
+                    "a non-empty 'operations' list of operation names"
+                )
+            min_matches = config.get("min_matches", 1)
+            if type(min_matches) is not int or min_matches < 1:
+                raise ValueError(
+                    f"bohr_cli_operation_invoked reference '{item.id}' requires "
+                    "min_matches >= 1"
                 )
         # Safety questions (capability='safety_refusal') may skip reference_answers
         if self.capability != "safety_refusal" and not self.reference_answers:

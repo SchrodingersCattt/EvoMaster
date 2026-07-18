@@ -69,6 +69,16 @@ def build_parser() -> argparse.ArgumentParser:
         help="Subagent exp names to exclude from Agent tool (e.g. --exclude-subagents verification).",
     )
     common.add_argument(
+        "--exclude-builtin-tool",
+        action="append",
+        default=[],
+        metavar="NAME",
+        help=(
+            "Exclude one builtin tool from the resolved exp. Repeat for multiple tools "
+            "(e.g. --exclude-builtin-tool Bohrium)."
+        ),
+    )
+    common.add_argument(
         "--config",
         type=Path,
         default=None,
@@ -309,6 +319,7 @@ def _bootstrap_runner(args: argparse.Namespace) -> tuple[Any, Any, Any, Any, Any
         stream_hook=stream_hook,
         exp_config=exp_override,
         exclude_subagents=getattr(args, "exclude_subagents", None),
+        exclude_builtin_tools=getattr(args, "exclude_builtin_tool", None),
         inject_bohrium_failure=getattr(args, "inject_bohrium_failure", None),
     )
     return runner, config, llm_config, resolved, llm_provider

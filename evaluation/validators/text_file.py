@@ -2,45 +2,13 @@
 
 from __future__ import annotations
 
-import fnmatch
 import re
 from pathlib import Path
 from typing import Any
 
+from evaluation.validators._common import resolve_file
 
-def _resolve_file(
-    workspace: Path,
-    filename: str,
-    *,
-    workspace_resolve: str = "recursive",
-) -> Path | None:
-    """Resolve *filename* under *workspace*.
-
-    *recursive* (default): exact ``workspace/`` first, then newest basename match
-    anywhere under the workspace (rglob).
-
-    *root*: only ``workspace/<basename>`` if *filename* is a single path segment
-    (no ``/`` or ``\\``); otherwise no match.
-    """
-    if workspace_resolve == "root":
-        if len(Path(filename).parts) != 1:
-            return None
-        candidate = workspace / filename
-        if candidate.is_file():
-            return candidate
-        return None
-
-    exact = workspace / filename
-    if exact.is_file():
-        return exact
-    hits = [
-        p
-        for p in workspace.rglob("*")
-        if p.is_file() and fnmatch.fnmatch(p.name, filename)
-    ]
-    if not hits:
-        return None
-    return max(hits, key=lambda p: p.stat().st_mtime)
+_resolve_file = resolve_file
 
 
 def _normalize(text: str, *, case_sensitive: bool, normalize_whitespace: bool) -> str:

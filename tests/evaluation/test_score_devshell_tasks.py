@@ -13,7 +13,6 @@ from evaluation.scripts.devshell.score_devshell_tasks import (
     _all_criteria_passed,
     _build_evidence,
     _format_score_reason,
-    _ingest_score_from_record,
     _load_latest_events_log,
     _load_raw_run_rows,
     _update_pending_with_score,
@@ -66,7 +65,10 @@ def _write_raw_runs(run_dir: Path, rows: list[dict[str, Any]]) -> None:
 
 
 def _write_events(
-    log_dir: Path, filename: str = "events_20260404_000001.jsonl"
+    log_dir: Path,
+    filename: str = "events_20260404_000001.jsonl",
+    *,
+    bash_command: str = "python optimize_structure.py --foo",
 ) -> Path:
     path = log_dir / filename
     path.write_text(
@@ -75,16 +77,16 @@ def _write_events(
                 json.dumps(
                     {
                         "type": "tool_call",
-                        "tool": "bash",
+                        "tool": "Bash",
                         "call_id": "tc-1",
-                        "args": {"command": "python optimize_structure.py --foo"},
+                        "args": {"command": bash_command},
                     },
                     ensure_ascii=False,
                 ),
                 json.dumps(
                     {
                         "type": "tool_result",
-                        "tool": "bash",
+                        "tool": "Bash",
                         "call_id": "tc-1",
                         "content": '{"status":"success","job_id":"42"}',
                     },
@@ -113,6 +115,24 @@ def _write_events(
                     ensure_ascii=False,
                 ),
             ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    return path
+
+
+def _write_bohr_receipt(log_dir: Path, *, ok: bool = True) -> Path:
+    path = log_dir / "bohr_cli_receipts.jsonl"
+    path.write_text(
+        json.dumps(
+            {
+                "schema_version": "bohr_cli_receipt_v1",
+                "operation": "job.list",
+                "argv": ["job", "list", "-o", "json"],
+                "exit_code": 0 if ok else 1,
+                "ok": ok,
+            }
         )
         + "\n",
         encoding="utf-8",
@@ -171,7 +191,7 @@ class TestBuildEvidence:
         )
 
         tool_names = [tc.tool_name for tc in evidence.tool_calls]
-        assert "execute_bash" in tool_names
+        assert "Bash" in tool_names
         assert "mat_sg_build_bulk_structure_by_template" in tool_names
         assert any(
             evt.event_type.value == "calculation_execution" for evt in evidence.events
@@ -196,10 +216,25 @@ class TestBuildEvidence:
             log_dir=_log_dir(tmp_run_dir),
         )
 
-        bash_call = next(
-            tc for tc in evidence.tool_calls if tc.tool_name == "execute_bash"
-        )
+        bash_call = next(tc for tc in evidence.tool_calls if tc.tool_name == "Bash")
         assert '"job_id":"42"' in bash_call.observation_excerpt
+
+    def test_loads_bohr_cli_execution_receipts(self, tmp_run_dir: Path) -> None:
+        ws = _workspace(tmp_run_dir)
+        _write_summary(ws)
+        _write_bohr_receipt(_log_dir(tmp_run_dir))
+
+        evidence = _build_evidence(
+            task_id="SC_struct_001_direct_r0",
+            workspace=ws,
+            summary=json.loads((ws / "_devshell_summary.json").read_text()),
+            answer="done",
+            duration_ms=1234,
+            log_dir=_log_dir(tmp_run_dir),
+        )
+
+        assert len(evidence.bohr_cli_receipts) == 1
+        assert evidence.bohr_cli_receipts[0].operation == "job.list"
 
 
 class TestFormatters:
@@ -228,12 +263,15 @@ class TestFormatters:
             ),
         }
 
-        reason = _format_score_reason(record, ingest_optional_ids=frozenset())
+        reason = _format_score_reason(
+            record, ingest_optional_ids=frozenset(), all_pass=False
+        )
         assert "### Grounding" in reason
         assert "### Efficiency" in reason
         assert "✓ pass" in reason
         assert "✗ fail" in reason
         assert "required checklist items for ingest" in reason
+        assert "ingest score 0" in reason
 
     def test_ingest_score_binary_all_must_pass(self) -> None:
         record = MagicMock()
@@ -241,17 +279,14 @@ class TestFormatters:
         record.total_count = 2
         record.overall_weighted_score = 0.5
         assert _all_criteria_passed(record) is True
-        assert _ingest_score_from_record(record) == 100
 
         record.passed_count = 1
         record.total_count = 2
         assert _all_criteria_passed(record) is False
-        assert _ingest_score_from_record(record) == 0
 
         record.passed_count = 0
         record.total_count = 0
         assert _all_criteria_passed(record) is False
-        assert _ingest_score_from_record(record) == 0
 
     def test_turn_budget_fail_still_passes_when_ingest_optional(self) -> None:
         from evaluation.core.schemas import CriterionResult
@@ -275,7 +310,6 @@ class TestFormatters:
         }
         opt = frozenset({"turn_budget"})
         assert _all_criteria_passed(record, ingest_optional_ids=opt) is True
-        assert _ingest_score_from_record(record, ingest_optional_ids=opt) == 100
         assert _all_criteria_passed(record, ingest_optional_ids=frozenset()) is False
 
 
@@ -435,3 +469,107 @@ class TestScoreTask:
         assert result["score"] == 0
         assert result["all_criteria_passed"] is False
         assert "✗ fail" in result["score_reason"]
+
+    def test_bohr_cli_question_requires_execution_evidence(
+        self, tmp_run_dir: Path
+    ) -> None:
+        from evaluation.core.evaluator import BinaryEvaluator
+
+        ws = _workspace(tmp_run_dir)
+        _write_summary(ws, final_content="Done")
+        row = {
+            "task_id": "SC_struct_001_direct_r0",
+            "question_id": "SC_test_001",
+            "mode": "direct",
+            "repeat_idx": 0,
+            "duration_ms": 1234,
+            "devshell_summary": {"status": "completed"},
+        }
+        question = self._make_question().model_copy(update={"tags": ["bohr-cli"]})
+        evaluator = BinaryEvaluator(llm_cfg=None)
+
+        _write_events(
+            _log_dir(tmp_run_dir),
+            bash_command="curl https://openapi.dp.tech/jobs",
+        )
+        missing = score_task(
+            row=row,
+            run_dir=tmp_run_dir,
+            question=question,
+            evaluator=evaluator,
+        )
+
+        assert missing["score"] == 0
+        assert missing["all_criteria_passed"] is False
+        assert "bohr_cli_execution" in missing["score_reason"]
+        assert "✗ fail" in missing["score_reason"]
+
+        _write_events(
+            _log_dir(tmp_run_dir),
+            bash_command="bohr job list --json",
+        )
+        _write_bohr_receipt(_log_dir(tmp_run_dir), ok=False)
+        failed_receipt = score_task(
+            row=row,
+            run_dir=tmp_run_dir,
+            question=question,
+            evaluator=evaluator,
+        )
+        assert failed_receipt["score"] == 0
+        assert "none was a successful execution" in failed_receipt["score_reason"]
+
+        _write_bohr_receipt(_log_dir(tmp_run_dir))
+        present = score_task(
+            row=row,
+            run_dir=tmp_run_dir,
+            question=question,
+            evaluator=evaluator,
+        )
+
+        assert present["score"] == 100
+        assert present["all_criteria_passed"] is True
+        assert "bohr_cli_execution" in present["score_reason"]
+        assert "✓ pass" in present["score_reason"]
+
+    def test_unparseable_receipts_fail_instead_of_legacy_fallback(
+        self, tmp_run_dir: Path
+    ) -> None:
+        from evaluation.core.evaluator import BinaryEvaluator
+
+        ws = _workspace(tmp_run_dir)
+        _write_summary(ws, final_content="Done")
+        row = {
+            "task_id": "SC_struct_001_direct_r0",
+            "question_id": "SC_test_001",
+            "mode": "direct",
+            "repeat_idx": 0,
+            "duration_ms": 1234,
+            "devshell_summary": {"status": "completed"},
+        }
+        question = self._make_question().model_copy(update={"tags": ["bohr-cli"]})
+        evaluator = BinaryEvaluator(llm_cfg=None)
+
+        # A matching Bash command exists, but the receipts file only contains
+        # lines the current schema cannot parse: the execution contract must
+        # fail loudly, not fall back to the weaker Bash-substring evidence.
+        _write_events(
+            _log_dir(tmp_run_dir),
+            bash_command="bohr job list --json",
+        )
+        receipts = _log_dir(tmp_run_dir) / "bohr_cli_receipts.jsonl"
+        receipts.write_text(
+            '{"schema_version": "bohr_cli_receipt_v2"}\nnot json at all\n',
+            encoding="utf-8",
+        )
+
+        result = score_task(
+            row=row,
+            run_dir=tmp_run_dir,
+            question=question,
+            evaluator=evaluator,
+        )
+
+        assert result["score"] == 0
+        assert result["all_criteria_passed"] is False
+        assert "no line parsed" in result["score_reason"]
+        assert "2 unparseable receipt line(s) skipped" in result["score_reason"]

@@ -29,7 +29,10 @@ def check_min_interatomic_distance(
     min_distance_A: float,
     elements: list[str] | None = None,
 ) -> tuple[bool, str]:
-    """Verify that all selected atom pairs are at least *min_distance_A* apart."""
+    """Verify that all selected atom pairs are at least *min_distance_A* apart.
+
+    For multi-frame files (``.extxyz``), every frame is checked.
+    """
     from evaluation.validators.structure_general import _load_structure, _resolve_file
 
     if not _PMG_AVAILABLE:
@@ -41,11 +44,24 @@ def check_min_interatomic_distance(
     fpath = _resolve_file(root, filename)
     if fpath is None:
         return False, f"no file matching {filename!r} in {root}"
+
+    # Multi-frame extxyz: check every frame
+    if str(fpath).endswith('.extxyz'):
+        return _check_min_dist_all_frames(fpath, min_distance_A, elements)
+
     try:
         struct = _load_structure(fpath)
     except Exception as exc:
         return False, f"could not parse {fpath.name}: {exc}"
 
+    return _check_min_dist_single(struct, fpath.name, min_distance_A, elements)
+
+
+def _selected_min_distance(
+    struct: Structure | Molecule,
+    elements: list[str] | None,
+) -> tuple[float, tuple[int, int] | None] | None:
+    """Return (min_dist, closest_pair) over selected sites, or None if < 2 sites."""
     selected = list(range(len(struct.sites)))
     if elements:
         allowed = set(elements)
@@ -55,8 +71,7 @@ def check_min_interatomic_distance(
             if getattr(site.specie, "symbol", str(site.specie)) in allowed
         ]
     if len(selected) < 2:
-        scope = f" for elements {elements}" if elements else ""
-        return False, f"{fpath.name}: fewer than 2 selected sites{scope}"
+        return None
 
     min_dist = float("inf")
     min_pair: tuple[int, int] | None = None
@@ -75,13 +90,70 @@ def check_min_interatomic_distance(
                 if dist < min_dist:
                     min_dist = dist
                     min_pair = (idx_i, idx_j)
+    return min_dist, min_pair
 
-    ok = min_dist >= min_distance_A
+
+def _check_min_dist_single(
+    struct: Structure | Molecule,
+    label: str,
+    min_distance_A: float,
+    elements: list[str] | None = None,
+) -> tuple[bool, str]:
+    """Min-distance check for a single structure/molecule."""
+    result = _selected_min_distance(struct, elements)
+    if result is None:
+        scope = f" for elements {elements}" if elements else ""
+        return False, f"{label}: fewer than 2 selected sites{scope}"
+    min_dist, min_pair = result
     pair_msg = f"pair={min_pair}" if min_pair is not None else "pair=n/a"
     return (
-        ok,
-        f"{fpath.name}: min interatomic distance = {min_dist:.4f} Å ({pair_msg}), "
+        min_dist >= min_distance_A,
+        f"{label}: min interatomic distance = {min_dist:.4f} Å ({pair_msg}), "
         f"expected >= {min_distance_A} Å",
+    )
+
+
+def _check_min_dist_all_frames(
+    fpath: Path,
+    min_distance_A: float,
+    elements: list[str] | None = None,
+) -> tuple[bool, str]:
+    """Check minimum interatomic distance across all frames of an ExtXYZ."""
+    import ase.io
+    from pymatgen.io.ase import AseAtomsAdaptor
+
+    try:
+        frames = ase.io.read(str(fpath), index=':')
+    except Exception as exc:
+        return False, f"could not read extxyz {fpath.name}: {exc}"
+    if not frames:
+        return False, f"no frames in {fpath.name}"
+
+    global_min = float("inf")
+    worst_frame = -1
+    for i, atoms in enumerate(frames):
+        if any(atoms.pbc):
+            struct = AseAtomsAdaptor.get_structure(atoms)
+        else:
+            struct = AseAtomsAdaptor.get_molecule(atoms)
+        result = _selected_min_distance(struct, elements)
+        if result is None:
+            scope = f" for elements {elements}" if elements else ""
+            return False, f"{fpath.name} frame {i}: fewer than 2 selected sites{scope}"
+        min_dist, min_pair = result
+        if min_dist < global_min:
+            global_min = min_dist
+            worst_frame = i
+        if min_dist < min_distance_A:
+            return False, (
+                f"{fpath.name} frame {i}: min interatomic distance = "
+                f"{min_dist:.4f} Å (pair={min_pair}), expected >= {min_distance_A} Å"
+            )
+
+    return (
+        True,
+        f"{fpath.name}: all {len(frames)} frames min_dist >= {min_distance_A} Å "
+        f"(worst: frame {worst_frame} = {global_min:.4f} Å)",
     )
 
 

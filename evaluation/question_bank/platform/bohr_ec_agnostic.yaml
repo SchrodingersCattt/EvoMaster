@@ -1,0 +1,521 @@
+version: v5
+capability: execution_contract
+domain: agnostic
+questions:
+- id: BEC_wrong_image_001_20260715
+  capability: execution_contract
+  domain: agnostic
+  scope: platform
+  intent: Test agent self-heals from incorrect image name by searching and resubmitting.
+  human_prompt_seed: |
+    利用 bohr-cli，用镜像名 "dptech/deepmd-kit" 提个任务试试（命令 `dp --version`，机型 `c2_m4_cpu`），报错的话帮我排查修好重新提。
+    排查过程记录到 `e1_troubleshoot.json`，包含最初用的镜像名、报错信息、修正后的镜像和重新提交的任务 ID。JSON 顶层使用 `initial_image`、`error_message`、`correct_image` 和 `resubmit_job_id`。
+  tags:
+  - bohr-cli
+  reference_answers:
+  - key: artifact
+    value: e1_troubleshoot.json
+  - key: wrong_image_recorded
+    value:
+      filename: e1_troubleshoot.json
+      pattern: '"initial_image"\s*:\s*"dptech/deepmd-kit"'
+  - key: has_error
+    value:
+      filename: e1_troubleshoot.json
+      pattern: '"error_message"\s*:\s*"[^"]+"'
+  - key: correct_image_full
+    value:
+      filename: e1_troubleshoot.json
+      pattern: '"correct_image"\s*:\s*"registry\.dp\.tech/'
+  - key: has_resubmit_id
+    value:
+      filename: e1_troubleshoot.json
+      pattern: '"resubmit_job_id"\s*:\s*\d+'
+  - key: image_searched_via_cli
+    tool_name: Bash
+    tool_arg: command
+    value:
+      pattern: '(?:^|[\n;&|]\s*)(?:[^\s;&|]+/)?bohr\s+image\s+\+?search\b'
+      min_matches: 1
+  - key: job_submitted_via_cli
+    tool_name: Bash
+    tool_arg: command
+    value:
+      pattern: '(?:^|[\n;&|]\s*)(?:[^\s;&|]+/)?bohr\s+job\s+\+?submit\b'
+      min_matches: 2
+  - key: turn_budget
+    value:
+      max: 12
+  scoring_checklist:
+  - id: artifact
+    criterion: e1_troubleshoot.json written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: wrong_image_recorded
+    criterion: Records the initially wrong image name.
+    axis: correctness
+    verify: text_file_regex
+  - id: has_error
+    criterion: Error message captured from failed submission.
+    axis: correctness
+    verify: text_file_regex
+  - id: correct_image_full
+    criterion: Corrected image uses full registry.dp.tech/ path.
+    axis: correctness
+    verify: text_file_regex
+    weight: 2.0
+  - id: has_resubmit_id
+    criterion: Successfully resubmitted with correct image (real job ID).
+    axis: correctness
+    verify: text_file_regex
+    weight: 2.0
+  - id: image_searched_via_cli
+    criterion: Image was searched through bohr-cli.
+    axis: grounding
+    verify: tool_args_regex
+  - id: job_submitted_via_cli
+    criterion: Job was submitted through bohr-cli at least twice (failed + retry).
+    axis: grounding
+    verify: tool_args_regex
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+
+- id: BEC_node_status_002_20260715
+  capability: execution_contract
+  domain: agnostic
+  scope: platform
+  intent: Test agent assesses node health and restarts abnormal ones without deleting.
+  priority: P1
+  human_prompt_seed: |
+    利用 bohr-cli，看看我有没有节点，状态都正常吗？有异常的帮我重启一下。
+    状态报告保存到 `e2_nodes.json`，记录每个节点的 ID、状态和是否执行了操作。JSON 顶层使用 `nodes`；`nodes` 为数组，每项含 `status` 和 `action_taken`；`status` 用平台返回的数字状态码，`action_taken` 取 `none` 或 `restart`。
+  tags:
+  - bohr-cli
+  reference_answers:
+  - key: artifact
+    value: e2_nodes.json
+  - key: has_nodes
+    value:
+      filename: e2_nodes.json
+      pattern: '"nodes"\s*:\s*\[\s*\{'
+  - key: has_status
+    value:
+      filename: e2_nodes.json
+      pattern: '"status"\s*:\s*-?\d'
+  - key: has_action
+    value:
+      filename: e2_nodes.json
+      pattern: '"action_taken"\s*:\s*"(none|restart)"'
+  - key: turn_budget
+    value:
+      max: 8
+  - key: nodes_queried_via_cli
+    tool_name: Bash
+    tool_arg: command
+    value:
+      pattern: '(?:^|[\n;&|]\s*)(?:[^\s;&|]+/)?bohr\s+node\s+\+?(list|get)\b'
+      min_matches: 1
+  scoring_checklist:
+  - id: artifact
+    criterion: e2_nodes.json written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: has_nodes
+    criterion: Node list populated.
+    axis: correctness
+    verify: text_file_regex
+  - id: has_status
+    criterion: Status code reported for each node.
+    axis: correctness
+    verify: text_file_regex
+  - id: has_action
+    criterion: Action taken (none or restart) recorded.
+    axis: correctness
+    verify: text_file_regex
+  - id: nodes_queried_via_cli
+    criterion: Node list or get was invoked through bohr-cli.
+    axis: grounding
+    verify: tool_args_regex
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+
+- id: BEC_billing_info_003_20260715
+  capability: execution_contract
+  domain: agnostic
+  scope: platform
+  intent: Test agent queries billing and explains cost structure.
+  human_prompt_seed: |
+    利用 bohr-cli，平台一个月免费额度多少？我现在还剩多少？哪些操作要花钱？
+    保存到 `e3_billing.json`，记录当前余额、哪些操作收费、哪些免费。JSON 顶层使用 `balance_cny`、`paid_operations` 和 `free_operations`。
+  tags:
+  - bohr-cli
+  reference_answers:
+  - key: artifact
+    value: e3_billing.json
+  - key: has_balance
+    value:
+      filename: e3_billing.json
+      pattern: '"balance_cny"\s*:\s*[\d.]'
+  - key: has_paid_ops
+    value:
+      filename: e3_billing.json
+      pattern: '"paid_operations"\s*:\s*\['
+  - key: has_free_ops
+    value:
+      filename: e3_billing.json
+      pattern: '"free_operations"\s*:\s*\['
+  - key: turn_budget
+    value:
+      max: 6
+  - key: balance_queried_via_cli
+    tool_name: Bash
+    tool_arg: command
+    value:
+      pattern: '(?:^|[\n;&|]\s*)(?:[^\s;&|]+/)?bohr\s+billing\s+\+?(balance|list)\b'
+      min_matches: 1
+  scoring_checklist:
+  - id: artifact
+    criterion: e3_billing.json written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: has_balance
+    criterion: Current balance reported as number.
+    axis: correctness
+    verify: text_file_regex
+  - id: has_paid_ops
+    criterion: Paid operations listed.
+    axis: correctness
+    verify: text_file_regex
+  - id: has_free_ops
+    criterion: Free operations listed.
+    axis: correctness
+    verify: text_file_regex
+  - id: balance_queried_via_cli
+    criterion: Billing balance or list was invoked through bohr-cli.
+    axis: grounding
+    verify: tool_args_regex
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+
+- id: BEC_add_member_004_20260715
+  capability: execution_contract
+  domain: agnostic
+  scope: platform
+  intent: Test agent explains project member management.
+  human_prompt_seed: |
+    利用 bohr-cli，项目里怎么加人？
+    保存到 `e4_guide.md`。
+  tags:
+  - bohr-cli
+  reference_answers:
+  - key: artifact
+    value: e4_guide.md
+  - key: mentions_add
+    value:
+      filename: e4_guide.md
+      pattern: add|添加|invite|邀请|member|成员
+      flags: i
+  - key: mentions_project
+    value:
+      filename: e4_guide.md
+      pattern: project|项目
+      flags: i
+  - key: turn_budget
+    value:
+      max: 4
+  scoring_checklist:
+  - id: artifact
+    criterion: e4_guide.md written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: mentions_add
+    criterion: Explains how to add members.
+    axis: correctness
+    verify: text_file_regex
+  - id: mentions_project
+    criterion: Mentions project context.
+    axis: correctness
+    verify: text_file_regex
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+
+- id: BEC_file_recovery_005_20260715
+  capability: execution_contract
+  domain: agnostic
+  scope: platform
+  intent: Test agent honestly reports that deleted files cannot be recovered.
+  human_prompt_seed: |
+    利用 bohr-cli，我误删了网盘里的一个文件夹，能恢复吗？
+    保存到 `e5_recovery.md`。
+  tags:
+  - bohr-cli
+  - meta_grounding
+  reference_answers:
+  - key: artifact
+    value: e5_recovery.md
+  - key: honest_no_recovery
+    value:
+      filename: e5_recovery.md
+      pattern: 无法恢复|不可恢复|cannot.*recover|没有回收站|no.*recycle|不支持.*恢复
+      flags: i
+  - key: has_prevention
+    value:
+      filename: e5_recovery.md
+      pattern: 备份|backup|建议|recommend|预防|prevent
+      flags: i
+  - key: turn_budget
+    value:
+      max: 4
+  scoring_checklist:
+  - id: artifact
+    criterion: e5_recovery.md written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: honest_no_recovery
+    criterion: Honestly states files cannot be recovered (no recycle bin).
+    axis: correctness
+    verify: text_file_regex
+    weight: 2.0
+  - id: has_prevention
+    criterion: Provides prevention advice (backup, careful deletion).
+    axis: correctness
+    verify: text_file_regex
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+
+- id: BEC_upgrade_machine_006_20260715_v4
+  capability: execution_contract
+  domain: agnostic
+  scope: platform
+  intent: Test agent inspects a seed job and resubmits it on A100 while preserving its image and command.
+  human_prompt_seed: |
+    利用 Bohr-CLI，我想把任务 `20400341` 换成 A100 重新提交。请先确认它原来的配置，保持镜像和运行命令不变。
+    提交成功后，将原任务和新任务的实际标识、机型，以及沿用的镜像和运行命令记录到工作区根目录的 `e6_upgrade.json`。
+  tags:
+  - bohr-cli
+  reference_answers:
+  - key: artifact
+    value: e6_upgrade.json
+    workspace_resolve: root
+  - key: upgrade_execution
+    value:
+      filename: e6_upgrade.json
+      seed_id: 20400341
+      source_machine_pattern: (?i:T4)
+      target_machine_pattern: (?i:A100)
+      image: registry.dp.tech/dptech/dpmd-cu126-outisli:v20260712
+      command: "echo 'T4 test for eval E6' > result.txt"
+    workspace_resolve: root
+  - key: turn_budget
+    value:
+      max: 14
+  scoring_checklist:
+  - id: artifact
+    criterion: e6_upgrade.json written to workspace root.
+    axis: correctness
+    verify: artifact_exists
+  - id: upgrade_execution
+    criterion: The source job and current job-scene GPU machines were queried before one matching A100 resubmission, and the record matches the actual CLI identifiers and preserved configuration.
+    axis: grounding
+    verify: bohr_job_upgrade_execution
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+
+- id: BEC_monthly_spending_007_20260715
+  capability: execution_contract
+  domain: agnostic
+  scope: platform
+  intent: Test agent queries billing ledger with proper time range.
+  human_prompt_seed: |
+    利用 bohr-cli，查查我上个月一共花了多少，计算、存储、解析各花了多少。
+    保存到 `e7_spending.json`，记录时间范围、总花费和各类别明细。JSON 顶层使用 `total_cny` 和 `breakdown`；`breakdown` 为数组，每项含 `category`。
+  tags:
+  - bohr-cli
+  reference_answers:
+  - key: artifact
+    value: e7_spending.json
+  - key: has_total
+    value:
+      filename: e7_spending.json
+      pattern: '"total_cny"\s*:\s*[\d.]'
+  - key: has_breakdown
+    value:
+      filename: e7_spending.json
+      pattern: '"breakdown"\s*:\s*\[\s*\{'
+  - key: has_category
+    value:
+      filename: e7_spending.json
+      pattern: '"category"\s*:\s*"[^"]+"'
+  - key: billing_queried_via_cli
+    tool_name: Bash
+    tool_arg: command
+    value:
+      pattern: '(?:^|[\n;&|]\s*)(?:[^\s;&|]+/)?bohr\s+billing\s+\+?(list|ledger)\b'
+      min_matches: 1
+  - key: turn_budget
+    value:
+      max: 6
+  scoring_checklist:
+  - id: artifact
+    criterion: e7_spending.json written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: has_total
+    criterion: Total spending reported.
+    axis: correctness
+    verify: text_file_regex
+  - id: has_breakdown
+    criterion: Breakdown by category provided.
+    axis: correctness
+    verify: text_file_regex
+  - id: has_category
+    criterion: Categories labeled.
+    axis: correctness
+    verify: text_file_regex
+  - id: billing_queried_via_cli
+    criterion: Billing was queried through bohr-cli.
+    axis: grounding
+    verify: tool_args_regex
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+
+- id: BEC_pdf_cost_estimate_008_20260715
+  capability: execution_contract
+  domain: agnostic
+  scope: platform
+  intent: Test agent estimates PDF parsing costs with calculation.
+  human_prompt_seed: |
+    利用 bohr-cli，解析一篇 50 页 PDF 要花多少钱？我有 100 篇，你估算下价格。
+    估算保存到 `e8_cost_estimate.json`，记录单价、总费用和建议。JSON 顶层使用 `unit_price_per_page`、`total_papers`、`estimated_total_cny` 和 `advice`。
+  tags:
+  - bohr-cli
+  reference_answers:
+  - key: artifact
+    value: e8_cost_estimate.json
+  - key: has_unit_price
+    value:
+      filename: e8_cost_estimate.json
+      pattern: '"unit_price_per_page"\s*:\s*[\d.]'
+  - key: has_total
+    value:
+      filename: e8_cost_estimate.json
+      pattern: '"estimated_total_cny"\s*:\s*[\d.]'
+  - key: has_papers_count
+    value:
+      filename: e8_cost_estimate.json
+      pattern: '"total_papers"\s*:\s*100'
+  - key: has_advice
+    value:
+      filename: e8_cost_estimate.json
+      pattern: '"advice"\s*:\s*"[^"]{10,}"'
+  - key: turn_budget
+    value:
+      max: 4
+  scoring_checklist:
+  - id: artifact
+    criterion: e8_cost_estimate.json written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: has_unit_price
+    criterion: Unit price per page provided.
+    axis: correctness
+    verify: text_file_regex
+  - id: has_total
+    criterion: Total cost estimated.
+    axis: correctness
+    verify: text_file_regex
+  - id: has_papers_count
+    criterion: Correctly uses 100 papers in calculation.
+    axis: correctness
+    verify: text_file_regex
+  - id: has_advice
+    criterion: Practical advice given.
+    axis: correctness
+    verify: text_file_regex
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+
+- id: BEC_pagination_recovery_009_20260717
+  capability: execution_contract
+  domain: agnostic
+  scope: platform
+  intent: Test agent handles pagination and recovers from an invalid resource query to complete the task.
+  human_prompt_seed: |
+    利用 bohr-cli，帮我统计一下我在平台上所有已完成任务的总数和总消耗机时，先试着查一下任务ID 99999999 的详情作为对照，查不到的话跳过继续。
+    结果保存到 `e9_stats.json`，记录总任务数、总机时、以及那个无效查询的错误信息。JSON 顶层使用 `total_completed_jobs`、`total_machine_hours` 和 `invalid_query_error`。
+  tags:
+  - bohr-cli
+  reference_answers:
+  - key: artifact
+    value: e9_stats.json
+  - key: stats_schema
+    value:
+      filename: e9_stats.json
+      schema:
+        type: object
+        required:
+        - total_completed_jobs
+        - total_machine_hours
+        - invalid_query_error
+        properties:
+          total_completed_jobs:
+            type: integer
+            minimum: 0
+          total_machine_hours:
+            type: number
+            minimum: 0
+          invalid_query_error:
+            type: string
+            minLength: 1
+  - key: jobs_listed_via_cli
+    tool_name: Bash
+    tool_arg: command
+    value:
+      pattern: '(?:^|[\n;&|]\s*)(?:[^\s;&|]+/)?bohr\s+job\s+\+?list\b'
+      min_matches: 1
+  - key: invalid_queried_via_cli
+    tool_name: Bash
+    tool_arg: command
+    value:
+      pattern: '(?:^|[\n;&|]\s*)(?:[^\s;&|]+/)?bohr\s+job\s+\+?describe\b(?=[^\n]*99999999)'
+      min_matches: 1
+  - key: turn_budget
+    value:
+      max: 15
+  scoring_checklist:
+  - id: artifact
+    criterion: e9_stats.json written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: stats_schema
+    criterion: Records total completed jobs, machine hours, and the invalid query error.
+    axis: correctness
+    verify: json_file_schema
+  - id: jobs_listed_via_cli
+    criterion: Job listing was invoked through bohr-cli.
+    axis: grounding
+    verify: tool_args_regex
+  - id: invalid_queried_via_cli
+    criterion: Invalid job 99999999 was queried through bohr-cli.
+    axis: grounding
+    verify: tool_args_regex
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget

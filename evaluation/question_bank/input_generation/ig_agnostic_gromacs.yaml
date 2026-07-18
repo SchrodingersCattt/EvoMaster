@@ -213,17 +213,19 @@ questions:
   - key: manifest_schema
     value:
       filename: input_prep_manifest.json
-      required_keys:
-      - software
-      - task
-      - input_dir
-      - generated_files
-      - user_provided_files
-      - diagnostics
-      - auxiliary_files
-      - assumptions
-      - submit_ready
-      - bohrium_command
+      schema:
+        type: object
+        required:
+        - software
+        - task
+        - input_dir
+        - generated_files
+        - user_provided_files
+        - diagnostics
+        - auxiliary_files
+        - assumptions
+        - submit_ready
+        - bohrium_command
   - key: diagnosis_artifact
     value: diagnosis.json
   - key: required_keywords

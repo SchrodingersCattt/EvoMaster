@@ -1,0 +1,1339 @@
+version: v5
+capability: workflow_orchestration
+domain: agnostic
+questions:
+- id: BWO_image_machine_001_20260715
+  capability: workflow_orchestration
+  domain: agnostic
+  scope: platform
+  intent: Test agent queries images and machine types without creating resources.
+  human_prompt_seed: |
+    利用 bohr-cli，我有个 CP2K 输入文件要跑 DFT，有没有现成的镜像？版本都是几？有哪些计算机型？
+    结果保存到 `b1_resources.json`，记录找到的镜像名称和版本，以及可用机型。JSON 顶层使用 `images` 和 `machine_types`，两者均为数组。
+  tags:
+  - bohr-cli
+  reference_answers:
+  - key: artifact
+    value: b1_resources.json
+  - key: has_images
+    value:
+      filename: b1_resources.json
+      pattern: '"images"\s*:\s*\[\s*\{'
+  - key: cp2k_found
+    value:
+      filename: b1_resources.json
+      pattern: '[Cc][Pp]2[Kk]'
+  - key: has_machines
+    value:
+      filename: b1_resources.json
+      pattern: '"machine_types"\s*:\s*\[\s*[\{"]'
+  - key: turn_budget
+    value:
+      max: 6
+  - key: queried_via_cli
+    tool_name: Bash
+    tool_arg: command
+    value:
+      pattern: '(?:^|[\n;&|]\s*)(?:[^\s;&|]+/)?bohr\s+(?:image\s+search|machine\s+list)\b'
+      min_matches: 2
+  scoring_checklist:
+  - id: artifact
+    criterion: b1_resources.json written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: has_images
+    criterion: images array populated.
+    axis: correctness
+    verify: text_file_regex
+  - id: cp2k_found
+    criterion: CP2K image found in results.
+    axis: correctness
+    verify: text_file_regex
+  - id: has_machines
+    criterion: machine_types array populated.
+    axis: correctness
+    verify: text_file_regex
+  - id: queried_via_cli
+    criterion: Image search and machine list were invoked through bohr-cli.
+    axis: grounding
+    verify: tool_args_regex
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+
+- id: BWO_long_running_002_20260715_v2
+  capability: workflow_orchestration
+  domain: agnostic
+  scope: platform
+  intent: Test agent diagnoses long-running jobs with appropriate recommendations.
+  human_prompt_seed: |
+    利用 bohr-cli，看看我有没有跑超过一天还没结束的任务，有的话检查下是不是卡死了。
+    将分析结果保存到 `b2_diagnosis.json`，记录每个超时任务的 ID、运行时长、状态和处理建议。JSON 顶层使用 `long_running_jobs` 和 `total_checked`；`long_running_jobs` 为数组，每项含 `job_id`、`name`、`duration_hours`、`status` 和 `recommendation`。
+  tags:
+  - bohr-cli
+  reference_answers:
+  - key: artifact
+    value: b2_diagnosis.json
+  - key: diagnosis_schema
+    value:
+      filename: b2_diagnosis.json
+      schema:
+        type: object
+        required:
+        - long_running_jobs
+        - total_checked
+        properties:
+          long_running_jobs:
+            type: array
+            items:
+              type: object
+              required:
+              - job_id
+              - name
+              - duration_hours
+              - status
+              - recommendation
+              properties:
+                job_id:
+                  oneOf:
+                  - type: integer
+                  - type: string
+                    minLength: 1
+                name:
+                  type: string
+                  minLength: 1
+                duration_hours:
+                  type: number
+                  minimum: 0
+                status:
+                  oneOf:
+                  - type: integer
+                  - type: string
+                    minLength: 1
+                recommendation:
+                  type: string
+                  enum:
+                  - terminate
+                  - kill
+                  - wait
+          total_checked:
+            type: integer
+            minimum: 0
+  - key: turn_budget
+    value:
+      max: 8
+  - key: jobs_listed_via_cli
+    tool_name: Bash
+    tool_arg: command
+    value:
+      pattern: '(?:^|[\n;&|]\s*)(?:[^\s;&|]+/)?bohr\s+job\s+\+?list\b'
+      min_matches: 1
+  scoring_checklist:
+  - id: artifact
+    criterion: b2_diagnosis.json written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: diagnosis_schema
+    criterion: Diagnosis records the checked-job count and gives every long-running job a valid terminate, kill, or wait recommendation.
+    axis: correctness
+    verify: json_file_schema
+  - id: jobs_listed_via_cli
+    criterion: Job list was invoked through bohr-cli.
+    axis: grounding
+    verify: tool_args_regex
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+
+- id: BWO_param_sweep_003_20260715_v5
+  capability: workflow_orchestration
+  domain: agnostic
+  scope: platform
+  intent: Test agent can submit batch parameterized jobs with job group.
+  human_prompt_seed: |
+    利用 Bohr-CLI，我要做参数扫描，温度 300K 到 1000K 每 100K 一个，同一个模板跑 8 个任务。
+    用 `registry.dp.tech/dptech/ubuntu:22.04-py3.10-cuda12.1` 镜像，命令为 `echo "T=$TEMP" > result.txt`（把 $TEMP 替换为实际温度值），机型 `c2_m4_cpu`。
+    把任务放在同一个任务组中，并将实际的任务组 ID 和每个温度对应的任务 ID 记录到 `b3_jobs.json`；每条任务记录包含 `temperature_K` 和 `job_id`。
+  tags:
+  - bohr-cli
+  reference_answers:
+  - key: artifact
+    value: b3_jobs.json
+  - key: sweep_execution
+    value:
+      filename: b3_jobs.json
+  - key: turn_budget
+    value:
+      max: 18
+  scoring_checklist:
+  - id: artifact
+    criterion: b3_jobs.json written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: sweep_execution
+    criterion: The recorded grouped sweep matches the successful Bohr-CLI executions.
+    axis: grounding
+    verify: bohr_parameter_sweep_execution
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+
+- id: BWO_gpu_compare_004_20260715_v4
+  capability: workflow_orchestration
+  domain: agnostic
+  scope: platform
+  intent: Test agent queries available GPU machines and makes a grounded recommendation without creating resources.
+  human_prompt_seed: |
+    利用 Bohr-CLI，帮我看看现在用于提交计算任务的可用 GPU 机型。我准备训练一个 500 原子体系的 DeepMD 模型，请比较一下显存和价格，推荐一个性价比合适的配置。只查询，不要创建资源。
+    把对比结果和推荐理由保存到工作区根目录的 `b4_gpu_comparison.json`。JSON 顶层使用 `workload`、`available_machines` 和 `recommendation`；`workload` 包含 `framework` 和 `atom_count`，每个候选机型包含 `sku_id`、`machine_type`、`gpu_model`、`gpu_count`、`gpu_memory_gb`、`price_cny_per_hour` 和 `has_stock`，`recommendation` 包含 `machine_type` 和 `reason`。
+  tags:
+  - bohr-cli
+  reference_answers:
+  - key: artifact
+    value: b4_gpu_comparison.json
+    workspace_resolve: root
+  - key: comparison_schema
+    value:
+      filename: b4_gpu_comparison.json
+      schema:
+        type: object
+        required:
+        - workload
+        - available_machines
+        - recommendation
+        properties:
+          workload:
+            type: object
+            required:
+            - framework
+            - atom_count
+            properties:
+              framework:
+                type: string
+                pattern: ^[Dd][Ee][Ee][Pp][Mm][Dd](?:[-_ ]?[Kk][Ii][Tt])?$
+              atom_count:
+                const: 500
+          available_machines:
+            type: array
+            minItems: 3
+            uniqueItems: true
+            items:
+              type: object
+              required:
+              - sku_id
+              - machine_type
+              - gpu_model
+              - gpu_count
+              - gpu_memory_gb
+              - price_cny_per_hour
+              - has_stock
+              properties:
+                sku_id:
+                  type: integer
+                  minimum: 1
+                machine_type:
+                  type: string
+                  minLength: 1
+                gpu_model:
+                  type: string
+                  minLength: 1
+                gpu_count:
+                  type: integer
+                  minimum: 1
+                gpu_memory_gb:
+                  type: number
+                  exclusiveMinimum: 0
+                price_cny_per_hour:
+                  type: number
+                  exclusiveMinimum: 0
+                has_stock:
+                  type: boolean
+            contains:
+              type: object
+              required:
+              - has_stock
+              properties:
+                has_stock:
+                  const: true
+          recommendation:
+            type: object
+            required:
+            - machine_type
+            - reason
+            properties:
+              machine_type:
+                type: string
+                minLength: 1
+              reason:
+                type: string
+                minLength: 20
+    workspace_resolve: root
+  - key: recommendation_in_stock
+    value:
+      filename: b4_gpu_comparison.json
+    workspace_resolve: root
+  - key: machines_queried_via_cli
+    tool_name: Bash
+    tool_arg: command
+    value:
+      pattern: '(?:^|[\n;&|]\s*)(?:(?:env|sudo)(?:\s+[^\s;&|]+)*\s+)?(?:[^\s;&|]+/)?bohr\s+machine\s+\+?list\b(?=[^\n]*(?:-c|--chooseType)(?:\s+|=)gpu(?:\s|$))(?=[^\n]*(?:-s|--scene)(?:\s+|=)job(?:\s|$))'
+      min_matches: 1
+  - key: turn_budget
+    value:
+      max: 12
+  scoring_checklist:
+  - id: artifact
+    criterion: b4_gpu_comparison.json written to workspace root.
+    axis: correctness
+    verify: artifact_exists
+  - id: comparison_schema
+    criterion: The result records the 500-atom DeepMD workload, multiple in-stock GPU machines with memory and price, and a reasoned recommendation.
+    axis: correctness
+    verify: json_file_schema
+  - id: recommendation_in_stock
+    criterion: The recommended machine is one of the listed in-stock candidates.
+    axis: correctness
+    verify: bohr_gpu_comparison_record
+  - id: machines_queried_via_cli
+    criterion: Job-scene GPU machine inventory was queried through bohr-cli.
+    axis: grounding
+    verify: tool_args_regex
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+
+- id: BWO_fail_diagnose_005_20260715
+  capability: workflow_orchestration
+  domain: agnostic
+  scope: platform
+  intent: Test agent diagnoses failed jobs from logs and takes corrective action.
+  human_prompt_seed: |
+    利用 bohr-cli，看看最近有没有失败的任务，拉日志分析下原因，内存不够的话换大机器重跑。
+    诊断报告保存到 `b5_diagnosis.json`，记录失败原因和采取的措施。JSON 顶层使用 `failed_jobs`、`error_type` 和 `action_taken`；`failed_jobs` 为数组。
+  tags:
+  - bohr-cli
+  reference_answers:
+  - key: artifact
+    value: b5_diagnosis.json
+  - key: has_failed_jobs
+    value:
+      filename: b5_diagnosis.json
+      pattern: '"failed_jobs"\s*:\s*\['
+  - key: has_error_type
+    value:
+      filename: b5_diagnosis.json
+      pattern: '"error_type"\s*:\s*"[^"]+"'
+  - key: has_action
+    value:
+      filename: b5_diagnosis.json
+      pattern: '"action_taken"\s*:\s*"[^"]+"'
+  - key: turn_budget
+    value:
+      max: 12
+  - key: log_fetched_via_cli
+    tool_name: Bash
+    tool_arg: command
+    value:
+      pattern: '(?:^|[\n;&|]\s*)(?:[^\s;&|]+/)?bohr\s+job\s+\+?log\b'
+      min_matches: 1
+  scoring_checklist:
+  - id: artifact
+    criterion: b5_diagnosis.json written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: has_failed_jobs
+    criterion: Failed jobs analyzed.
+    axis: correctness
+    verify: text_file_regex
+  - id: has_error_type
+    criterion: Error type classified.
+    axis: correctness
+    verify: text_file_regex
+  - id: has_action
+    criterion: Action taken recorded.
+    axis: correctness
+    verify: text_file_regex
+  - id: log_fetched_via_cli
+    criterion: Job log was fetched through bohr-cli.
+    axis: grounding
+    verify: tool_args_regex
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+
+- id: BWO_check_results_006_20260715
+  capability: workflow_orchestration
+  domain: agnostic
+  scope: platform
+  intent: Test agent checks finished jobs for result files availability.
+  human_prompt_seed: |
+    利用 bohr-cli，看看最近完成的任务，有没有忘设回传路径的，输出文件能不能捞回来。
+    结果保存到 `b6_results.json`，记录每个任务是否有结果可下载。JSON 顶层使用 `finished_jobs`；`finished_jobs` 为数组，每项含 `has_result`。
+  tags:
+  - bohr-cli
+  reference_answers:
+  - key: artifact
+    value: b6_results.json
+  - key: has_finished
+    value:
+      filename: b6_results.json
+      pattern: '"finished_jobs"\s*:\s*\['
+  - key: has_result_field
+    value:
+      filename: b6_results.json
+      pattern: '"has_result"\s*:\s*(true|false)'
+  - key: turn_budget
+    value:
+      max: 8
+  - key: jobs_queried_via_cli
+    tool_name: Bash
+    tool_arg: command
+    value:
+      pattern: '(?:^|[\n;&|]\s*)(?:[^\s;&|]+/)?bohr\s+job\s+\+?(list|describe)\b'
+      min_matches: 1
+  scoring_checklist:
+  - id: artifact
+    criterion: b6_results.json written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: has_finished
+    criterion: finished_jobs array present.
+    axis: correctness
+    verify: text_file_regex
+  - id: has_result_field
+    criterion: Each job has has_result boolean.
+    axis: correctness
+    verify: text_file_regex
+  - id: jobs_queried_via_cli
+    criterion: Job list or describe was invoked through bohr-cli.
+    axis: grounding
+    verify: tool_args_regex
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+
+- id: BWO_sandbox_ase_007_20260715_v2
+  capability: workflow_orchestration
+  domain: agnostic
+  scope: platform
+  intent: Test the full bohr-cli sandbox lifecycle with a deterministic ASE workload.
+  human_prompt_seed: |
+    利用 bohr-cli，在 `sac-cpu-small` 沙箱里运行已经准备好的 `opt_water.py`，环境缺什么就在沙箱里补一下，完成水分子结构优化，并把结果取回工作区。
+    把优化后的水分子坐标保存到工作区根目录的 `b7_water_optimized.xyz`，运行日志保存到 `b7_log.txt`。结果取回后删除沙箱，避免继续占用资源。
+  tags:
+  - bohr-cli
+  data_files:
+  - key: optimization_script
+    path: data/bohr_cli/opt_water.py
+    description: ASE script that optimizes a water molecule and writes the requested artifacts.
+  reference_answers:
+  - key: xyz_artifact
+    value: b7_water_optimized.xyz
+    workspace_resolve: root
+  - key: log_artifact
+    value: b7_log.txt
+    workspace_resolve: root
+  - key: xyz_has_atoms
+    value:
+      filename: b7_water_optimized.xyz
+      tokens:
+      - O
+      - H
+    workspace_resolve: root
+  - key: xyz_three_atoms
+    value:
+      filename: b7_water_optimized.xyz
+      pattern: (?m)^\s*3\s*$
+    workspace_resolve: root
+  - key: log_has_energy
+    value:
+      filename: b7_log.txt
+      pattern: '[Ee]nergy|eV|converge|BFGS|FIRE'
+      flags: i
+    workspace_resolve: root
+  - key: sandbox_created_via_cli
+    tool_name: Bash
+    tool_arg: command
+    value:
+      pattern: '(?:^|[\n;&|]\s*)(?:(?:env|sudo)(?:\s+[^\s;&|]+)*\s+)?(?:[^\s;&|]+/)?bohr\s+sandbox\s+create\s+sac-cpu-small\b'
+      min_matches: 1
+  - key: script_uploaded_via_cli
+    tool_name: Bash
+    tool_arg: command
+    value:
+      pattern: '(?:^|[\n;&|]\s*)(?:(?:env|sudo)(?:\s+[^\s;&|]+)*\s+)?(?:[^\s;&|]+/)?bohr\s+sandbox\s+files\s+\+?write\b(?=[^\n]*\bopt_water\.py\b)'
+      min_matches: 1
+  - key: script_executed_via_cli
+    tool_name: Bash
+    tool_arg: command
+    value:
+      pattern: '(?:^|[\n;&|]\s*)(?:(?:env|sudo)(?:\s+[^\s;&|]+)*\s+)?(?:[^\s;&|]+/)?bohr\s+sandbox\s+\+?exec\b(?=[^\n]*\bopt_water\.py\b)'
+      min_matches: 1
+  - key: results_downloaded_via_cli
+    tool_name: Bash
+    tool_arg: command
+    value:
+      pattern: '(?:^|[\n;&|]\s*)(?:(?:env|sudo)(?:\s+[^\s;&|]+)*\s+)?(?:[^\s;&|]+/)?bohr\s+sandbox\s+files\s+\+?read\b(?=[^\n]*(?:b7_water_optimized\.xyz|b7_log\.txt)\b)'
+      min_matches: 2
+  - key: sandbox_deleted_via_cli
+    tool_name: Bash
+    tool_arg: command
+    value:
+      pattern: '(?:^|[\n;&|]\s*)(?:(?:env|sudo)(?:\s+[^\s;&|]+)*\s+)?(?:[^\s;&|]+/)?bohr\s+sandbox\s+\+?delete\b'
+      min_matches: 1
+  - key: turn_budget
+    value:
+      max: 30
+  scoring_checklist:
+  - id: xyz_artifact
+    criterion: b7_water_optimized.xyz written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: log_artifact
+    criterion: b7_log.txt written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: xyz_has_atoms
+    criterion: XYZ file contains O and H atoms.
+    axis: correctness
+    verify: text_file_contains_all
+  - id: xyz_three_atoms
+    criterion: XYZ file header indicates 3 atoms (water molecule).
+    axis: correctness
+    verify: text_file_regex
+  - id: log_has_energy
+    criterion: Log shows energy/convergence information.
+    axis: correctness
+    verify: text_file_regex
+  - id: sandbox_created_via_cli
+    criterion: A sac-cpu-small sandbox was created through bohr-cli.
+    axis: grounding
+    verify: tool_args_regex
+  - id: script_uploaded_via_cli
+    criterion: The provided optimization script was uploaded to the sandbox through bohr-cli.
+    axis: grounding
+    verify: tool_args_regex
+  - id: script_executed_via_cli
+    criterion: The optimization script was executed in the sandbox through bohr-cli.
+    axis: grounding
+    verify: tool_args_regex
+  - id: results_downloaded_via_cli
+    criterion: Both the optimized structure and log were downloaded through bohr-cli.
+    axis: grounding
+    verify: tool_args_regex
+  - id: sandbox_deleted_via_cli
+    criterion: The sandbox was deleted through bohr-cli after the results were retrieved.
+    axis: grounding
+    verify: tool_args_regex
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+
+- id: BWO_dp_compare_008_20260715
+  capability: workflow_orchestration
+  domain: agnostic
+  scope: platform
+  intent: Test agent can run comparison tests on two models in sandbox.
+  human_prompt_seed: |
+    利用 bohr-cli，我有两个势函数模型想对比精度，用同一组测试集分别跑 dp test，结果对比一下。
+    对比结果保存到 `b8_comparison.json`，记录各模型的误差指标和结论。JSON 顶层使用 `model_a`、`model_b` 和 `conclusion`；`model_a` 与 `model_b` 各含数值字段 `rmse_e` 和 `rmse_f`。
+    注：如果环境里没有模型文件，可以用 mock 数据演示流程，但要体现完整的 dp test 对比逻辑。
+  tags:
+  - bohr-cli
+  reference_answers:
+  - key: artifact
+    value: b8_comparison.json
+  - key: has_model_a
+    value:
+      filename: b8_comparison.json
+      pattern: '"model_a"'
+  - key: has_model_b
+    value:
+      filename: b8_comparison.json
+      pattern: '"model_b"'
+  - key: has_rmse
+    value:
+      filename: b8_comparison.json
+      pattern: '"rmse_[ef]"\s*:\s*[\d.]'
+  - key: has_conclusion
+    value:
+      filename: b8_comparison.json
+      pattern: '"conclusion"\s*:\s*"[^"]{10,}"'
+  - key: turn_budget
+    value:
+      max: 15
+  scoring_checklist:
+  - id: artifact
+    criterion: b8_comparison.json written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: has_model_a
+    criterion: model_a results present.
+    axis: correctness
+    verify: text_file_regex
+  - id: has_model_b
+    criterion: model_b results present.
+    axis: correctness
+    verify: text_file_regex
+  - id: has_rmse
+    criterion: RMSE metrics reported as numbers.
+    axis: correctness
+    verify: text_file_regex
+  - id: has_conclusion
+    criterion: Comparison conclusion provided.
+    axis: correctness
+    verify: text_file_regex
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+
+- id: BWO_stop_running_009_20260715_v4
+  capability: workflow_orchestration
+  domain: agnostic
+  scope: platform
+  intent: Test agent stops only a self-submitted active job and records the outcome.
+  human_prompt_seed: |
+    利用 Bohr-CLI，帮我提交一个临时 CPU 任务来复现问题：镜像使用 `registry.dp.tech/dptech/ubuntu:22.04-py3.10-cuda12.1`，机型 `c2_m4_cpu`，命令为 `echo "b9 started" > b9_started.txt && sleep 600`，任务名以 `b9-stop-running-` 开头并带上唯一后缀。
+    任务提交后先确认一下状态；它还没结束时我发现输入有误，请把刚提交的这个任务停掉，别影响其他任务，处理后再查询确认结果。将实际任务 ID、任务名、镜像、机型、命令、每次状态查询结果、停止动作和最终状态保存到工作区根目录的 `b9_actions.json`；状态保留 Bohr-CLI 返回的整数状态码。
+  tags:
+  - bohr-cli
+  reference_answers:
+  - key: artifact
+    value: b9_actions.json
+    workspace_resolve: root
+  - key: stop_execution
+    value:
+      filename: b9_actions.json
+      image: registry.dp.tech/dptech/ubuntu:22.04-py3.10-cuda12.1
+      machine_type: c2_m4_cpu
+      command: echo "b9 started" > b9_started.txt && sleep 600
+      job_name_prefix: b9-stop-running-
+    workspace_resolve: root
+  - key: turn_budget
+    value:
+      max: 30
+  scoring_checklist:
+  - id: artifact
+    criterion: b9_actions.json written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: stop_execution
+    criterion: The record identifies the self-submitted job and its configuration, preserves status history, and records a successful stop action or stopped state.
+    axis: correctness
+    verify: bohr_job_stop_execution
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+
+- id: BWO_node_dataset_010_20260715
+  capability: workflow_orchestration
+  domain: agnostic
+  scope: platform
+  intent: Test agent assesses hot-mount feasibility for running nodes.
+  priority: P1
+  human_prompt_seed: |
+    利用 bohr-cli，我有节点在跑，能不能动态再挂一个数据集进去？先看看我有哪些节点和数据集。
+    分析结果保存到 `b10_analysis.json`，记录节点和数据集状态，以及是否支持热挂载。JSON 顶层使用 `nodes` 和 `hot_mount_supported`。
+  tags:
+  - bohr-cli
+  reference_answers:
+  - key: artifact
+    value: b10_analysis.json
+  - key: has_nodes
+    value:
+      filename: b10_analysis.json
+      pattern: '"nodes"'
+  - key: has_mount_assessment
+    value:
+      filename: b10_analysis.json
+      pattern: '"hot_mount_supported"\s*:\s*(true|false)'
+  - key: queried_via_cli
+    tool_name: Bash
+    tool_arg: command
+    value:
+      pattern: '(?:^|[\n;&|]\s*)(?:[^\s;&|]+/)?bohr\s+(?:node\s+list|dataset\s+list)\b'
+      min_matches: 2
+  - key: turn_budget
+    value:
+      max: 8
+  scoring_checklist:
+  - id: artifact
+    criterion: b10_analysis.json written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: has_nodes
+    criterion: Nodes listed.
+    axis: correctness
+    verify: text_file_regex
+  - id: has_mount_assessment
+    criterion: Hot mount feasibility assessed with boolean.
+    axis: correctness
+    verify: text_file_regex
+  - id: queried_via_cli
+    criterion: Nodes and datasets were queried through bohr-cli.
+    axis: grounding
+    verify: tool_args_regex
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+
+# D-series: Composite workflows
+
+- id: BWO_material_screen_D1_20260715
+  capability: workflow_orchestration
+  domain: agnostic
+  scope: platform
+  intent: Test agent designs a multi-step material screening workflow with real cost estimation.
+  human_prompt_seed: |
+    利用 bohr-cli，我要做新材料筛选：先从文献里找候选结构，然后平台上跑 DFT 初筛，给我一个可行方案加预算。
+    方案保存到 `d1_plan.json`，包含各步骤及预估费用、推荐机型。要求查询真实的机型和价格信息。JSON 顶层使用 `steps`、`total_budget_cny` 和 `recommended_machine`；`steps` 为数组，每项含 `estimated_cost_cny`。
+  tags:
+  - bohr-cli
+  reference_answers:
+  - key: artifact
+    value: d1_plan.json
+  - key: has_steps
+    value:
+      filename: d1_plan.json
+      pattern: '"steps"\s*:\s*\['
+  - key: has_cost
+    value:
+      filename: d1_plan.json
+      pattern: '"estimated_cost_cny"\s*:\s*[\d.]'
+  - key: has_total
+    value:
+      filename: d1_plan.json
+      pattern: '"total_budget_cny"\s*:\s*[\d.]'
+  - key: has_machine
+    value:
+      filename: d1_plan.json
+      pattern: '"recommended_machine"\s*:\s*"[^"]+"'
+  - key: queried_via_cli
+    tool_name: Bash
+    tool_arg: command
+    value:
+      pattern: '(?:^|[\n;&|]\s*)(?:[^\s;&|]+/)?bohr\s+machine\s+\+?list\b'
+      min_matches: 1
+  - key: turn_budget
+    value:
+      max: 15
+  scoring_checklist:
+  - id: artifact
+    criterion: d1_plan.json written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: has_steps
+    criterion: Plan has multi-step workflow.
+    axis: correctness
+    verify: text_file_regex
+  - id: has_cost
+    criterion: Individual step costs estimated.
+    axis: correctness
+    verify: text_file_regex
+  - id: has_total
+    criterion: Total budget provided.
+    axis: correctness
+    verify: text_file_regex
+  - id: has_machine
+    criterion: Machine recommendation given.
+    axis: correctness
+    verify: text_file_regex
+  - id: queried_via_cli
+    criterion: Machine or paper information was queried through bohr-cli.
+    axis: grounding
+    verify: tool_args_regex
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+
+- id: BWO_automation_D2_20260715
+  capability: workflow_orchestration
+  domain: agnostic
+  scope: platform
+  intent: Test agent can design a job-completion automation workflow honestly.
+  human_prompt_seed: |
+    利用 bohr-cli，能不能搞个自动化：任务跑完自动把结果写到我的数据库表里？
+    方案保存到 `d2_automation.md`，包含"## 轮询机制"和"## 数据流"和"## 可行性评估"三节。
+  tags:
+  - bohr-cli
+  reference_answers:
+  - key: artifact
+    value: d2_automation.md
+  - key: has_polling
+    value:
+      filename: d2_automation.md
+      pattern: (?m)^## .*轮询|^## .*[Pp]oll
+      flags: i
+  - key: has_dataflow
+    value:
+      filename: d2_automation.md
+      pattern: (?m)^## .*数据|^## .*[Dd]ata
+      flags: i
+  - key: has_feasibility
+    value:
+      filename: d2_automation.md
+      pattern: (?m)^## .*可行|^## .*[Ff]easib
+      flags: i
+  - key: turn_budget
+    value:
+      max: 8
+  scoring_checklist:
+  - id: artifact
+    criterion: d2_automation.md written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: has_polling
+    criterion: Has polling mechanism section.
+    axis: correctness
+    verify: text_file_regex
+  - id: has_dataflow
+    criterion: Has data flow section.
+    axis: correctness
+    verify: text_file_regex
+  - id: has_feasibility
+    criterion: Has feasibility assessment section.
+    axis: correctness
+    verify: text_file_regex
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+
+- id: BWO_pdf_params_D3_20260715
+  capability: workflow_orchestration
+  domain: agnostic
+  scope: platform
+  intent: Test agent extracts computation parameters from a paper and matches platform images.
+  human_prompt_seed: |
+    利用 bohr-cli，我想复现这篇论文的计算结果，帮我看看它用的什么软件什么参数，然后在平台上搜一下有没有对应的镜像。
+    提取结果保存到 `d3_params.json`，记录软件名称、版本、关键计算参数和匹配到的镜像。JSON 顶层使用 `software`、`parameters` 和 `functional`；`parameters` 为对象。
+  tags:
+  - bohr-cli
+  data_files:
+  - key: pdf_paper
+    path: data/bohr_cli/s41524-025-01739-7.pdf
+    description: npj Computational Materials paper for parameter extraction.
+  reference_answers:
+  - key: artifact
+    value: d3_params.json
+  - key: has_software
+    value:
+      filename: d3_params.json
+      pattern: '"software"\s*:\s*"[^"]+"'
+  - key: has_params
+    value:
+      filename: d3_params.json
+      pattern: '"parameters"\s*:\s*\{'
+  - key: has_functional
+    value:
+      filename: d3_params.json
+      pattern: '"functional"\s*:\s*"[^"]+"'
+  - key: image_searched_via_cli
+    tool_name: Bash
+    tool_arg: command
+    value:
+      pattern: '(?:^|[\n;&|]\s*)(?:[^\s;&|]+/)?bohr\s+image\s+\+?search\b'
+      min_matches: 1
+  - key: turn_budget
+    value:
+      max: 12
+  scoring_checklist:
+  - id: artifact
+    criterion: d3_params.json written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: has_software
+    criterion: Software identified from paper.
+    axis: correctness
+    verify: text_file_regex
+  - id: has_params
+    criterion: Parameters object present.
+    axis: correctness
+    verify: text_file_regex
+  - id: has_functional
+    criterion: Functional/method extracted.
+    axis: correctness
+    verify: text_file_regex
+  - id: image_searched_via_cli
+    criterion: Platform image was searched through bohr-cli.
+    axis: grounding
+    verify: tool_args_regex
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+
+- id: BWO_data_organize_D4_20260715
+  capability: workflow_orchestration
+  domain: agnostic
+  scope: platform
+  intent: Test agent can organize job results and identify missing data.
+  human_prompt_seed: |
+    利用 bohr-cli，论文要投稿了，帮我把计算数据从任务结果里整理出来，看看还差什么图表。
+    整理报告保存到 `d4_data_report.json`，记录分析了哪些任务、已有数据和缺失项。JSON 顶层使用 `jobs_analyzed` 和 `missing_items`；`missing_items` 为数组。
+  tags:
+  - bohr-cli
+  reference_answers:
+  - key: artifact
+    value: d4_data_report.json
+  - key: has_jobs
+    value:
+      filename: d4_data_report.json
+      pattern: '"jobs_analyzed"'
+  - key: has_missing
+    value:
+      filename: d4_data_report.json
+      pattern: '"missing_items"\s*:\s*\['
+  - key: jobs_queried_via_cli
+    tool_name: Bash
+    tool_arg: command
+    value:
+      pattern: '(?:^|[\n;&|]\s*)(?:[^\s;&|]+/)?bohr\s+job\s+\+?(list|describe)\b'
+      min_matches: 1
+  - key: turn_budget
+    value:
+      max: 12
+  scoring_checklist:
+  - id: artifact
+    criterion: d4_data_report.json written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: has_jobs
+    criterion: Contains jobs_analyzed field.
+    axis: correctness
+    verify: text_file_regex
+  - id: has_missing
+    criterion: Missing items identified.
+    axis: correctness
+    verify: text_file_regex
+  - id: jobs_queried_via_cli
+    criterion: Job results were queried through bohr-cli.
+    axis: grounding
+    verify: tool_args_regex
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+
+- id: BWO_lit_db_D5_20260715_v3
+  capability: workflow_orchestration
+  domain: agnostic
+  scope: platform
+  intent: Test agent designs a literature database construction pipeline.
+  human_prompt_seed: |
+    利用 bohr-cli，我想为钠离子电池正极材料做个文献数据库。帮我检索 20 篇高引文献，再根据检索结果设计用于记录关键性能参数的字段和批处理入库策略。
+    把结果保存到 `d5_literature_db.json`，其中记录 `schema.fields`、实际检索到的文献数 `papers_found` 和 `batch_strategy`；每个字段包含 `name`、`type` 和 `description`。JSON 顶层使用 `schema`、`papers_found` 和 `batch_strategy`；`schema` 包含 `fields`，`fields` 为数组，每项含 `name`、`type` 和 `description`。
+  tags:
+  - bohr-cli
+  reference_answers:
+  - key: artifact
+    value: d5_literature_db.json
+  - key: literature_db_schema
+    value:
+      filename: d5_literature_db.json
+      schema:
+        type: object
+        required:
+        - schema
+        - papers_found
+        - batch_strategy
+        properties:
+          schema:
+            type: object
+            required:
+            - fields
+            properties:
+              fields:
+                type: array
+                minItems: 3
+                items:
+                  type: object
+                  required:
+                  - name
+                  - type
+                  - description
+                  properties:
+                    name:
+                      type: string
+                      minLength: 1
+                    type:
+                      type: string
+                      minLength: 1
+                    description:
+                      type: string
+                      minLength: 1
+          papers_found:
+            type: integer
+            minimum: 20
+          batch_strategy:
+            oneOf:
+            - type: string
+              minLength: 10
+            - type: object
+              minProperties: 1
+  - key: paper_search_via_cli
+    tool_name: Bash
+    tool_arg: command
+    value:
+      pattern: '(?:^|[\n;&|]\s*)(?:(?:env|sudo)(?:\s+[^\s;&|]+)*\s+)?(?:[^\s;&|]+/)?bohr\s+paper\s+\+?search\b(?=[^\n;&|]*--size(?:\s+|=)20(?:\s|$))'
+      min_matches: 1
+  - key: turn_budget
+    value:
+      max: 15
+  scoring_checklist:
+  - id: artifact
+    criterion: d5_literature_db.json written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: literature_db_schema
+    criterion: Database design records at least 20 retrieved papers, at least three documented fields, and a non-empty batch strategy.
+    axis: correctness
+    verify: json_file_schema
+  - id: paper_search_via_cli
+    criterion: Twenty papers were requested through bohr-cli paper search.
+    axis: grounding
+    verify: tool_args_regex
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+
+- id: BWO_monitor_D6_20260715_v6
+  capability: workflow_orchestration
+  domain: agnostic
+  scope: platform
+  intent: Test agent can submit a job and poll its status until completion.
+  human_prompt_seed: |
+    利用 Bohr-CLI，先提一个 `echo "hello from bohrium" | tee result.txt && sleep 60` 的短任务（镜像用 `registry.dp.tech/dptech/ubuntu:22.04-py3.10-cuda12.1`，机型 `c2_m4_cpu`），然后轮询监控它，完成后把日志存下来。
+    将平台日志保存为工作区根目录下的 `d6_job.log`，并将实际提交参数、每次轮询结果和日志保存结果记录到 `d6_monitor.json`。记录应能关联实际任务，并清楚反映轮询过程和最终完成状态。
+  tags:
+  - bohr-cli
+  reference_answers:
+  - key: artifact
+    value: d6_monitor.json
+    workspace_resolve: root
+  - key: monitor_execution
+    value:
+      filename: d6_monitor.json
+      log_filename: d6_job.log
+      image: registry.dp.tech/dptech/ubuntu:22.04-py3.10-cuda12.1
+      machine_type: c2_m4_cpu
+      command: echo "hello from bohrium" | tee result.txt && sleep 60
+  - key: log_artifact
+    value: d6_job.log
+    workspace_resolve: root
+  - key: turn_budget
+    value:
+      max: 30
+  scoring_checklist:
+  - id: artifact
+    criterion: d6_monitor.json written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: monitor_execution
+    criterion: One matching job was submitted, repeatedly polled to successful completion, recorded, and followed by successful log retrieval.
+    axis: grounding
+    verify: bohr_job_monitor_execution
+  - id: log_artifact
+    criterion: Platform job log is saved as d6_job.log at workspace root.
+    axis: correctness
+    verify: artifact_exists
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+
+- id: BWO_node_ssh_scp_D7_20260715_v2
+  capability: workflow_orchestration
+  domain: agnostic
+  scope: platform
+  intent: Test agent creates a node, gets SSH info, and transfers a file.
+  priority: P1
+  human_prompt_seed: |
+    利用 bohr-cli，用我的 Bohrium 鉴权启动一个容器节点，镜像使用 `registry.dp.tech/dptech/ubuntu:22.04-py3.10-cuda12.1`，机型选择 T4 相关的最便宜配置。节点启动后获取 SSH 连接方式，并通过 scp 把工作区的 `test` 文件传到节点的 `/personal/test`。
+    完成后删除节点，避免继续计费。将实际操作结果保存到 `d7_node_ops.json`，记录 `node_id`、`image`、`machine_type`、`ssh_command`、`remote_path`、`file_transferred` 和 `node_deleted`；不要在文件中记录密码、私钥等敏感信息。
+  tags:
+  - bohr-cli
+  data_files:
+  - key: test_file
+    path: data/bohr_cli/test
+    description: Small test file for SCP transfer.
+  reference_answers:
+  - key: artifact
+    value: d7_node_ops.json
+    workspace_resolve: root
+  - key: node_ops_schema
+    value:
+      filename: d7_node_ops.json
+      schema:
+        type: object
+        required:
+        - node_id
+        - image
+        - machine_type
+        - ssh_command
+        - remote_path
+        - file_transferred
+        - node_deleted
+        properties:
+          node_id:
+            type: integer
+            minimum: 1
+          image:
+            const: registry.dp.tech/dptech/ubuntu:22.04-py3.10-cuda12.1
+          machine_type:
+            type: string
+            pattern: '[Tt]4'
+          ssh_command:
+            type: string
+            pattern: ^ssh\b
+          remote_path:
+            const: /personal/test
+          file_transferred:
+            const: true
+          node_deleted:
+            const: true
+  - key: resources_queried_via_cli
+    tool_name: Bash
+    tool_arg: command
+    value:
+      pattern: '(?:^|[\n;&|]\s*)(?:(?:env|sudo)(?:\s+[^\s;&|]+)*\s+)?(?:[^\s;&|]+/)?bohr\s+node\s+\+?resources\b'
+      min_matches: 1
+  - key: node_created_via_cli
+    tool_name: Bash
+    tool_arg: command
+    value:
+      pattern: '(?:^|[\n;&|]\s*)(?:(?:env|sudo)(?:\s+[^\s;&|]+)*\s+)?(?:[^\s;&|]+/)?bohr\s+node\s+\+?create\b'
+      min_matches: 1
+  - key: node_inspected_via_cli
+    tool_name: Bash
+    tool_arg: command
+    value:
+      pattern: '(?:^|[\n;&|]\s*)(?:(?:env|sudo)(?:\s+[^\s;&|]+)*\s+)?(?:[^\s;&|]+/)?bohr\s+node\s+\+?get\b'
+      min_matches: 1
+  - key: file_transferred_via_scp
+    tool_name: Bash
+    tool_arg: command
+    value:
+      pattern: '(?:^|[\n;&|]\s*)(?:[^\s;&|]+/)?(?:scp|sftp|rsync)\b(?=[^\n;&|]*/personal/)'
+      min_matches: 1
+  - key: node_deleted_via_cli
+    tool_name: Bash
+    tool_arg: command
+    value:
+      pattern: '(?:^|[\n;&|]\s*)(?:(?:env|sudo)(?:\s+[^\s;&|]+)*\s+)?(?:[^\s;&|]+/)?bohr\s+node\s+\+?delete\b'
+      min_matches: 1
+  - key: turn_budget
+    value:
+      max: 60
+  scoring_checklist:
+  - id: artifact
+    criterion: d7_node_ops.json written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: node_ops_schema
+    criterion: Operation record contains a real node ID, requested image and T4 machine, SSH command, successful transfer to /personal/test, and successful node cleanup.
+    axis: correctness
+    verify: json_file_schema
+  - id: resources_queried_via_cli
+    criterion: Node resources were queried through bohr-cli.
+    axis: grounding
+    verify: tool_args_regex
+  - id: node_created_via_cli
+    criterion: The node was created through bohr-cli.
+    axis: grounding
+    verify: tool_args_regex
+  - id: node_inspected_via_cli
+    criterion: Node status and SSH information were inspected through bohr-cli.
+    axis: grounding
+    verify: tool_args_regex
+  - id: file_transferred_via_scp
+    criterion: The test file was transferred to a /personal/ destination through scp/sftp/rsync.
+    axis: grounding
+    verify: tool_args_regex
+  - id: node_deleted_via_cli
+    criterion: The node was deleted through bohr-cli after transfer.
+    axis: grounding
+    verify: tool_args_regex
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+
+- id: BWO_group_terminate_011_20260716
+  capability: workflow_orchestration
+  domain: agnostic
+  scope: platform
+  intent: Test agent creates a job group, submits jobs into it, and terminates the group.
+  human_prompt_seed: |
+    利用 bohr-cli，帮我验证一下任务组的批量控制能力：建一个任务组，往里面提两个会跑很久的临时任务（镜像 registry.dp.tech/dptech/ubuntu:22.04-py3.10-cuda12.1，机型 c2_m4_cpu，命令 sleep 300，任务名以 b11-grp-stop- 开头带唯一后缀），确认任务跑起来后按组停掉，最后确认每个任务都到了终止状态。
+    操作过程和最终各任务状态保存到 `b11_group_stop.json`。JSON 顶层使用 `job_group_id`、`jobs` 和 `group_terminated`；`jobs` 为数组，每项含 `job_id` 和 `final_status`。
+  tags:
+  - bohr-cli
+  reference_answers:
+  - key: artifact
+    value: b11_group_stop.json
+  - key: group_stop_schema
+    value:
+      filename: b11_group_stop.json
+      schema:
+        type: object
+        required:
+        - job_group_id
+        - jobs
+        - group_terminated
+        properties:
+          job_group_id:
+            type: integer
+            minimum: 1
+          jobs:
+            type: array
+            minItems: 2
+            items:
+              type: object
+              required:
+              - job_id
+              - final_status
+              properties:
+                job_id:
+                  type: integer
+                  minimum: 1
+                final_status:
+                  oneOf:
+                  - type: integer
+                  - type: string
+                    minLength: 1
+          group_terminated:
+            type: boolean
+            const: true
+  - key: group_created_via_cli
+    tool_name: Bash
+    tool_arg: command
+    value:
+      pattern: '(?:^|[\n;&|]\s*)(?:[^\s;&|]+/)?bohr\s+job_group\s+\+?create\b'
+      min_matches: 1
+      max_matches: 1
+  - key: jobs_submitted_via_cli
+    tool_name: Bash
+    tool_arg: command
+    value:
+      pattern: '(?:^|[\n;&|]\s*)(?:[^\s;&|]+/)?bohr\s+job\s+\+?submit\b'
+      min_matches: 2
+  - key: group_terminated_via_cli
+    tool_name: Bash
+    tool_arg: command
+    value:
+      pattern: '(?:^|[\n;&|]\s*)(?:[^\s;&|]+/)?bohr\s+job_group\s+\+?terminate\b'
+      min_matches: 1
+  - key: turn_budget
+    value:
+      max: 25
+  scoring_checklist:
+  - id: artifact
+    criterion: b11_group_stop.json written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: group_stop_schema
+    criterion: Records a positive group ID, at least two jobs with IDs and terminal status, and confirms group termination.
+    axis: correctness
+    verify: json_file_schema
+  - id: group_created_via_cli
+    criterion: Exactly one job group was created through bohr-cli.
+    axis: grounding
+    verify: tool_args_regex
+  - id: jobs_submitted_via_cli
+    criterion: At least two jobs were submitted through bohr-cli.
+    axis: grounding
+    verify: tool_args_regex
+  - id: group_terminated_via_cli
+    criterion: The job group was terminated through bohr-cli.
+    axis: grounding
+    verify: tool_args_regex
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+
+- id: BWO_event_consume_012_20260717
+  capability: workflow_orchestration
+  domain: agnostic
+  scope: platform
+  intent: Test agent submits a short job and consumes the corresponding completion event from the platform.
+  human_prompt_seed: |
+    利用 bohr-cli，帮我验证一下平台事件消费能力：提交一个唯一命名的短任务（镜像 registry.dp.tech/dptech/ubuntu:22.04-py3.10-cuda12.1，机型 c2_m4_cpu，命令 echo "event-test-done"，任务名以 b12-evt- 开头带唯一后缀），等它跑完后从平台事件中找到对应的完成事件，把事件内容和任务最终状态交叉核对。
+    操作记录保存到 `b12_event.json`。JSON 顶层使用 `job_id`、`job_name`、`event_found` 和 `final_status_match`。
+  tags:
+  - bohr-cli
+  reference_answers:
+  - key: artifact
+    value: b12_event.json
+  - key: event_schema
+    value:
+      filename: b12_event.json
+      schema:
+        type: object
+        required:
+        - job_id
+        - job_name
+        - event_found
+        - final_status_match
+        properties:
+          job_id:
+            type: integer
+            minimum: 1
+          job_name:
+            type: string
+            pattern: ^b12-evt-
+          event_found:
+            type: boolean
+            const: true
+          final_status_match:
+            type: boolean
+            const: true
+  - key: job_submitted_via_cli
+    tool_name: Bash
+    tool_arg: command
+    value:
+      pattern: '(?:^|[\n;&|]\s*)(?:[^\s;&|]+/)?bohr\s+job\s+\+?submit\b'
+      min_matches: 1
+  - key: event_consumed_via_cli
+    tool_name: Bash
+    tool_arg: command
+    value:
+      pattern: '(?:^|[\n;&|]\s*)(?:[^\s;&|]+/)?bohr\s+event\s+\+?consume\b'
+      min_matches: 1
+  - key: turn_budget
+    value:
+      max: 25
+  scoring_checklist:
+  - id: artifact
+    criterion: b12_event.json written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: event_schema
+    criterion: Records job ID with b12-evt- prefix name, confirms event found and status matches.
+    axis: correctness
+    verify: json_file_schema
+  - id: job_submitted_via_cli
+    criterion: Job was submitted through bohr-cli.
+    axis: grounding
+    verify: tool_args_regex
+  - id: event_consumed_via_cli
+    criterion: Event was consumed through bohr-cli.
+    axis: grounding
+    verify: tool_args_regex
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget

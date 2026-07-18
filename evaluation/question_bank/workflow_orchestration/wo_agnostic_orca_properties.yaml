@@ -1,0 +1,520 @@
+version: v5
+capability: workflow_orchestration
+domain: agnostic
+questions:
+- id: WO_orca_homo_lumo_benzene_001_20260629
+  capability: workflow_orchestration
+  domain: agnostic
+  intent: Compute HOMO/LUMO gap of benzene using ORCA B3LYP.
+  human_prompt_seed: 用 ORCA B3LYP 计算苯（C₆H₆）的 HOMO-LUMO gap。
+  tags:
+  - eng_orca
+  data_files: []
+  reference_answers:
+  - key: homo_lumo_gap_eV
+    value: 6.66
+    tolerance: 0.5
+  - key: turn_budget
+    value:
+      max: 20
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 12000
+  scoring_checklist:
+  - id: homo_lumo_gap_eV
+    criterion: Benzene HOMO-LUMO gap is within tolerance of ~6.66 eV.
+    axis: correctness
+    verify: numerical_range
+  - id: orbital_identification
+    criterion: Report identifies HOMO and LUMO orbital energies separately.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: grounding_source
+    criterion: Gap value derived from ORCA output, not literature.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: no_retries
+    criterion: No repeated identical submissions.
+    axis: efficiency
+    verify: no_retries
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Duration within budget.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Token usage within budget.
+    axis: efficiency
+    verify: token_budget
+
+- id: WO_orca_fukui_benzene_001_20260629
+  capability: workflow_orchestration
+  domain: agnostic
+  intent: Compute Fukui functions (f+, f-) of benzene using ORCA.
+  human_prompt_seed: 用 ORCA 计算苯的福井函数 f⁺ 和 f⁻，判断亲电/亲核反应活性位点。
+  tags:
+  - eng_orca
+  data_files: []
+  reference_answers:
+  - key: fukui_f_plus
+    value: 0.10
+    tolerance: 0.03
+  - key: fukui_f_minus
+    value: 0.10
+    tolerance: 0.03
+  - key: turn_budget
+    value:
+      max: 20
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 12000
+  scoring_checklist:
+  - id: fukui_f_plus
+    criterion: Fukui f+ per carbon is ~0.10 (due to benzene symmetry).
+    axis: correctness
+    verify: numerical_range
+  - id: fukui_f_minus
+    criterion: Fukui f- per carbon is ~0.10.
+    axis: correctness
+    verify: numerical_range
+  - id: symmetry_recognized
+    criterion: Report recognizes that all C atoms in benzene are equivalent so f+≈f−.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: grounding_source
+    criterion: Values from N/N+1/N-1 electron calculations, not assumed.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: no_retries
+    criterion: No repeated identical submissions.
+    axis: efficiency
+    verify: no_retries
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Duration within budget.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Token usage within budget.
+    axis: efficiency
+    verify: token_budget
+
+- id: WO_orca_reaction_path_co2_001_20260629
+  capability: workflow_orchestration
+  domain: agnostic
+  intent: Compute reaction path for CO2 hydrogenation using ORCA PBE.
+  human_prompt_seed: 用 ORCA PBE 计算 CO₂ 加氢反应路径（CO₂→HCOOH 方向），给出各步的 ΔG。
+  tags:
+  - eng_orca
+  data_files: []
+  reference_answers:
+  - key: required_fields
+    value:
+    - reaction_path
+    - CO2
+    - HCOOH
+    - delta_G
+    - transition_state
+  - key: turn_budget
+    value:
+      max: 30
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 18000
+  scoring_checklist:
+  - id: reaction_steps
+    criterion: Report identifies at least 2-3 elementary steps with intermediates and transition states.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: energy_profile
+    criterion: Free energy values (ΔG) reported for each step with correct sign convention.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: grounding_source
+    criterion: Energetics derived from ORCA geometry optimization and frequency calculations.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: no_retries
+    criterion: No repeated identical submissions.
+    axis: efficiency
+    verify: no_retries
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Duration within budget.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Token usage within budget.
+    axis: efficiency
+    verify: token_budget
+
+- id: WO_orca_ir_phenol_001_20260629
+  capability: workflow_orchestration
+  domain: agnostic
+  intent: Compute IR spectrum of phenol using ORCA B3LYP and identify O-H stretching frequency.
+  human_prompt_seed: 用 ORCA B3LYP 计算苯酚的红外光谱，找出 O-H 伸缩振动频率。
+  tags:
+  - eng_orca
+  data_files: []
+  reference_answers:
+  - key: oh_stretch_cm
+    value: 4150
+    tolerance: 300
+  - key: turn_budget
+    value:
+      max: 20
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 12000
+  scoring_checklist:
+  - id: oh_stretch_cm
+    criterion: O-H stretching frequency is in reasonable range (~3600-4200 cm⁻¹ for harmonic).
+    axis: correctness
+    verify: numerical_range
+  - id: mode_assignment
+    criterion: Report assigns the highest-frequency mode to O-H stretch.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: grounding_source
+    criterion: Frequencies from ORCA frequency calculation output.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: no_retries
+    criterion: No repeated identical submissions.
+    axis: efficiency
+    verify: no_retries
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Duration within budget.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Token usage within budget.
+    axis: efficiency
+    verify: token_budget
+
+- id: WO_orca_dipole_phenol_001_20260629
+  capability: workflow_orchestration
+  domain: agnostic
+  intent: Compute dipole moment of phenol using ORCA B3LYP.
+  human_prompt_seed: 用 ORCA B3LYP 计算苯酚的偶极矩。
+  tags:
+  - eng_orca
+  data_files: []
+  reference_answers:
+  - key: dipole_moment_D
+    value: 1.56
+    tolerance: 0.3
+  - key: turn_budget
+    value:
+      max: 20
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 12000
+  scoring_checklist:
+  - id: dipole_moment_D
+    criterion: Phenol dipole moment is within tolerance of ~1.56 D.
+    axis: correctness
+    verify: numerical_range
+  - id: grounding_source
+    criterion: Dipole moment from ORCA SCF output, not literature.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: no_retries
+    criterion: No repeated identical submissions.
+    axis: efficiency
+    verify: no_retries
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Duration within budget.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Token usage within budget.
+    axis: efficiency
+    verify: token_budget
+
+- id: WO_orca_charge_phenol_001_20260629
+  capability: workflow_orchestration
+  domain: agnostic
+  intent: Compute atomic charge distribution of phenol using ORCA Mulliken/Loewdin.
+  human_prompt_seed: 用 ORCA 计算苯酚的原子电荷分布，报告 O 原子的电荷。
+  tags:
+  - eng_orca
+  data_files: []
+  reference_answers:
+  - key: o_charge_e
+    value: -0.583
+    tolerance: 0.1
+  - key: turn_budget
+    value:
+      max: 20
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 12000
+  scoring_checklist:
+  - id: o_charge_e
+    criterion: Oxygen atom charge is within tolerance of ~−0.583 e.
+    axis: correctness
+    verify: numerical_range
+  - id: charge_method
+    criterion: Report states which population analysis method was used (Mulliken/Loewdin/Hirshfeld).
+    axis: correctness
+    verify: llm_binary_judge
+  - id: grounding_source
+    criterion: Charges from ORCA population analysis output.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: no_retries
+    criterion: No repeated identical submissions.
+    axis: efficiency
+    verify: no_retries
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Duration within budget.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Token usage within budget.
+    axis: efficiency
+    verify: token_budget
+
+- id: WO_orca_geometry_phenol_001_20260629
+  capability: workflow_orchestration
+  domain: agnostic
+  intent: Optimize phenol geometry using ORCA B3LYP and report C-O bond length.
+  human_prompt_seed: 用 ORCA B3LYP 优化苯酚结构，报告 C-O 键长和 C-O-H 键角。
+  tags:
+  - eng_orca
+  data_files: []
+  reference_answers:
+  - key: co_bond_A
+    value: 1.335
+    tolerance: 0.03
+  - key: turn_budget
+    value:
+      max: 20
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 12000
+  scoring_checklist:
+  - id: co_bond_A
+    criterion: C-O bond length is within tolerance of ~1.335 Å.
+    axis: correctness
+    verify: numerical_range
+  - id: geometry_complete
+    criterion: Report includes both C-O bond length and C-O-H angle.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: grounding_source
+    criterion: Geometry from ORCA optimization output.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: no_retries
+    criterion: No repeated identical submissions.
+    axis: efficiency
+    verify: no_retries
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Duration within budget.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Token usage within budget.
+    axis: efficiency
+    verify: token_budget
+
+- id: WO_orca_raman_phenol_001_20260629
+  capability: workflow_orchestration
+  domain: agnostic
+  intent: Compute Raman spectrum of phenol using ORCA PBE.
+  human_prompt_seed: 用 ORCA PBE 计算苯酚的拉曼光谱，报告活性模式数量。
+  tags:
+  - eng_orca
+  data_files: []
+  reference_answers:
+  - key: raman_modes
+    value: 33
+    tolerance: 3
+  - key: turn_budget
+    value:
+      max: 25
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 15000
+  scoring_checklist:
+  - id: raman_modes
+    criterion: Number of Raman-active modes is ~33 for phenol (3N-6 = 33 for 13 atoms).
+    axis: correctness
+    verify: numerical_range
+  - id: raman_computed
+    criterion: Agent correctly sets up Raman activity calculation (requires polarizability derivatives).
+    axis: correctness
+    verify: llm_binary_judge
+  - id: grounding_source
+    criterion: Mode count and activities from ORCA output.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: no_retries
+    criterion: No repeated identical submissions.
+    axis: efficiency
+    verify: no_retries
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Duration within budget.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Token usage within budget.
+    axis: efficiency
+    verify: token_budget
+
+- id: WO_orca_magnetic_fe_001_20260629
+  capability: workflow_orchestration
+  domain: agnostic
+  intent: Compute magnetic moment of Fe atom using ORCA UKS.
+  human_prompt_seed: 用 ORCA UKS 计算 Fe 原子的磁矩 μ。
+  tags:
+  - eng_orca
+  data_files: []
+  reference_answers:
+  - key: magnetic_moment_bohr
+    value: 4.90
+    tolerance: 0.3
+  - key: turn_budget
+    value:
+      max: 20
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 12000
+  scoring_checklist:
+  - id: magnetic_moment_bohr
+    criterion: Fe atom magnetic moment is within tolerance of ~4.90 μ_B.
+    axis: correctness
+    verify: numerical_range
+  - id: spin_state
+    criterion: Report identifies the correct spin multiplicity (2S+1=5, high-spin d⁶).
+    axis: correctness
+    verify: llm_binary_judge
+  - id: grounding_source
+    criterion: Magnetic moment from ORCA UKS calculation output.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: no_retries
+    criterion: No repeated identical submissions.
+    axis: efficiency
+    verify: no_retries
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Duration within budget.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Token usage within budget.
+    axis: efficiency
+    verify: token_budget
+
+- id: WO_orca_tddft_phenol_001_20260629
+  capability: workflow_orchestration
+  domain: agnostic
+  intent: Compute UV-Vis absorption spectrum of phenol using ORCA TD-DFT.
+  human_prompt_seed: 用 ORCA TD-DFT 计算苯酚的 UV-Vis 吸收光谱，报告最大吸收波长。
+  tags:
+  - eng_orca
+  data_files: []
+  reference_answers:
+  - key: lambda_max_nm
+    value: 167.5
+    tolerance: 20
+  - key: turn_budget
+    value:
+      max: 25
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 15000
+  scoring_checklist:
+  - id: lambda_max_nm
+    criterion: Maximum absorption wavelength is in reasonable range.
+    axis: correctness
+    verify: numerical_range
+  - id: excitation_states
+    criterion: Report includes multiple excited states with oscillator strengths.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: grounding_source
+    criterion: Spectral data from ORCA TD-DFT output.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: no_retries
+    criterion: No repeated identical submissions.
+    axis: efficiency
+    verify: no_retries
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Duration within budget.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Token usage within budget.
+    axis: efficiency
+    verify: token_budget

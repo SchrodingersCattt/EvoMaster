@@ -223,6 +223,11 @@ class TestRealLlmConfigVendorWiring:
 
         assert cfg.profiles["matmaster/qwen3.7-max"].provider == "litellm-qwen"
         assert cfg.profiles["matmaster/DeepSeek-v4-Pro"].provider == "litellm-deepseek"
+        flash = cfg.profiles["matmaster/DeepSeek-v4-Flash"]
+        assert flash.provider == "litellm-deepseek"
+        assert flash.model == "matmaster/DeepSeek-v4-Flash"
+        assert flash.reasoning_effort == "high"
+        assert flash.context_limit == 200_000
         assert cfg.profiles["gemini-3.1-pro-preview"].provider == "litellm"
 
     def test_default_profile_builds_qwen_vendor_transport(self) -> None:

@@ -24,3 +24,16 @@ def test_snapshot_eval_tooling_direct_matches_production_exp() -> None:
     assert "matmaster/skills" in joined.replace("\\", "/")
     assert "abacus" in snap["skill_names"]
     assert "matmaster_exp" not in snap
+
+
+def test_snapshot_eval_tooling_applies_builtin_exclusions() -> None:
+    snap = snapshot_eval_tooling(
+        repo_root=REPO_ROOT,
+        exp_name="direct",
+        excluded_builtin_tools=["Bohrium"],
+    )
+
+    assert snap["tools_builtin_excluded"] == ["Bohrium"]
+    assert "Bohrium" not in snap["builtin_tool_names"]
+    assert "Bohrium" not in snap["tool_names_surface"]
+    assert "Bash" in snap["builtin_tool_names"]

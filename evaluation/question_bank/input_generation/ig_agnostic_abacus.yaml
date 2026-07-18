@@ -206,17 +206,19 @@ questions:
   - key: manifest_schema
     value:
       filename: input_prep_manifest.json
-      required_keys:
-      - software
-      - task
-      - input_dir
-      - generated_files
-      - user_provided_files
-      - diagnostics
-      - auxiliary_files
-      - assumptions
-      - submit_ready
-      - bohrium_command
+      schema:
+        type: object
+        required:
+        - software
+        - task
+        - input_dir
+        - generated_files
+        - user_provided_files
+        - diagnostics
+        - auxiliary_files
+        - assumptions
+        - submit_ready
+        - bohrium_command
   - key: abacus_core_keywords
     value:
       filename: INPUT
@@ -333,14 +335,16 @@ questions:
   - key: manifest_schema
     value:
       filename: timoyalv_abacus_scf/input_prep_manifest.json
-      required_keys:
-      - software
-      - task
-      - input_dir
-      - generated_files
-      - auxiliary_files
-      - assumptions
-      - submit_ready
+      schema:
+        type: object
+        required:
+        - software
+        - task
+        - input_dir
+        - generated_files
+        - auxiliary_files
+        - assumptions
+        - submit_ready
   - key: manifest_auxiliary_names
     value:
       filename: timoyalv_abacus_scf/input_prep_manifest.json
@@ -427,17 +431,19 @@ questions:
   - key: manifest_schema
     value:
       filename: input_prep_manifest.json
-      required_keys:
-      - software
-      - task
-      - input_dir
-      - generated_files
-      - user_provided_files
-      - diagnostics
-      - auxiliary_files
-      - assumptions
-      - submit_ready
-      - bohrium_command
+      schema:
+        type: object
+        required:
+        - software
+        - task
+        - input_dir
+        - generated_files
+        - user_provided_files
+        - diagnostics
+        - auxiliary_files
+        - assumptions
+        - submit_ready
+        - bohrium_command
   - key: manifest_has_auxiliary_files
     value:
       filename: input_prep_manifest.json

@@ -51,9 +51,10 @@ RUN pip install --no-cache-dir \
     "cairosvg>=2.7" \
     "pint>=0.24"
 
-# MolCrysKit is published on PyPI; pull the latest release (unpinned, auto-updates on rebuild).
+# MolCrysKit provides the mck CLI for file-to-file molecular-crystal operations.
+# Pin for reproducible remote images with CLI support.
 RUN pip install --no-cache-dir \
-    "molcrys-kit" \
+    "molcrys-kit==0.5.1" \
     "packmol>=21.2.1"
 
 # 默认留空：本地可用 docker build --build-arg 传入。remote-image 流水线由 ci/remote_transfer_prepare.py

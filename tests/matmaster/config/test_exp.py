@@ -2,14 +2,28 @@
 
 from __future__ import annotations
 
-from matmaster.config.exp import ExpConfig, ExpSkillsConfig, ExpToolsConfig
+from matmaster.config.exp import (
+    ExpConfig,
+    ExpSkillsConfig,
+    ExpToolsConfig,
+    with_excluded_builtin_tools,
+)
 
 
 class TestExpToolsConfig:
     def test_defaults(self):
         cfg = ExpToolsConfig()
         assert cfg.builtin == ["*"]
+        assert cfg.excluded_builtin == []
         assert cfg.mcp == "*"
+
+    def test_add_excluded_builtin_tools(self):
+        cfg = with_excluded_builtin_tools(
+            ExpConfig(),
+            ["Bohrium", "", "Bohrium"],
+        )
+        assert cfg.tools.builtin == ["*"]
+        assert cfg.tools.excluded_builtin == ["Bohrium"]
 
 
 class TestExpConfig:

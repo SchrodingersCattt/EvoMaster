@@ -1,8 +1,4 @@
-"""Structure-file verify helpers kept out of evaluator_helpers.py.
-
-The main helper module is close to the project's 1000-line limit, so new
-structure-specific wrappers live here and are imported by the verify registry.
-"""
+"""Structure-file verify helpers imported by the verify registry."""
 
 from __future__ import annotations
 

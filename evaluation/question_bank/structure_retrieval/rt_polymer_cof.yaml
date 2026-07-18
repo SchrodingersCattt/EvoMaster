@@ -1,0 +1,751 @@
+version: v5
+capability: structure_retrieval
+domain: polymer
+questions:
+- id: RT_cof_topology_001_20260629
+  capability: structure_retrieval
+  domain: polymer
+  priority: P1
+  intent: Retrieve COF structures filtered by topology (sql) and chemical feature
+    (triazine nodes). Tests the agent's ability to correctly route to the CoRE COF
+    database, apply topology-based filtering, and identify structures matching both
+    topological and chemical constraints.
+  human_prompt_seed: '帮我从 COF 数据库中检索 sql 拓扑、含三嗪(triazine)节点的 COF 结构。
+
+
+    请完成以下交付：
+
+    1) `cof_retrieval_report.md`：说明检索条件、使用了哪个数据库、返回了多少候选、各候选的关键属性（拓扑、元素、孔径等）；
+
+    2) `cof_candidates.json`：至少包含 `query_topology`, `database_source`, `candidate_count`, `results`（每个结果含 name, topology, elements, pld, lcd）；
+
+    3) 将筛选出的第一个结构导出为 `COF_sql_triazine.cif`。'
+  tags:
+  - meta_database
+  data_files: []
+  reference_answers:
+  - key: retrieval_report
+    value: cof_retrieval_report.md
+  - key: candidates_json
+    value: cof_candidates.json
+  - key: cif_artifact
+    value: COF_sql_triazine.cif
+  - key: candidates_required_tokens
+    value:
+      filename: cof_candidates.json
+      tokens:
+      - query_topology
+      - database_source
+      - candidate_count
+      - results
+      - name
+      - topology
+      - elements
+      flags: i
+  - key: report_required_tokens
+    value:
+      filename: cof_retrieval_report.md
+      tokens:
+      - sql
+      - triazine
+      - COF
+      - 数据库
+      - 候选
+      flags: i
+  - key: cif_parsable
+    value:
+      filename: COF_sql_triazine.cif
+  - key: turn_budget
+    value:
+      max: 10
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 8000
+  scoring_checklist:
+  - id: retrieval_report
+    criterion: '[Must] Agent writes `cof_retrieval_report.md` to workspace.'
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+  - id: candidates_json
+    criterion: '[Must] Agent writes `cof_candidates.json` to workspace.'
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+  - id: cif_artifact
+    criterion: '[Must] Agent writes `COF_sql_triazine.cif` to workspace.'
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+  - id: cif_parsable
+    criterion: '[Must] COF_sql_triazine.cif is parsable as a valid structure file.'
+    axis: correctness
+    verify: struct_file_parsable
+    weight: 1.5
+  - id: correct_topology
+    criterion: The retrieved structure(s) have sql topology. The candidate list should
+      show topology=sql for the selected structure. If the structure doesn't have sql
+      topology, the retrieval is incorrect.
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 2.5
+  - id: contains_triazine
+    criterion: The selected structure contains triazine (C3N3) moieties, evidenced by
+      having both C and N elements with N in the framework backbone (not just pendant).
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 2.0
+  - id: candidates_required_tokens
+    criterion: Candidates JSON has all required metadata fields.
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+  - id: grounding_source
+    criterion: All reported structures come from actual retrieval results (corecof or
+      optimade), no fabricated COF names or properties.
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 2.0
+  - id: no_retries
+    criterion: No repeated identical retrieval calls with the same parameters.
+    axis: efficiency
+    verify: no_retries
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Duration is within budget.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total tokens are within budget.
+    axis: efficiency
+    verify: token_budget
+
+- id: RT_cof_name_001_20260629
+  capability: structure_retrieval
+  domain: polymer
+  priority: P1
+  intent: Retrieve a specific named COF structure (COF-LZU1) and report its structural
+    metadata. Tests name-based exact retrieval from the COF database and the agent's
+    ability to validate that the returned structure matches the query name.
+  human_prompt_seed: '检索 COF-LZU1 的晶体结构，并报告其基本结构信息。
+
+
+    请完成以下交付：
+
+    1) `COF_LZU1.cif`：导出结构文件；
+
+    2) `cof_lzu1_info.json`：包含 `name`, `topology`, `elements`, `formula`, `space_group`,
+    `pld`, `lcd`, `surface_area`, `type`(2D/3D), `database_source`；
+
+    3) 在报告中确认这是否确实是亚胺键连接的 hcb 拓扑 COF。'
+  tags:
+  - meta_database
+  data_files: []
+  reference_answers:
+  - key: cif_artifact
+    value: COF_LZU1.cif
+  - key: info_json
+    value: cof_lzu1_info.json
+  - key: cif_parsable
+    value:
+      filename: COF_LZU1.cif
+  - key: info_required_tokens
+    value:
+      filename: cof_lzu1_info.json
+      tokens:
+      - name
+      - topology
+      - elements
+      - formula
+      - space_group
+      - database_source
+      - COF-LZU1
+      flags: i
+  - key: turn_budget
+    value:
+      max: 10
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 7000
+  scoring_checklist:
+  - id: cif_artifact
+    criterion: '[Must] Agent writes `COF_LZU1.cif` to workspace.'
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+  - id: info_json
+    criterion: '[Must] Agent writes `cof_lzu1_info.json` to workspace.'
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+  - id: cif_parsable
+    criterion: '[Must] COF_LZU1.cif is parsable as a valid structure file.'
+    axis: correctness
+    verify: struct_file_parsable
+    weight: 1.5
+  - id: correct_name_match
+    criterion: The returned structure is actually COF-LZU1 (not a different COF). The
+      info JSON should confirm name contains "LZU1" and topology is "hcb".
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 3.0
+  - id: info_required_tokens
+    criterion: Info JSON contains all required structural metadata fields.
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+  - id: grounding_source
+    criterion: Structural claims (topology, bond type, elements) are grounded in actual
+      retrieval results, not fabricated from general knowledge about COF-LZU1.
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 2.0
+  - id: no_retries
+    criterion: No repeated identical retrieval calls.
+    axis: efficiency
+    verify: no_retries
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Duration is within budget.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total tokens are within budget.
+    axis: efficiency
+    verify: token_budget
+
+- id: RT_cof_elements_001_20260629
+  capability: structure_retrieval
+  domain: polymer
+  priority: P1
+  intent: Retrieve COF structures containing specific elements (B and N, characteristic
+    of boronate/borazine COFs). Tests element-based filtering and the agent's ability
+    to interpret "含硼和氮" as an element constraint rather than a formula query.
+  human_prompt_seed: '检索同时含有硼(B)和氮(N)元素的 COF 结构，返回最多 5 个候选。
+
+
+    请完成以下交付：
+
+    1) `bn_cof_candidates.json`：包含 `query_elements`, `candidate_count`, `results`（每个含 name,
+    formula, elements, topology, surface_area）；
+
+    2) `bn_cof_report.md`：分析这些 COF 的共同特征（连接化学类型、典型拓扑、孔径范围），解释为什么
+    B+N 组合在 COF 中常见（硼酸酯键、硼嗪键等）。'
+  tags:
+  - meta_database
+  data_files: []
+  reference_answers:
+  - key: candidates_json
+    value: bn_cof_candidates.json
+  - key: report
+    value: bn_cof_report.md
+  - key: candidates_required_tokens
+    value:
+      filename: bn_cof_candidates.json
+      tokens:
+      - query_elements
+      - candidate_count
+      - results
+      - name
+      - elements
+      - B
+      - N
+      flags: i
+  - key: report_required_tokens
+    value:
+      filename: bn_cof_report.md
+      tokens:
+      - 硼
+      - 氮
+      - COF
+      - 连接
+      flags: i
+  - key: turn_budget
+    value:
+      max: 10
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 8000
+  scoring_checklist:
+  - id: candidates_json
+    criterion: '[Must] Agent writes `bn_cof_candidates.json` to workspace.'
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+  - id: report
+    criterion: '[Must] Agent writes `bn_cof_report.md` to workspace.'
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+  - id: elements_correct
+    criterion: All reported candidate structures actually contain both B and N elements.
+      If any candidate lacks B or N, the filtering is wrong.
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 3.0
+  - id: candidates_required_tokens
+    criterion: Candidates JSON has all required fields.
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+  - id: chemistry_analysis
+    criterion: Report correctly explains B+N COF chemistry (boronate ester C2O2B linkage,
+      or borazine B3N3 rings) and identifies the connection type for retrieved structures.
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 2.0
+  - id: no_retries
+    criterion: No repeated identical retrieval calls.
+    axis: efficiency
+    verify: no_retries
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Duration is within budget.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total tokens are within budget.
+    axis: efficiency
+    verify: token_budget
+
+- id: RT_cof_pore_size_001_20260629
+  capability: structure_retrieval
+  domain: polymer
+  priority: P1
+  intent: Retrieve COF structures filtered by pore size property (PLD > 20 Angstrom).
+    Tests numeric property filtering — the agent must translate a natural-language
+    constraint into a database filter on the pld column and return structures meeting
+    the criterion.
+  human_prompt_seed: '检索孔限径(PLD)大于 20 埃的 COF 结构，按孔径从大到小排列，返回前 5 个。
+
+
+    请完成以下交付：
+
+    1) `large_pore_cof.json`：包含 `filter_criterion`, `results`（每个含 name, pld, lcd,
+    topology, surface_area, type）；
+
+    2) `large_pore_cof_report.md`：分析大孔 COF 的结构特征（什么样的拓扑/连接体长度容易产生大孔）；
+
+    3) 导出孔径最大的结构为 `largest_pore_cof.cif`。'
+  tags:
+  - meta_database
+  data_files: []
+  reference_answers:
+  - key: results_json
+    value: large_pore_cof.json
+  - key: report
+    value: large_pore_cof_report.md
+  - key: cif_artifact
+    value: largest_pore_cof.cif
+  - key: results_required_tokens
+    value:
+      filename: large_pore_cof.json
+      tokens:
+      - filter_criterion
+      - results
+      - name
+      - pld
+      - lcd
+      - topology
+      flags: i
+  - key: cif_parsable
+    value:
+      filename: largest_pore_cof.cif
+  - key: turn_budget
+    value:
+      max: 10
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 8000
+  scoring_checklist:
+  - id: results_json
+    criterion: '[Must] Agent writes `large_pore_cof.json` to workspace.'
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+  - id: report
+    criterion: '[Must] Agent writes `large_pore_cof_report.md` to workspace.'
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+  - id: cif_artifact
+    criterion: '[Must] Agent writes `largest_pore_cof.cif` to workspace.'
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+  - id: cif_parsable
+    criterion: '[Must] largest_pore_cof.cif is parsable as a valid structure file.'
+    axis: correctness
+    verify: struct_file_parsable
+    weight: 1.5
+  - id: pld_criterion_met
+    criterion: '[Must] All reported structures have PLD > 20 Angstrom. If any structure
+      has PLD <= 20, the filtering is incorrect.'
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 3.0
+  - id: results_required_tokens
+    criterion: Results JSON has all required fields.
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+  - id: pore_analysis
+    criterion: Report provides reasonable analysis of why certain COFs have large pores
+      (long linkers, expanded topologies) grounded in the retrieved data.
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.5
+  - id: no_retries
+    criterion: No repeated identical retrieval calls.
+    axis: efficiency
+    verify: no_retries
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Duration is within budget.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total tokens are within budget.
+    axis: efficiency
+    verify: token_budget
+
+- id: RT_cof_3d_001_20260629
+  capability: structure_retrieval
+  domain: polymer
+  priority: P1
+  intent: Retrieve 3D COF structures with dia topology. Tests multi-criteria filtering
+    combining dimensionality (type=3D) and topology (dia). The agent must correctly
+    apply both constraints simultaneously.
+  human_prompt_seed: '从 COF 数据库检索 3D 类型、dia 拓扑的 COF 结构。
+
+
+    请完成以下交付：
+
+    1) `3d_dia_cof.json`：包含 `query_type`, `query_topology`, `candidate_count`, `results`
+    （每个含 name, topology, type, formula, density, void_fraction）；
+
+    2) `3d_dia_report.md`：说明 3D COF 与 2D COF 在结构上的核心区别、dia 拓扑的连接规则（四面体节点+线性连接体），以及检索到的结构是否符合预期；
+
+    3) 导出第一个候选结构为 `COF_3D_dia.cif`。'
+  tags:
+  - meta_database
+  data_files: []
+  reference_answers:
+  - key: results_json
+    value: 3d_dia_cof.json
+  - key: report
+    value: 3d_dia_report.md
+  - key: cif_artifact
+    value: COF_3D_dia.cif
+  - key: results_required_tokens
+    value:
+      filename: 3d_dia_cof.json
+      tokens:
+      - query_type
+      - query_topology
+      - candidate_count
+      - results
+      - name
+      - topology
+      - type
+      - dia
+      - 3D
+      flags: i
+  - key: cif_parsable
+    value:
+      filename: COF_3D_dia.cif
+  - key: turn_budget
+    value:
+      max: 10
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 8000
+  scoring_checklist:
+  - id: results_json
+    criterion: '[Must] Agent writes `3d_dia_cof.json` to workspace.'
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+  - id: report
+    criterion: '[Must] Agent writes `3d_dia_report.md` to workspace.'
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+  - id: cif_artifact
+    criterion: '[Must] Agent writes `COF_3D_dia.cif` to workspace.'
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+  - id: cif_parsable
+    criterion: '[Must] COF_3D_dia.cif is parsable as a valid structure file.'
+    axis: correctness
+    verify: struct_file_parsable
+    weight: 1.5
+  - id: correct_type_topology
+    criterion: '[Must] Returned structures are 3D type with dia topology. A 2D structure
+      or one with hcb/sql topology FAILS this check.'
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 3.0
+  - id: results_required_tokens
+    criterion: Results JSON has all required metadata fields.
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+  - id: dimensional_understanding
+    criterion: Report correctly explains that 3D COFs require tetrahedral (Td) nodes
+      to extend in all three directions, and dia topology specifically uses 4-connected
+      nodes with linear linkers in a diamond net arrangement.
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 2.0
+  - id: no_retries
+    criterion: No repeated identical retrieval calls.
+    axis: efficiency
+    verify: no_retries
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Duration is within budget.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total tokens are within budget.
+    axis: efficiency
+    verify: token_budget
+
+- id: RT_cof_surface_area_001_20260629
+  capability: structure_retrieval
+  domain: polymer
+  priority: P2
+  intent: Retrieve COF structures with high surface area (>2000 m2/g) for gas storage
+    application screening. Tests the agent's ability to apply numeric surface area
+    filter and contextualize results for practical application.
+  human_prompt_seed: '帮我筛选比表面积大于 2000 m²/g 的 COF 材料，我想找适合甲烷储存的高孔隙率结构。
+
+
+    请完成以下交付：
+
+    1) `high_sa_cof.json`：包含 `filter_criterion`, `application`, `results`（每个含 name,
+    surface_area_m2g, void_fraction, pld, lcd, topology）；
+
+    2) `gas_storage_screening.md`：从检索结果中推荐 2-3 个最适合甲烷储存的候选，说明推荐理由
+    （孔径匹配甲烷动力学直径~3.8Å、高空隙率、合适拓扑）。'
+  tags:
+  - meta_database
+  data_files: []
+  reference_answers:
+  - key: results_json
+    value: high_sa_cof.json
+  - key: screening_report
+    value: gas_storage_screening.md
+  - key: results_required_tokens
+    value:
+      filename: high_sa_cof.json
+      tokens:
+      - filter_criterion
+      - application
+      - results
+      - surface_area
+      - void_fraction
+      - pld
+      flags: i
+  - key: report_required_tokens
+    value:
+      filename: gas_storage_screening.md
+      tokens:
+      - 甲烷
+      - 储存
+      - 孔径
+      - 推荐
+      flags: i
+  - key: turn_budget
+    value:
+      max: 12
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 10000
+  scoring_checklist:
+  - id: results_json
+    criterion: '[Must] Agent writes `high_sa_cof.json` to workspace.'
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+  - id: screening_report
+    criterion: '[Must] Agent writes `gas_storage_screening.md` to workspace.'
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+  - id: sa_criterion_met
+    criterion: All reported structures have surface area > 2000 m2/g.
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 2.5
+  - id: results_required_tokens
+    criterion: Results JSON has all required fields.
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+  - id: screening_rationale
+    criterion: Screening report provides scientifically reasonable recommendations
+      considering methane kinetic diameter (~3.8 Angstrom), Deliverable capacity
+      considerations, and pore-size matching. Does not recommend structures with
+      PLD < 3.8 Angstrom for methane storage.
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 2.5
+  - id: no_retries
+    criterion: No repeated identical retrieval calls.
+    axis: efficiency
+    verify: no_retries
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Duration is within budget.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total tokens are within budget.
+    axis: efficiency
+    verify: token_budget
+
+- id: RT_cof_comparison_001_20260629
+  capability: structure_retrieval
+  domain: polymer
+  priority: P2
+  intent: Compare structures from two different topologies (hcb vs sql) in terms of
+    pore properties. Tests the agent's ability to perform multiple constrained queries
+    and synthesize comparative analysis from retrieval results.
+  human_prompt_seed: '分别检索 hcb 拓扑和 sql 拓扑的 COF 各 3 个，对比两种拓扑在孔径(PLD/LCD)和比表面积上的差异。
+
+
+    请完成以下交付：
+
+    1) `topology_comparison.json`：包含 `hcb_results`（3个）和 `sql_results`（3个），每个含
+    name, topology, pld, lcd, surface_area_m2g；
+
+    2) `topology_comparison_report.md`：对比分析两组数据的孔径和比表面积分布差异，解释为什么不同拓扑会导致不同的孔道几何。'
+  tags:
+  - meta_database
+  data_files: []
+  reference_answers:
+  - key: comparison_json
+    value: topology_comparison.json
+  - key: comparison_report
+    value: topology_comparison_report.md
+  - key: json_required_tokens
+    value:
+      filename: topology_comparison.json
+      tokens:
+      - hcb_results
+      - sql_results
+      - name
+      - topology
+      - pld
+      - lcd
+      - surface_area
+      flags: i
+  - key: report_required_tokens
+    value:
+      filename: topology_comparison_report.md
+      tokens:
+      - hcb
+      - sql
+      - 孔径
+      - 对比
+      flags: i
+  - key: turn_budget
+    value:
+      max: 12
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 10000
+  scoring_checklist:
+  - id: comparison_json
+    criterion: '[Must] Agent writes `topology_comparison.json` to workspace.'
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+  - id: comparison_report
+    criterion: '[Must] Agent writes `topology_comparison_report.md` to workspace.'
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+  - id: correct_topology_separation
+    criterion: '[Must] hcb_results all have topology=hcb and sql_results all have
+      topology=sql. No mixing of topologies between groups.'
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 3.0
+  - id: json_required_tokens
+    criterion: Comparison JSON has all required fields.
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+  - id: comparison_grounded
+    criterion: The comparative analysis is grounded in the actual retrieved data (uses
+      real PLD/LCD/SA values from the results), not fabricated general statements about
+      topology-pore relationships.
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 2.0
+  - id: topology_explanation
+    criterion: Report correctly explains how topology affects pore geometry (hcb has
+      hexagonal channels from 3-connected nodes; sql has square channels from 4-connected
+      nodes; channel diameter depends on linker length and node size).
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.5
+  - id: no_retries
+    criterion: No repeated identical retrieval calls.
+    axis: efficiency
+    verify: no_retries
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Duration is within budget.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total tokens are within budget.
+    axis: efficiency
+    verify: token_budget

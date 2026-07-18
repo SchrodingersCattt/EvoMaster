@@ -5,11 +5,6 @@
       "transport": "http",
       "url": "https://dart-uuid1754393230.appspace.bohrium.com/mcp?token=b3a955c99823427683843616328023d8"
     },
-    "mat_doc": {
-      "headers": {},
-      "transport": "http",
-      "url": "http://pfmx1355864.bohrium.tech:50001/mcp"
-    },
     "mat_electron_microscope": {
       "headers": {},
       "transport": "sse",

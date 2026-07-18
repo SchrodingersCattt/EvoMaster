@@ -9,16 +9,16 @@ import json
 import re
 from pathlib import Path
 
+from jsonschema.exceptions import SchemaError
+from jsonschema.validators import validator_for
 
-def _resolve_file(workspace: Path, name: str) -> Path | None:
-    """Try direct child first, then recursive glob."""
-    direct = workspace / name
-    if direct.is_file():
-        return direct
-    for p in workspace.rglob(Path(name).name):
-        if p.is_file():
-            return p
-    return None
+from evaluation.validators._common import (
+    collect_positive_ids as _collect_json_identifiers,
+)
+from evaluation.validators._common import normalise_key as _normalise_key
+from evaluation.validators._common import positive_int as _positive_int
+from evaluation.validators._common import resolve_file as _resolve_file
+from evaluation.validators._common import walk_json as _walk_json
 
 
 def _traverse_dotted(obj: object, dotted_key: str) -> object | None:
@@ -38,11 +38,13 @@ def check_json_file_schema(
     workspace_dir: str | Path,
     *,
     filename: str,
-    required_keys: list[str] | None = None,
+    schema: dict[str, object] | bool | None,
 ) -> tuple[bool, str]:
-    """Check that a JSON file is valid and contains required keys."""
+    """Validate a JSON file against a standard JSON Schema."""
     if not filename:
         return False, 'json_file_schema: no filename provided'
+    if not isinstance(schema, (dict, bool)):
+        return False, 'json_file_schema: no valid schema provided'
     root = Path(workspace_dir)
     fpath = _resolve_file(root, filename)
     if fpath is None:
@@ -51,13 +53,358 @@ def check_json_file_schema(
         data = json.loads(fpath.read_text(encoding='utf-8'))
     except ValueError as exc:
         return False, f'{filename} is not valid JSON: {exc}'
+
+    validator_cls = validator_for(schema)
+    try:
+        validator_cls.check_schema(schema)
+    except SchemaError as exc:
+        return False, f'json_file_schema: invalid schema: {exc.message}'
+
+    errors = sorted(
+        validator_cls(schema).iter_errors(data),
+        key=lambda error: tuple(str(part) for part in error.absolute_path),
+    )
+    if errors:
+        shown: list[str] = []
+        for error in errors[:5]:
+            path = '$'
+            for part in error.absolute_path:
+                if isinstance(part, int):
+                    path += f'[{part}]'
+                else:
+                    path += f'.{part}'
+            shown.append(f'{path}: {error.message}')
+        suffix = f'; {len(errors) - 5} more error(s)' if len(errors) > 5 else ''
+        return False, f'{filename} failed JSON Schema: {"; ".join(shown)}{suffix}'
+    return True, f'{filename} is valid JSON matching the configured schema'
+
+
+def check_bohr_job_stop_record(
+    workspace_dir: str | Path,
+    *,
+    filename: str,
+    image: str,
+    machine_type: str,
+    command: str,
+    job_name_prefix: str,
+) -> tuple[bool, str]:
+    """Validate a Bohr job-stop record without prescribing its JSON layout."""
+    if not all((filename, image, machine_type, command, job_name_prefix)):
+        return False, 'bohr_job_stop_record: incomplete verifier configuration'
+
+    root = Path(workspace_dir)
+    fpath = _resolve_file(root, filename)
+    if fpath is None:
+        return False, f'{filename} not found in workspace'
+    try:
+        data = json.loads(fpath.read_text(encoding='utf-8'))
+    except ValueError as exc:
+        return False, f'{filename} is not valid JSON: {exc}'
+    return check_bohr_job_stop_record_data(
+        filename,
+        data,
+        image=image,
+        machine_type=machine_type,
+        command=command,
+        job_name_prefix=job_name_prefix,
+    )
+
+
+def check_bohr_job_stop_record_data(
+    filename: str,
+    data: object,
+    *,
+    image: str,
+    machine_type: str,
+    command: str,
+    job_name_prefix: str,
+) -> tuple[bool, str]:
+    """Record-level checks on already-parsed job-stop JSON."""
+    strings = [value.strip() for value in _walk_json(data) if isinstance(value, str)]
+    missing_values = [
+        label
+        for label, expected in (
+            ('image', image),
+            ('machine type', machine_type),
+            ('command', command),
+        )
+        if expected not in strings
+    ]
+    if missing_values:
+        return False, f'{filename}: missing {", ".join(missing_values)} evidence'
+    if not any(value.startswith(job_name_prefix) for value in strings):
+        return False, f'{filename}: no job name starts with {job_name_prefix!r}'
+
+    mappings = [value for value in _walk_json(data) if isinstance(value, dict)]
+    if not _collect_json_identifiers(data):
+        return False, f'{filename}: no positive job/task ID evidence'
+
+    raw_status_keys = {'status', 'statuscode'}
+    web_status_keys = {'webstatus', 'webstatuscode'}
+    status_records = 0
+    raw_statuses: list[int] = []
+    web_statuses: list[int] = []
+    for mapping in mappings:
+        record_has_status = False
+        for key, value in mapping.items():
+            if isinstance(value, bool) or not isinstance(value, int):
+                continue
+            normalised = _normalise_key(key)
+            if normalised in raw_status_keys:
+                raw_statuses.append(value)
+                record_has_status = True
+            elif normalised in web_status_keys:
+                web_statuses.append(value)
+                record_has_status = True
+        status_records += int(record_has_status)
+
+    if status_records < 2:
+        return False, f'{filename}: fewer than two status query records'
+    if not any(status in {0, 1, 3} for status in raw_statuses):
+        return False, f'{filename}: no active raw status evidence'
+
+    control_pattern = re.compile(
+        r'\b(?:bohr\s+job\s+)?(?:terminate|kill|cancel)\b', re.I
+    )
+    if not any(control_pattern.search(value) for value in strings):
+        return False, f'{filename}: no stop action evidence'
+
+    def _is_success(value: object) -> bool:
+        if value is True:
+            return True
+        if isinstance(value, str):
+            return value.strip().lower() in {'ok', 'success', 'succeeded', 'successful'}
+        if isinstance(value, dict):
+            return any(
+                _normalise_key(key) in {'ok', 'success', 'status', 'result'}
+                and _is_success(child)
+                for key, child in value.items()
+            )
+        return False
+
+    successful_control = any(
+        any(
+            _normalise_key(key) in {'action', 'command', 'commandline', 'method'}
+            and isinstance(value, str)
+            and control_pattern.search(value)
+            for key, value in mapping.items()
+        )
+        and any(
+            _normalise_key(key) in {'ok', 'success', 'status', 'result'}
+            and _is_success(value)
+            for key, value in mapping.items()
+        )
+        for mapping in mappings
+    )
+    stopped_status = -1 in raw_statuses or -1 in web_statuses or 5 in web_statuses
+    if not successful_control and not stopped_status:
+        return False, f'{filename}: no successful stop action or stopped state evidence'
+
+    return (
+        True,
+        f'{filename}: job identity, configuration, status history, and stop action '
+        'are recorded',
+    )
+
+
+def check_bohr_job_upgrade_record(
+    workspace_dir: str | Path,
+    *,
+    filename: str,
+    seed_id: int,
+    source_machine_pattern: str,
+    target_machine_pattern: str,
+    image: str,
+    command: str,
+) -> tuple[bool, str]:
+    """Validate a Bohr job upgrade record without prescribing its JSON layout."""
+    if (
+        not filename
+        or seed_id <= 0
+        or not all((source_machine_pattern, target_machine_pattern, image, command))
+    ):
+        return False, 'bohr_job_upgrade_record: incomplete verifier configuration'
+
+    root = Path(workspace_dir)
+    fpath = _resolve_file(root, filename)
+    if fpath is None:
+        return False, f'{filename} not found in workspace'
+    try:
+        data = json.loads(fpath.read_text(encoding='utf-8'))
+    except ValueError as exc:
+        return False, f'{filename} is not valid JSON: {exc}'
+    return check_bohr_job_upgrade_record_data(
+        filename,
+        data,
+        seed_id=seed_id,
+        source_machine_pattern=source_machine_pattern,
+        target_machine_pattern=target_machine_pattern,
+        image=image,
+        command=command,
+    )
+
+
+def check_bohr_job_upgrade_record_data(
+    filename: str,
+    data: object,
+    *,
+    seed_id: int,
+    source_machine_pattern: str,
+    target_machine_pattern: str,
+    image: str,
+    command: str,
+) -> tuple[bool, str]:
+    """Record-level checks on already-parsed job-upgrade JSON."""
+    strings = [value.strip() for value in _walk_json(data) if isinstance(value, str)]
+    identifiers = _collect_json_identifiers(data)
+
+    if seed_id not in identifiers:
+        return False, f'{filename}: supplied source task identifier is not recorded'
+    if not any(identifier != seed_id for identifier in identifiers):
+        return False, f'{filename}: no distinct positive resubmitted job identifier'
+    if not any(re.search(source_machine_pattern, value) for value in strings):
+        return False, f'{filename}: source machine evidence is missing'
+    if not any(re.search(target_machine_pattern, value) for value in strings):
+        return False, f'{filename}: target A100 machine evidence is missing'
+    if image not in strings:
+        return False, f'{filename}: preserved image evidence is missing'
+    if command not in strings:
+        return False, f'{filename}: preserved command evidence is missing'
+
+    return (
+        True,
+        f'{filename}: source and resubmitted jobs, machine change, image, and command '
+        'are recorded',
+    )
+
+
+def check_bohr_gpu_comparison_record(
+    workspace_dir: str | Path,
+    *,
+    filename: str,
+) -> tuple[bool, str]:
+    """Check that a recommended Bohr machine is an in-stock listed candidate."""
+    if not filename:
+        return False, 'bohr_gpu_comparison_record: no filename provided'
+
+    root = Path(workspace_dir)
+    fpath = _resolve_file(root, filename)
+    if fpath is None:
+        return False, f'{filename} not found in workspace'
+    try:
+        data = json.loads(fpath.read_text(encoding='utf-8'))
+    except ValueError as exc:
+        return False, f'{filename} is not valid JSON: {exc}'
+
     if not isinstance(data, dict):
-        return False, f'{filename} top-level is {type(data).__name__}, expected object'
-    keys = required_keys or []
-    missing = [k for k in keys if k not in data]
-    if missing:
-        return False, f'{filename} missing keys: {missing}'
-    return True, f'{filename} valid JSON with all {len(keys)} required keys'
+        return False, f'{filename}: top-level value must be an object'
+    candidates = data.get('available_machines')
+    recommendation = data.get('recommendation')
+    if not isinstance(candidates, list) or not isinstance(recommendation, dict):
+        return False, f'{filename}: missing candidate list or recommendation object'
+
+    selected = recommendation.get('machine_type')
+    if not isinstance(selected, str) or not selected.strip():
+        return False, f'{filename}: recommendation has no machine_type'
+
+    def _normalise_machine_type(value: object) -> str:
+        if not isinstance(value, str):
+            return ''
+        return re.sub(r'\s+', ' ', value).strip().casefold()
+
+    selected_normalised = _normalise_machine_type(selected)
+    matches = [
+        candidate
+        for candidate in candidates
+        if isinstance(candidate, dict)
+        and _normalise_machine_type(candidate.get('machine_type'))
+        == selected_normalised
+    ]
+    if not matches:
+        return False, f'{filename}: recommended machine is not in available_machines'
+    if not any(candidate.get('has_stock') is True for candidate in matches):
+        return False, f'{filename}: recommended machine is not marked in stock'
+
+    return True, f'{filename}: recommended machine is a listed in-stock candidate'
+
+
+def check_bohr_parameter_sweep_record(
+    workspace_dir: str | Path,
+    *,
+    filename: str,
+) -> tuple[bool, str]:
+    """Validate grouped 300-1000 K sweep semantics without prescribing layout."""
+    if not filename:
+        return False, 'bohr_parameter_sweep_record: no filename provided'
+
+    root = Path(workspace_dir)
+    fpath = _resolve_file(root, filename)
+    if fpath is None:
+        return False, f'{filename} not found in workspace'
+    try:
+        data = json.loads(fpath.read_text(encoding='utf-8'))
+    except ValueError as exc:
+        return False, f'{filename} is not valid JSON: {exc}'
+    return check_bohr_parameter_sweep_record_data(filename, data)
+
+
+def check_bohr_parameter_sweep_record_data(
+    filename: str,
+    data: object,
+) -> tuple[bool, str]:
+    """Record-level checks on already-parsed parameter-sweep JSON."""
+
+    def _temperature(value: object) -> int | None:
+        if isinstance(value, bool):
+            return None
+        if isinstance(value, int):
+            return value
+        if isinstance(value, str) and value.isdigit():
+            return int(value)
+        return None
+
+    group_ids: set[int] = set()
+    jobs: list[tuple[int, int]] = []
+    group_keys = {'groupid', 'jobgroupid', 'taskgroupid'}
+    for mapping in (value for value in _walk_json(data) if isinstance(value, dict)):
+        normalised = {_normalise_key(key): value for key, value in mapping.items()}
+        for key in group_keys:
+            if key not in normalised:
+                continue
+            group_id = _positive_int(normalised[key])
+            if group_id is None:
+                return False, f'{filename}: task group ID must be positive'
+            group_ids.add(group_id)
+
+        if 'temperaturek' not in normalised or 'jobid' not in normalised:
+            continue
+        temperature = _temperature(normalised['temperaturek'])
+        job_id = _positive_int(normalised['jobid'])
+        if temperature is None:
+            return False, f'{filename}: temperature_K must be an integer'
+        if job_id is None:
+            return False, f'{filename}: every job_id must be positive'
+        jobs.append((temperature, job_id))
+
+    if not group_ids:
+        return False, f'{filename}: no positive task group ID recorded'
+    if len(group_ids) != 1:
+        return False, f'{filename}: conflicting task group IDs recorded'
+    if len(jobs) != 8:
+        return False, f'{filename}: expected 8 temperature jobs, found {len(jobs)}'
+
+    expected_temperatures = set(range(300, 1001, 100))
+    temperatures = [temperature for temperature, _job_id in jobs]
+    if set(temperatures) != expected_temperatures or len(set(temperatures)) != 8:
+        return False, f'{filename}: temperatures must cover 300-1000 K by 100 K once'
+    job_ids = [job_id for _temperature_k, job_id in jobs]
+    if len(set(job_ids)) != 8:
+        return False, f'{filename}: job IDs must identify eight distinct tasks'
+
+    return (
+        True,
+        f'{filename}: one task group and eight distinct 300-1000 K jobs are recorded',
+    )
 
 
 def check_json_file_numeric_range(

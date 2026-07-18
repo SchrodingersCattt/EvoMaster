@@ -6,9 +6,36 @@ from typing import Any
 
 from evaluation.validators.abacus_input import check_abacus_input
 from evaluation.validators.answer_text import check_answer_json_numeric
+from evaluation.validators.bohr_cli import (
+    check_bohr_cli_operation_invoked as _check_bohr_cli_operation_invoked,
+)
+from evaluation.validators.bohr_cli import (
+    check_bohr_job_monitor_execution as _check_bohr_job_monitor_execution,
+)
+from evaluation.validators.bohr_cli import (
+    check_bohr_job_stop_execution as _check_bohr_job_stop_execution,
+)
+from evaluation.validators.bohr_cli import (
+    check_bohr_job_upgrade_execution as _check_bohr_job_upgrade_execution,
+)
+from evaluation.validators.bohr_cli import (
+    check_bohr_parameter_sweep_execution as _check_bohr_parameter_sweep_execution,
+)
 from evaluation.validators.budget import check_duration_budget as _check_duration_budget
 from evaluation.validators.budget import check_token_budget as _check_token_budget
 from evaluation.validators.budget import check_turn_budget as _check_turn_budget
+from evaluation.validators.json_file import (
+    check_bohr_gpu_comparison_record as _check_bohr_gpu_comparison_record,
+)
+from evaluation.validators.json_file import (
+    check_bohr_job_stop_record as _check_bohr_job_stop_record,
+)
+from evaluation.validators.json_file import (
+    check_bohr_job_upgrade_record as _check_bohr_job_upgrade_record,
+)
+from evaluation.validators.json_file import (
+    check_bohr_parameter_sweep_record as _check_bohr_parameter_sweep_record,
+)
 from evaluation.validators.json_file import (
     check_json_file_artifacts as _check_json_file_artifacts,
 )
@@ -125,7 +152,146 @@ def check_json_file_schema(
     return _check_json_file_schema(
         evidence.workspace_dir,
         filename=cfg.get("filename", ""),
-        required_keys=cfg.get("required_keys", []),
+        schema=cfg.get("schema"),
+    )
+
+
+def check_bohr_job_stop_record(
+    *, evidence: EvidenceBundle | None, ref: ReferenceAnswer
+) -> tuple[bool, str]:
+    if evidence is None or not evidence.workspace_dir:
+        return False, "no workspace root"
+    cfg = ref.value if isinstance(ref.value, dict) else {}
+    return _check_bohr_job_stop_record(
+        evidence.workspace_dir,
+        filename=cfg.get("filename", ""),
+        image=cfg.get("image", ""),
+        machine_type=cfg.get("machine_type", ""),
+        command=cfg.get("command", ""),
+        job_name_prefix=cfg.get("job_name_prefix", ""),
+    )
+
+
+def check_bohr_cli_operation_invoked(
+    *, evidence: EvidenceBundle | None, ref: ReferenceAnswer
+) -> tuple[bool, str]:
+    if evidence is None:
+        return False, "no evidence"
+    cfg = ref.value if isinstance(ref.value, dict) else {}
+    operations = cfg.get("operations") or []
+    if isinstance(operations, str):
+        operations = [operations]
+    return _check_bohr_cli_operation_invoked(
+        receipts=evidence.bohr_cli_receipts,
+        operations=list(operations),
+        min_matches=int(cfg.get("min_matches", 1)),
+        require_ok=bool(cfg.get("require_ok", True)),
+    )
+
+
+def check_bohr_job_stop_execution(
+    *, evidence: EvidenceBundle | None, ref: ReferenceAnswer
+) -> tuple[bool, str]:
+    if evidence is None or not evidence.workspace_dir:
+        return False, "no workspace root"
+    cfg = ref.value if isinstance(ref.value, dict) else {}
+    return _check_bohr_job_stop_execution(
+        evidence.workspace_dir,
+        filename=cfg.get("filename", ""),
+        image=cfg.get("image", ""),
+        machine_type=cfg.get("machine_type", ""),
+        command=cfg.get("command", ""),
+        job_name_prefix=cfg.get("job_name_prefix", ""),
+        receipts=evidence.bohr_cli_receipts,
+    )
+
+
+def check_bohr_gpu_comparison_record(
+    *, evidence: EvidenceBundle | None, ref: ReferenceAnswer
+) -> tuple[bool, str]:
+    if evidence is None or not evidence.workspace_dir:
+        return False, "no workspace root"
+    cfg = ref.value if isinstance(ref.value, dict) else {}
+    return _check_bohr_gpu_comparison_record(
+        evidence.workspace_dir,
+        filename=cfg.get("filename", ""),
+    )
+
+
+def check_bohr_parameter_sweep_record(
+    *, evidence: EvidenceBundle | None, ref: ReferenceAnswer
+) -> tuple[bool, str]:
+    if evidence is None or not evidence.workspace_dir:
+        return False, "no workspace root"
+    cfg = ref.value if isinstance(ref.value, dict) else {}
+    return _check_bohr_parameter_sweep_record(
+        evidence.workspace_dir,
+        filename=cfg.get("filename", ""),
+    )
+
+
+def check_bohr_parameter_sweep_execution(
+    *, evidence: EvidenceBundle | None, ref: ReferenceAnswer
+) -> tuple[bool, str]:
+    if evidence is None or not evidence.workspace_dir:
+        return False, "no workspace root"
+    cfg = ref.value if isinstance(ref.value, dict) else {}
+    return _check_bohr_parameter_sweep_execution(
+        evidence.workspace_dir,
+        filename=cfg.get("filename", ""),
+        receipts=evidence.bohr_cli_receipts,
+    )
+
+
+def check_bohr_job_monitor_execution(
+    *, evidence: EvidenceBundle | None, ref: ReferenceAnswer
+) -> tuple[bool, str]:
+    if evidence is None or not evidence.workspace_dir:
+        return False, "no workspace root"
+    cfg = ref.value if isinstance(ref.value, dict) else {}
+    return _check_bohr_job_monitor_execution(
+        evidence.workspace_dir,
+        filename=cfg.get("filename", ""),
+        log_filename=cfg.get("log_filename", ""),
+        image=cfg.get("image", ""),
+        machine_type=cfg.get("machine_type", ""),
+        command=cfg.get("command", ""),
+        receipts=evidence.bohr_cli_receipts,
+    )
+
+
+def check_bohr_job_upgrade_record(
+    *, evidence: EvidenceBundle | None, ref: ReferenceAnswer
+) -> tuple[bool, str]:
+    if evidence is None or not evidence.workspace_dir:
+        return False, "no workspace root"
+    cfg = ref.value if isinstance(ref.value, dict) else {}
+    return _check_bohr_job_upgrade_record(
+        evidence.workspace_dir,
+        filename=cfg.get("filename", ""),
+        seed_id=int(cfg.get("seed_id", 0)),
+        source_machine_pattern=cfg.get("source_machine_pattern", ""),
+        target_machine_pattern=cfg.get("target_machine_pattern", ""),
+        image=cfg.get("image", ""),
+        command=cfg.get("command", ""),
+    )
+
+
+def check_bohr_job_upgrade_execution(
+    *, evidence: EvidenceBundle | None, ref: ReferenceAnswer
+) -> tuple[bool, str]:
+    if evidence is None or not evidence.workspace_dir:
+        return False, "no workspace root"
+    cfg = ref.value if isinstance(ref.value, dict) else {}
+    return _check_bohr_job_upgrade_execution(
+        evidence.workspace_dir,
+        filename=cfg.get("filename", ""),
+        seed_id=int(cfg.get("seed_id", 0)),
+        source_machine_pattern=cfg.get("source_machine_pattern", ""),
+        target_machine_pattern=cfg.get("target_machine_pattern", ""),
+        image=cfg.get("image", ""),
+        command=cfg.get("command", ""),
+        receipts=evidence.bohr_cli_receipts,
     )
 
 

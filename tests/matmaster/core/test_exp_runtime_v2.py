@@ -833,6 +833,29 @@ class TestActivePlanesNewNames:
 
         assert planes == frozenset({ToolPlane.CONTROL_PLANE})
 
+    def test_excluded_external_builtins_do_not_activate_external_service(
+        self,
+    ) -> None:
+        """Exclusions apply to plane derivation, not just tool registration."""
+        from matmaster.core.exp import _EXTERNAL_EFFECT_TOOL_NAMES, Exp
+        from matmaster.types.topology import ToolPlane
+
+        planes = Exp._derive_active_planes(
+            has_session=False,
+            builtin_cfg=["Bash", "Bohrium"],
+            skills_enabled=False,
+            excluded_builtin=frozenset({"Bohrium"}),
+        )
+        assert planes == frozenset({ToolPlane.CONTROL_PLANE})
+
+        planes = Exp._derive_active_planes(
+            has_session=False,
+            builtin_cfg=["*"],
+            skills_enabled=False,
+            excluded_builtin=frozenset(_EXTERNAL_EFFECT_TOOL_NAMES),
+        )
+        assert planes == frozenset({ToolPlane.CONTROL_PLANE})
+
     @pytest.mark.asyncio
     async def test_build_runtime_adds_external_service_plane_for_websearch(
         self,

@@ -11,17 +11,23 @@ This is the devshell counterpart of
 4. Write score / score_reason back to ``pending_ingest/*.json`` or submit them.
 
 **Ingest score (0/100):** a task passes (100) only when **every** scoring_checklist
-item passes; otherwise 0. The DevShell agent loop calls
-:func:`score_devshell_tasks_for_agent_loop` in-process, which treats ``token_budget_total``
-and ``turn_budget`` as non-blocking for the binary score (they still appear in ``score_reason``). The CLI
-invocation uses strict ``ingest_optional_checklist_ids=()`` (empty). Per-axis weighted ratios
+item passes; otherwise 0. Both the DevShell agent loop
+(:func:`score_devshell_tasks_for_agent_loop`, in-process) and the CLI ``--submit``
+invocation (:func:`main`) pass ``ingest_optional_checklist_ids=_DEVSHELL_AGENT_INGEST_OPTIONAL_IDS``,
+so budget-style criteria (``token_budget_total``, ``turn_budget``, ``duration_budget``,
+``efficiency_judge``, ``no_retries``) are non-blocking for the binary score in both paths;
+they still appear in ``score_reason``. Per-axis weighted ratios
 are still recorded in ``score_reason`` for debugging; they do not affect the numeric ingest score.
+Questions tagged ``bohr-cli`` additionally require a successful process-level Bohr-CLI
+receipt. Historical runs without receipts retain the prior ``Bash`` event fallback; direct
+API/SDK or builtin ``Bohrium`` use cannot satisfy this contract.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
@@ -31,18 +37,21 @@ from evaluation.core.evaluator import BinaryEvaluator
 from evaluation.core.evaluator_wiring import token_usage_record_from_evidence
 from evaluation.core.evidence import (
     ArtifactRecord,
+    BohrCliReceiptRecord,
     EventRecord,
     EvidenceBundle,
     EvidenceExtractor,
     TokenUsage,
     ToolCallRecord,
 )
+from evaluation.core.question_tags import is_bohr_cli_question
 from evaluation.core.schemas import LLMRuntimeConfig, QuestionItem
 from evaluation.scripts.baseline.score_baseline_tasks import (
     _build_evaluator_llm_cfg,
     _build_question_map,
     _load_eval_config,
 )
+from evaluation.scripts.devshell.bohr_cli_audit import RECEIPTS_FILENAME
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 _QUESTION_BANK_DIR = REPO_ROOT / "evaluation" / "question_bank"
@@ -148,7 +157,6 @@ def _load_latest_events_log(log_dir: Path) -> Path | None:
 
 def _normalize_tool_name(tool_name: str) -> str:
     mapping = {
-        "bash": "execute_bash",
         "edit_file": "str_replace_editor",
     }
     return mapping.get(tool_name, tool_name)
@@ -163,6 +171,88 @@ def _tool_calls_payload(evidence: EvidenceBundle) -> list[dict[str, Any]]:
         }
         for tc in evidence.tool_calls
     ]
+
+
+_BOHR_COMMAND_RE = re.compile(
+    r"(?:^|[\n;&|]\s*)(?:(?:env|sudo)(?:\s+[^\s;&|]+)*\s+)?"
+    r"(?:[^\s;&|]+/)?bohr(?:\s|$)"
+)
+
+
+def _required_execution_checks(
+    *,
+    question: QuestionItem,
+    evidence: EvidenceBundle,
+) -> dict[str, tuple[bool, str]]:
+    """Return tag-driven execution checks that are mandatory for binary pass."""
+    if not is_bohr_cli_question(question):
+        return {}
+
+    successful_receipts = [
+        receipt
+        for receipt in evidence.bohr_cli_receipts
+        if receipt.ok
+        and receipt.exit_code == 0
+        and not receipt.help_requested
+        and not receipt.dry_run
+    ]
+    skipped_note = (
+        f" ({evidence.bohr_cli_receipt_lines_skipped} unparseable receipt "
+        "line(s) skipped)"
+        if evidence.bohr_cli_receipt_lines_skipped
+        else ""
+    )
+    if evidence.bohr_cli_receipts:
+        if successful_receipts:
+            return {
+                "bohr_cli_execution": (
+                    True,
+                    f"Recorded {len(successful_receipts)} successful Bohr-CLI "
+                    f"execution receipt(s).{skipped_note}",
+                )
+            }
+        return {
+            "bohr_cli_execution": (
+                False,
+                f"Recorded {len(evidence.bohr_cli_receipts)} Bohr-CLI receipt(s), "
+                f"but none was a successful execution.{skipped_note}",
+            )
+        }
+    if evidence.bohr_cli_receipt_lines_skipped:
+        # A receipts file exists but nothing in it parsed: schema drift or a
+        # truncated write. Fail loudly instead of degrading to the weaker
+        # legacy Bash-command fallback below.
+        return {
+            "bohr_cli_execution": (
+                False,
+                "Receipt file present but no line parsed as "
+                f"{RECEIPTS_FILENAME}-schema evidence"
+                f"{skipped_note}.",
+            )
+        }
+
+    bash_commands: list[str] = []
+    for call in evidence.tool_calls:
+        if call.tool_name != "Bash":
+            continue
+        command = call.args.get("command") or call.args.get("cmd")
+        if isinstance(command, str):
+            bash_commands.append(command)
+            if _BOHR_COMMAND_RE.search(command):
+                return {
+                    "bohr_cli_execution": (
+                        True,
+                        "Bash executed a bohr CLI command (legacy event evidence).",
+                    )
+                }
+
+    return {
+        "bohr_cli_execution": (
+            False,
+            "No successful Bohr-CLI execution receipt or matching Bash command "
+            f"was found ({len(bash_commands)} Bash command(s) inspected).",
+        )
+    }
 
 
 def _load_summary_from_file(workspace: Path) -> dict[str, Any]:
@@ -266,6 +356,25 @@ def _load_events(
     return tool_calls, events, run_status
 
 
+def _load_bohr_cli_receipts(*, log_dir: Path) -> tuple[list[BohrCliReceiptRecord], int]:
+    """Return (receipts, skipped) where skipped counts unparseable lines."""
+    path = log_dir / RECEIPTS_FILENAME
+    if not path.is_file():
+        return [], 0
+    receipts: list[BohrCliReceiptRecord] = []
+    skipped = 0
+    for raw in path.read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
+        if not line:
+            continue
+        try:
+            value = json.loads(line)
+            receipts.append(BohrCliReceiptRecord.model_validate(value))
+        except (json.JSONDecodeError, ValueError):
+            skipped += 1
+    return receipts, skipped
+
+
 def _build_evidence(
     *,
     task_id: str,
@@ -288,6 +397,7 @@ def _build_evidence(
             last_turn_usage = TokenUsage.from_usage_dict(last)
 
     tool_calls, events, run_status = _load_events(log_dir=log_dir)
+    bohr_cli_receipts, receipt_lines_skipped = _load_bohr_cli_receipts(log_dir=log_dir)
     total_steps = int(summary.get("num_turns") or 0) or len(tool_calls)
     model_name = summary.get("model")
     summary_status = summary.get("status")
@@ -298,6 +408,8 @@ def _build_evidence(
         events=events,
         tool_calls=tool_calls,
         artifacts=_build_artifacts(workspace),
+        bohr_cli_receipts=bohr_cli_receipts,
+        bohr_cli_receipt_lines_skipped=receipt_lines_skipped,
         model_name=model_name if isinstance(model_name, str) else None,
         token_usage_last_turn=last_turn_usage,
         token_usage_run=summary_usage,
@@ -311,7 +423,13 @@ def _build_evidence(
 _AXIS_SECTION_ORDER = ("correctness", "grounding", "efficiency")
 
 
-def _format_score_reason(record: Any, *, ingest_optional_ids: frozenset[str]) -> str:
+def _format_score_reason(
+    record: Any,
+    *,
+    ingest_optional_ids: frozenset[str],
+    required_execution_checks: dict[str, tuple[bool, str]] | None = None,
+    all_pass: bool,
+) -> str:
     by_axis: dict[str, list[tuple[str, Any]]] = {}
     for cid, result in record.criteria_results.items():
         by_axis.setdefault(result.axis, []).append((cid, result))
@@ -339,16 +457,21 @@ def _format_score_reason(record: Any, *, ingest_optional_ids: frozenset[str]) ->
 
     while lines and lines[-1] == "":
         lines.pop()
+    execution_checks = required_execution_checks or {}
+    if execution_checks:
+        lines.extend(["", "### Execution Contract", ""])
+        for check_id, (passed, reason) in execution_checks.items():
+            status = "✓ pass" if passed else "✗ fail"
+            lines.append(f"- **`{check_id}`** (`tool_evidence`): {status} — {reason}")
     lines.append("")
     lines.append(
         f"**Overall weighted score:** {record.overall_weighted_score:.3f} "
         f"({record.passed_count}/{record.total_count} criteria passed)"
     )
     lines.append("")
-    ap = _all_criteria_passed(record, ingest_optional_ids=ingest_optional_ids)
     lines.append(
         f"**Task pass (required checklist items for ingest):** "
-        f"{'yes' if ap else 'no'} (ingest score {'100' if ap else '0'})"
+        f"{'yes' if all_pass else 'no'} (ingest score {'100' if all_pass else '0'})"
     )
     if ingest_optional_ids:
         lines.append("")
@@ -387,17 +510,6 @@ def _all_criteria_passed(
         return False
     passed = int(getattr(record, "passed_count", 0) or 0)
     return passed == total
-
-
-def _ingest_score_from_record(
-    record: Any, *, ingest_optional_ids: frozenset[str] | None = None
-) -> int:
-    """Binary 0/100 for ingest: 100 when all non-optional checklist items pass."""
-    return (
-        100
-        if _all_criteria_passed(record, ingest_optional_ids=ingest_optional_ids)
-        else 0
-    )
 
 
 def _update_pending_with_score(
@@ -505,13 +617,25 @@ def score_task(
         }
 
     opt = ingest_optional_checklist_ids or frozenset()
-    all_pass = _all_criteria_passed(record, ingest_optional_ids=opt)
+    execution_checks = _required_execution_checks(
+        question=question,
+        evidence=evidence,
+    )
+    all_pass = _all_criteria_passed(
+        record,
+        ingest_optional_ids=opt,
+    ) and all(passed for passed, _ in execution_checks.values())
     return {
         "task_id": task_id,
         "question_id": question.id,
-        "score": _ingest_score_from_record(record, ingest_optional_ids=opt),
+        "score": 100 if all_pass else 0,
         "all_criteria_passed": all_pass,
-        "score_reason": _format_score_reason(record, ingest_optional_ids=opt),
+        "score_reason": _format_score_reason(
+            record,
+            ingest_optional_ids=opt,
+            required_execution_checks=execution_checks,
+            all_pass=all_pass,
+        ),
         "record": record,
         "error": None,
     }
