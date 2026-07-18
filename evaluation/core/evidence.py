@@ -357,6 +357,13 @@ class EvidenceBundle(BaseModel):
             'Process-level Bohr-CLI execution receipts emitted by the evaluation shim.'
         ),
     )
+    bohr_cli_receipt_lines_skipped: int = Field(
+        default=0,
+        description=(
+            'Receipt-file lines that failed to parse or validate; non-zero means '
+            'the receipt evidence is incomplete and must not silently degrade.'
+        ),
+    )
     model_name: str | None = Field(
         default=None,
         description='Base model name used during the run (from LLM config or API response)',

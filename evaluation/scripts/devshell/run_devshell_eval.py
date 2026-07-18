@@ -139,6 +139,7 @@ def main() -> int:
     sys.path.insert(0, str(REPO_ROOT))
     from evaluation.scripts.devshell.bohr_cli_audit import (
         RECEIPT_SCHEMA,
+        RECEIPTS_FILENAME,
         prepare_bohr_cli_audit_environment,
     )
     from evaluation.scripts.devshell.eval_model_routes import (
@@ -413,7 +414,7 @@ def main() -> int:
         if "bohr-cli" in {str(tag) for tag in question.tags}:
             task_env, bohr_audit_enabled = prepare_bohr_cli_audit_environment(
                 env,
-                receipt_path=log_dir / "bohr_cli_receipts.jsonl",
+                receipt_path=log_dir / RECEIPTS_FILENAME,
                 shim_dir=run_dir / "_eval_bin",
             )
             bohr_audit_unavailable = bohr_audit_unavailable or not bohr_audit_enabled
@@ -555,6 +556,14 @@ def main() -> int:
             try:
                 if summary_file.is_file():
                     summary_file.unlink()
+            except OSError:
+                pass
+            # The audit launcher appends receipts; drop the aborted attempt's
+            # lines or the exactly-one-lifecycle execution checks see doubles.
+            receipts_file = Path(prepared["log_dir"]) / RECEIPTS_FILENAME
+            try:
+                if receipts_file.is_file():
+                    receipts_file.unlink()
             except OSError:
                 pass
             console_log_file.parent.mkdir(parents=True, exist_ok=True)

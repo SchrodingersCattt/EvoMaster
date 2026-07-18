@@ -13,7 +13,6 @@ from evaluation.scripts.devshell.score_devshell_tasks import (
     _all_criteria_passed,
     _build_evidence,
     _format_score_reason,
-    _ingest_score_from_record,
     _load_latest_events_log,
     _load_raw_run_rows,
     _update_pending_with_score,
@@ -264,12 +263,15 @@ class TestFormatters:
             ),
         }
 
-        reason = _format_score_reason(record, ingest_optional_ids=frozenset())
+        reason = _format_score_reason(
+            record, ingest_optional_ids=frozenset(), all_pass=False
+        )
         assert "### Grounding" in reason
         assert "### Efficiency" in reason
         assert "✓ pass" in reason
         assert "✗ fail" in reason
         assert "required checklist items for ingest" in reason
+        assert "ingest score 0" in reason
 
     def test_ingest_score_binary_all_must_pass(self) -> None:
         record = MagicMock()
@@ -277,17 +279,14 @@ class TestFormatters:
         record.total_count = 2
         record.overall_weighted_score = 0.5
         assert _all_criteria_passed(record) is True
-        assert _ingest_score_from_record(record) == 100
 
         record.passed_count = 1
         record.total_count = 2
         assert _all_criteria_passed(record) is False
-        assert _ingest_score_from_record(record) == 0
 
         record.passed_count = 0
         record.total_count = 0
         assert _all_criteria_passed(record) is False
-        assert _ingest_score_from_record(record) == 0
 
     def test_turn_budget_fail_still_passes_when_ingest_optional(self) -> None:
         from evaluation.core.schemas import CriterionResult
@@ -311,7 +310,6 @@ class TestFormatters:
         }
         opt = frozenset({"turn_budget"})
         assert _all_criteria_passed(record, ingest_optional_ids=opt) is True
-        assert _ingest_score_from_record(record, ingest_optional_ids=opt) == 100
         assert _all_criteria_passed(record, ingest_optional_ids=frozenset()) is False
 
 
@@ -532,3 +530,46 @@ class TestScoreTask:
         assert present["all_criteria_passed"] is True
         assert "bohr_cli_execution" in present["score_reason"]
         assert "✓ pass" in present["score_reason"]
+
+    def test_unparseable_receipts_fail_instead_of_legacy_fallback(
+        self, tmp_run_dir: Path
+    ) -> None:
+        from evaluation.core.evaluator import BinaryEvaluator
+
+        ws = _workspace(tmp_run_dir)
+        _write_summary(ws, final_content="Done")
+        row = {
+            "task_id": "SC_struct_001_direct_r0",
+            "question_id": "SC_test_001",
+            "mode": "direct",
+            "repeat_idx": 0,
+            "duration_ms": 1234,
+            "devshell_summary": {"status": "completed"},
+        }
+        question = self._make_question().model_copy(update={"tags": ["bohr-cli"]})
+        evaluator = BinaryEvaluator(llm_cfg=None)
+
+        # A matching Bash command exists, but the receipts file only contains
+        # lines the current schema cannot parse: the execution contract must
+        # fail loudly, not fall back to the weaker Bash-substring evidence.
+        _write_events(
+            _log_dir(tmp_run_dir),
+            bash_command="bohr job list --json",
+        )
+        receipts = _log_dir(tmp_run_dir) / "bohr_cli_receipts.jsonl"
+        receipts.write_text(
+            '{"schema_version": "bohr_cli_receipt_v2"}\nnot json at all\n',
+            encoding="utf-8",
+        )
+
+        result = score_task(
+            row=row,
+            run_dir=tmp_run_dir,
+            question=question,
+            evaluator=evaluator,
+        )
+
+        assert result["score"] == 0
+        assert result["all_criteria_passed"] is False
+        assert "no line parsed" in result["score_reason"]
+        assert "2 unparseable receipt line(s) skipped" in result["score_reason"]

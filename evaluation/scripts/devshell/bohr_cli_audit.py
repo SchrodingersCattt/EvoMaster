@@ -26,6 +26,7 @@ from typing import Any
 REAL_BIN_ENV = "BOHR_EVAL_REAL_BIN"
 RECEIPT_PATH_ENV = "BOHR_EVAL_RECEIPT_PATH"
 RECEIPT_SCHEMA = "bohr_cli_receipt_v1"
+RECEIPTS_FILENAME = "bohr_cli_receipts.jsonl"
 
 _JSON_MUTATION_OPERATIONS = frozenset({"job.submit", "job_group.create"})
 _JOB_DESCRIPTION_OPERATION = "job.describe"

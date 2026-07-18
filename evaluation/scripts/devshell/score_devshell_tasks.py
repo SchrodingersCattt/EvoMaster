@@ -45,6 +45,7 @@ from evaluation.core.evidence import (
     ToolCallRecord,
 )
 from evaluation.core.schemas import LLMRuntimeConfig, QuestionItem
+from evaluation.scripts.devshell.bohr_cli_audit import RECEIPTS_FILENAME
 from evaluation.scripts.baseline.score_baseline_tasks import (
     _build_evaluator_llm_cfg,
     _build_question_map,
@@ -195,20 +196,38 @@ def _required_execution_checks(
         and not receipt.help_requested
         and not receipt.dry_run
     ]
+    skipped_note = (
+        f" ({evidence.bohr_cli_receipt_lines_skipped} unparseable receipt "
+        "line(s) skipped)"
+        if evidence.bohr_cli_receipt_lines_skipped
+        else ""
+    )
     if evidence.bohr_cli_receipts:
         if successful_receipts:
             return {
                 "bohr_cli_execution": (
                     True,
                     f"Recorded {len(successful_receipts)} successful Bohr-CLI "
-                    "execution receipt(s).",
+                    f"execution receipt(s).{skipped_note}",
                 )
             }
         return {
             "bohr_cli_execution": (
                 False,
                 f"Recorded {len(evidence.bohr_cli_receipts)} Bohr-CLI receipt(s), "
-                "but none was a successful execution.",
+                f"but none was a successful execution.{skipped_note}",
+            )
+        }
+    if evidence.bohr_cli_receipt_lines_skipped:
+        # A receipts file exists but nothing in it parsed: schema drift or a
+        # truncated write. Fail loudly instead of degrading to the weaker
+        # legacy Bash-command fallback below.
+        return {
+            "bohr_cli_execution": (
+                False,
+                "Receipt file present but no line parsed as "
+                f"{RECEIPTS_FILENAME}-schema evidence"
+                f"{skipped_note}.",
             )
         }
 
@@ -337,11 +356,13 @@ def _load_events(
     return tool_calls, events, run_status
 
 
-def _load_bohr_cli_receipts(*, log_dir: Path) -> list[BohrCliReceiptRecord]:
-    path = log_dir / "bohr_cli_receipts.jsonl"
+def _load_bohr_cli_receipts(*, log_dir: Path) -> tuple[list[BohrCliReceiptRecord], int]:
+    """Return (receipts, skipped) where skipped counts unparseable lines."""
+    path = log_dir / RECEIPTS_FILENAME
     if not path.is_file():
-        return []
+        return [], 0
     receipts: list[BohrCliReceiptRecord] = []
+    skipped = 0
     for raw in path.read_text(encoding="utf-8").splitlines():
         line = raw.strip()
         if not line:
@@ -350,8 +371,8 @@ def _load_bohr_cli_receipts(*, log_dir: Path) -> list[BohrCliReceiptRecord]:
             value = json.loads(line)
             receipts.append(BohrCliReceiptRecord.model_validate(value))
         except (json.JSONDecodeError, ValueError):
-            continue
-    return receipts
+            skipped += 1
+    return receipts, skipped
 
 
 def _build_evidence(
@@ -376,7 +397,7 @@ def _build_evidence(
             last_turn_usage = TokenUsage.from_usage_dict(last)
 
     tool_calls, events, run_status = _load_events(log_dir=log_dir)
-    bohr_cli_receipts = _load_bohr_cli_receipts(log_dir=log_dir)
+    bohr_cli_receipts, receipt_lines_skipped = _load_bohr_cli_receipts(log_dir=log_dir)
     total_steps = int(summary.get("num_turns") or 0) or len(tool_calls)
     model_name = summary.get("model")
     summary_status = summary.get("status")
@@ -388,6 +409,7 @@ def _build_evidence(
         tool_calls=tool_calls,
         artifacts=_build_artifacts(workspace),
         bohr_cli_receipts=bohr_cli_receipts,
+        bohr_cli_receipt_lines_skipped=receipt_lines_skipped,
         model_name=model_name if isinstance(model_name, str) else None,
         token_usage_last_turn=last_turn_usage,
         token_usage_run=summary_usage,
@@ -406,6 +428,7 @@ def _format_score_reason(
     *,
     ingest_optional_ids: frozenset[str],
     required_execution_checks: dict[str, tuple[bool, str]] | None = None,
+    all_pass: bool,
 ) -> str:
     by_axis: dict[str, list[tuple[str, Any]]] = {}
     for cid, result in record.criteria_results.items():
@@ -446,13 +469,9 @@ def _format_score_reason(
         f"({record.passed_count}/{record.total_count} criteria passed)"
     )
     lines.append("")
-    ap = _all_criteria_passed(
-        record,
-        ingest_optional_ids=ingest_optional_ids,
-    ) and all(passed for passed, _ in execution_checks.values())
     lines.append(
         f"**Task pass (required checklist items for ingest):** "
-        f"{'yes' if ap else 'no'} (ingest score {'100' if ap else '0'})"
+        f"{'yes' if all_pass else 'no'} (ingest score {'100' if all_pass else '0'})"
     )
     if ingest_optional_ids:
         lines.append("")
@@ -491,17 +510,6 @@ def _all_criteria_passed(
         return False
     passed = int(getattr(record, "passed_count", 0) or 0)
     return passed == total
-
-
-def _ingest_score_from_record(
-    record: Any, *, ingest_optional_ids: frozenset[str] | None = None
-) -> int:
-    """Binary 0/100 for ingest: 100 when all non-optional checklist items pass."""
-    return (
-        100
-        if _all_criteria_passed(record, ingest_optional_ids=ingest_optional_ids)
-        else 0
-    )
 
 
 def _update_pending_with_score(
@@ -626,6 +634,7 @@ def score_task(
             record,
             ingest_optional_ids=opt,
             required_execution_checks=execution_checks,
+            all_pass=all_pass,
         ),
         "record": record,
         "error": None,
