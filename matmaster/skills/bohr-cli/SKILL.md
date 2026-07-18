@@ -28,6 +28,9 @@ bohr auth login --device --no-wait --json   # 返回 verification URL 和 device
 bohr auth login --device-code <code>        # 用户授权后执行，轮询直至登录完成
 ```
 
+- 必须用上面的两步式。不要跑无参数的 `bohr auth login`：headless 下它会同步阻塞等授权，Bash 超时被杀，且每次重跑都生成新验证码，用户对旧码的授权全部作废。
+- `--device-code` 成功后若提示 `Login successful` 但附带 `could not obtain access key (failed to parse gateway response ...)` 告警：这是已知 CLI/网关兼容问题，vouch token 已生效，job/file 等命令可正常使用，仅 billing 等依赖 AK 的功能受限；如实报告即可，不要反复重新登录。
+
 认证失败排障：
 
 - 401 响应带 `retryable: false`：同一凭证登录失败一次即止，不要循环重试；引导用户走设备码流程或更新凭证。
