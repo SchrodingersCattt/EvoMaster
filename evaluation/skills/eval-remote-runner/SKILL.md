@@ -36,10 +36,8 @@ All commands below use placeholders `$HOST`, `$PORT`, `$USER` — replace with a
 ## Hard Rules
 
 - **Never kill a running eval** — always check `ps` before launching.
-- **`flock -n /tmp/eval.lock`** — ensures mutual exclusion (already in launch command).
 - **`--eval-ingest-pending-only`** — MANDATORY on every run. Without it, scoring has no pending files to evaluate.
-- Bohr CLI runs MUST include **`--bohrium-env prod`** so tasks use the production AK and endpoint without changing eval-ingest routing or Bohrium interface type.
-- `exit_code == 0` ≠ criteria passed. Only `score_devshell_tasks.py` determines pass/fail.
+- Bohr CLI 专项必须带 **`--bohrium-env prod`**（凭据注入语义见 Step 1 flags 表后的专项段落）。
 
 ## Workflow
 
@@ -56,8 +54,9 @@ git push origin eval:sync-question-catalog
 自动同步有延迟。启动评测前在 eval 机器手动执行一次做确认兜底（幂等）：
 
 ```bash
-ssh -p $PORT $USER@$HOST "cd /root/matmaster-evo && uv run python evaluation/scripts/sync_question_catalog_to_tools_server.py 2>&1 | tail -1"
-# 成功判据：success active_count=<本地题库总数>。--dry-run 只预览前 20 个 ID，不能当同步验证。
+ssh -p $PORT $USER@$HOST "cd /root/matmaster-evo && uv run python evaluation/scripts/sync_question_catalog_to_tools_server.py 2>&1 | tail -3"
+# 成功判据：输出中 loaded N question row(s) 的 N 与 success active_count=N 相等。
+# --dry-run 只预览前 20 个 ID，不能当同步验证。
 ```
 
 ### Step 1: Sync and Launch
@@ -118,11 +117,13 @@ ssh -p $PORT $USER@$HOST "ps aux | grep 'run_devshell_eval\|run_devshell_agent_l
 
 Each tick: SSH check → macOS popup (auto-dismiss 5s) → if PROCS=0, auto-score and cancel loop.
 
+> ⚠️ 上面 /loop 内嵌的打分命令是 Step 3 的**副本**（/loop prompt 独立执行、无本 skill 上下文，必须自包含）：修改 Step 3 命令时必须同步这里，反之亦然。
+
 **Note**: `/loop` only fires while REPL is idle. During active conversation it will not trigger — this is normal, not a lost job. Check `CronList` to confirm it still exists.
 
 ### Step 3: Score and Submit
 
-Run only after process count = 0:
+`exit_code == 0` ≠ criteria passed —— 只有本步的 `score_devshell_tasks.py` 决定 pass/fail。Run only after process count = 0:
 
 ```bash
 ssh -p $PORT $USER@$HOST "cd /root/matmaster-evo && \
