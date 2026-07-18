@@ -23,7 +23,8 @@ import urllib.request
 from typing import Any
 
 SHARE_URL_PATTERNS = [
-    re.compile(r"https?://[^/]+/matmaster/chat/share/([a-f0-9]+)"),
+    # chat/share 为现行路径；chat-evo/share 为历史路径，对外帮助文档仍有存量链接
+    re.compile(r"https?://[^/]+/matmaster/chat(?:-evo)?/share/([a-f0-9]+)"),
 ]
 
 API_PATH_TEMPLATE = (
@@ -42,6 +43,8 @@ def parse_share_url(url_or_id: str) -> tuple[str, str]:
         if m:
             session_id = m.group(1)
             base_end = url_or_id.find("/matmaster/chat/share/")
+            if base_end == -1:
+                base_end = url_or_id.find("/matmaster/chat-evo/share/")
             base_url = url_or_id[:base_end]
             return base_url, session_id
     if re.fullmatch(r"[a-f0-9]{16,64}", url_or_id):
@@ -54,10 +57,10 @@ def fetch_sse_events(
 ) -> list[dict]:
     """POST to the share stream endpoint and parse SSE events.
 
-    idle 会话：后端先推 session_status(idle)，随后一次性回放全部历史并在末尾关闭连接。
-    历史里录有每一轮 run 结尾的 stream_closed，不能当作流结束信号——多轮会话会被截断，
-    必须读到 EOF。active 会话：跟随 live run，遇到 live 的 stream_closed 才收尾。
-    max_seconds 是两种情况共用的墙钟上限，防止在长跑会话上挂死。
+    回放历史里录有每一轮 run 结尾的 stream_closed，且无法与 live 事件区分，
+    因此任何 stream_closed 都不作为终止信号——否则多轮会话被截到第一轮。
+    终止只依赖两件事：服务端关闭连接（idle 会话回放完即关，实测秒级返回）
+    或 max_seconds 墙钟上限（active 会话跟随 live 流最多等到这里）。
     """
     api_url = base_url + API_PATH_TEMPLATE.format(session_id=session_id)
     req = urllib.request.Request(
@@ -73,7 +76,6 @@ def fetch_sse_events(
         raise RuntimeError(f"HTTP {e.code} from {api_url}: {error_body[:500]}") from e
 
     events: list[dict] = []
-    session_idle = False
     started = time.monotonic()
     try:
         for raw_line in resp:
@@ -88,12 +90,6 @@ def fetch_sse_events(
             except json.JSONDecodeError:
                 continue
             events.append(ev)
-            ev_type = ev.get("type", "")
-            if ev_type == "session_status" and len(events) == 1:
-                session_idle = ev.get("status") == "idle"
-                continue
-            if ev_type == "stream_closed" and not session_idle:
-                break
     except OSError:
         pass
     finally:
