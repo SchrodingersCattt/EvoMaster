@@ -9,7 +9,7 @@ questions:
   intent: Test agent navigates file system to find large/old files and plans cleanup.
   human_prompt_seed: |
     利用 bohr-cli，储存快满了，帮我找找哪些文件又大又久没动过的，规划一下清理列表。不要直接删，先给我看方案。
-    清理规划保存到 `c1_cleanup_plan.json`，列出大文件及处理建议。JSON 顶层使用 `files`；`files` 为数组，每项含 `size_mb` 和 `recommendation`。
+    清理规划保存到 `c1_cleanup_plan.json`，列出大文件及处理建议。JSON 顶层使用 `files`；`files` 为数组，每项含 `size_mb` 和 `recommendation`，`recommendation` 取 `delete`、`keep` 或 `archive`。
   tags:
   - bohr-cli
   reference_answers:

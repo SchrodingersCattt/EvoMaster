@@ -523,6 +523,7 @@ def test_bwo_node_ssh_scp_v2_requires_real_lifecycle_and_cleanup() -> None:
         "node_deleted": True,
     }
     validator.validate(valid)
+    validator.validate({**valid, "_note": "created via -f config due to -m bug"})
     with pytest.raises(ValidationError):
         validator.validate({**valid, "node_id": 0})
     with pytest.raises(ValidationError):
@@ -544,8 +545,15 @@ def test_bwo_node_ssh_scp_v2_requires_real_lifecycle_and_cleanup() -> None:
     refs_by_key = {ref.key: ref for ref in question.reference_answers}
     for key, command in commands_by_key.items():
         assert re.search(refs_by_key[key].value["pattern"], command)
+    transfer_pattern = refs_by_key["file_transferred_via_scp"].value["pattern"]
+    for accepted in (
+        "sftp -P 22022 root@node.example:/personal/ <<< 'put test'",
+        "scp -P 22022 ./test 'root@node.example:/personal/test'",
+        "rsync -e 'ssh -p 22022' test root@node.example:/personal/",
+    ):
+        assert re.search(transfer_pattern, accepted)
     assert not re.search(
-        refs_by_key["file_transferred_via_scp"].value["pattern"],
+        transfer_pattern,
         "scp -P 22022 test root@node.example:/tmp/test",
     )
 

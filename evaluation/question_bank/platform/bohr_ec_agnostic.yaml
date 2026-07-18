@@ -90,7 +90,7 @@ questions:
   priority: P1
   human_prompt_seed: |
     利用 bohr-cli，看看我有没有节点，状态都正常吗？有异常的帮我重启一下。
-    状态报告保存到 `e2_nodes.json`，记录每个节点的 ID、状态和是否执行了操作。JSON 顶层使用 `nodes`；`nodes` 为数组，每项含 `status` 和 `action_taken`。
+    状态报告保存到 `e2_nodes.json`，记录每个节点的 ID、状态和是否执行了操作。JSON 顶层使用 `nodes`；`nodes` 为数组，每项含 `status` 和 `action_taken`；`status` 用平台返回的数字状态码，`action_taken` 取 `none` 或 `restart`。
   tags:
   - bohr-cli
   reference_answers:

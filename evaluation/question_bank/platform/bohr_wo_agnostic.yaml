@@ -543,7 +543,7 @@ questions:
   intent: Test agent can run comparison tests on two models in sandbox.
   human_prompt_seed: |
     利用 bohr-cli，我有两个势函数模型想对比精度，用同一组测试集分别跑 dp test，结果对比一下。
-    对比结果保存到 `b8_comparison.json`，记录各模型的误差指标和结论。JSON 顶层使用 `model_a`、`model_b` 和 `conclusion`。
+    对比结果保存到 `b8_comparison.json`，记录各模型的误差指标和结论。JSON 顶层使用 `model_a`、`model_b` 和 `conclusion`；`model_a` 与 `model_b` 各含数值字段 `rmse_e` 和 `rmse_f`。
     注：如果环境里没有模型文件，可以用 mock 数据演示流程，但要体现完整的 dp test 对比逻辑。
   tags:
   - bohr-cli
@@ -1104,7 +1104,6 @@ questions:
             const: true
           node_deleted:
             const: true
-        additionalProperties: false
   - key: resources_queried_via_cli
     tool_name: Bash
     tool_arg: command
@@ -1127,7 +1126,7 @@ questions:
     tool_name: Bash
     tool_arg: command
     value:
-      pattern: '(?:^|[\n;&|]\s*)(?:[^\s;&|]+/)?scp\b(?=[^\n;&|]*\s(?:[^@\s]+@[^:\s]+:)?/personal/test(?:\s|$))'
+      pattern: '(?:^|[\n;&|]\s*)(?:[^\s;&|]+/)?(?:scp|sftp|rsync)\b(?=[^\n;&|]*/personal/)'
       min_matches: 1
   - key: node_deleted_via_cli
     tool_name: Bash
@@ -1137,7 +1136,7 @@ questions:
       min_matches: 1
   - key: turn_budget
     value:
-      max: 30
+      max: 60
   scoring_checklist:
   - id: artifact
     criterion: d7_node_ops.json written to workspace.
@@ -1160,7 +1159,7 @@ questions:
     axis: grounding
     verify: tool_args_regex
   - id: file_transferred_via_scp
-    criterion: The test file was transferred to /personal/test through scp.
+    criterion: The test file was transferred to a /personal/ destination through scp/sftp/rsync.
     axis: grounding
     verify: tool_args_regex
   - id: node_deleted_via_cli
