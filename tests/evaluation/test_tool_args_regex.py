@@ -269,6 +269,101 @@ def test_scripted_tool_args_regex_accepts_inline_script_execution() -> None:
     assert "inline_scripts=1" in result.reason
 
 
+def test_scripted_tool_args_regex_accepts_heredoc_in_compound_command() -> None:
+    record = BinaryEvaluator().evaluate(
+        question=_scripted_tool_regex_question(),
+        answer="done",
+        tool_calls=[
+            {
+                "tool_name": "Bash",
+                "tool_args": {
+                    "command": (
+                        "cd /workspace && cat > poll_job.py <<'PY'\n"
+                        'subprocess.run(["bohr", "job", "describe", "-i", job_id])\n'
+                        "PY\npython3 poll_job.py"
+                    )
+                },
+            }
+        ],
+    )
+
+    result = record.criteria_results["polled"]
+    assert result.passed is True
+    assert "inline_scripts=1" in result.reason
+
+
+def test_scripted_tool_args_regex_masks_heredoc_data_in_compound_command() -> None:
+    record = BinaryEvaluator().evaluate(
+        question=_scripted_tool_regex_question(),
+        answer="done",
+        tool_calls=[
+            {
+                "tool_name": "Bash",
+                "tool_args": {
+                    "command": (
+                        "cd /workspace && cat > notes.txt <<'TXT'\n"
+                        "bohr job describe -i 99\n"
+                        "TXT"
+                    )
+                },
+            }
+        ],
+    )
+
+    result = record.criteria_results["polled"]
+    assert result.passed is False
+    assert "direct=0" in result.reason
+
+
+def test_scripted_tool_args_regex_does_not_double_count_one_execution() -> None:
+    question = QuestionItem(
+        id="scripted_tool_regex_overlap_test",
+        capability="workflow_orchestration",
+        domain="agnostic",
+        intent="Verify exactly one submission with overlapping patterns.",
+        human_prompt_seed="Submit the job once.",
+        reference_answers=[
+            ReferenceAnswer(
+                key="submitted",
+                tool_name="Bash",
+                tool_arg="command",
+                value={
+                    "direct_pattern": BOHR_COMMAND_PATTERN,
+                    "script_pattern": BOHR_COMMAND_PATTERN,
+                    "min_matches": 1,
+                    "max_matches": 1,
+                },
+            )
+        ],
+        scoring_checklist=[
+            ScoringCheckItem(
+                id="submitted",
+                criterion="Job was submitted exactly once.",
+                axis="grounding",
+                verify="scripted_tool_args_regex",
+            )
+        ],
+    )
+
+    record = BinaryEvaluator().evaluate(
+        question=question,
+        answer="done",
+        tool_calls=[
+            {
+                "tool_name": "Bash",
+                "tool_args": {
+                    "command": "bohr job describe -i 20400713 && python3 plot.py"
+                },
+            }
+        ],
+    )
+
+    result = record.criteria_results["submitted"]
+    assert result.passed is True, result.reason
+    assert "direct=1" in result.reason
+    assert "inline_scripts=0" in result.reason
+
+
 @pytest.mark.parametrize(
     "value",
     [

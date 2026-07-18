@@ -196,7 +196,7 @@ _INLINE_SCRIPT_EXECUTOR_RE = re.compile(
     r"(?:^|[\n;&|]\s*)(?:[^\s;&|]+/)?" r"(?:python(?:3(?:\.\d+)*)?|bash|sh)\s+[^\s;&|]+"
 )
 _HEREDOC_OPENER_RE = re.compile(
-    r"(?m)^[ \t]*cat\b[^\n]*<<-?[ \t]*(?P<quote>['\"]?)"
+    r"(?m)(?:^|[;&|(])[ \t]*cat\b[^\n]*<<-?[ \t]*(?P<quote>['\"]?)"
     r"(?P<tag>[A-Za-z_][A-Za-z0-9_]*)(?P=quote)[^\n]*$"
 )
 _HEREDOC_REDIRECT_RE = re.compile(
@@ -287,7 +287,8 @@ def _h_scripted_tool_args_regex(ctx):
             heredoc_scripts = _find_heredoc_scripts(command)
             executable_command = _mask_heredoc_bodies(command, heredoc_scripts)
             executor_calls.append((index, executable_command))
-            direct_matches += sum(1 for _ in direct_regex.finditer(executable_command))
+            command_direct = sum(1 for _ in direct_regex.finditer(executable_command))
+            direct_matches += command_direct
             matching_heredocs = [
                 (path, content)
                 for path, content, _start, _end in heredoc_scripts
@@ -303,8 +304,12 @@ def _h_scripted_tool_args_regex(ctx):
                 )
                 for path, _content in matching_heredocs
             )
+            # The weak text-plus-executor path only counts when the command
+            # produced no direct match; with overlapping direct/script
+            # patterns it would otherwise count one execution twice.
             if heredoc_executed_inline or (
-                script_regex.search(executable_command)
+                command_direct == 0
+                and script_regex.search(executable_command)
                 and _INLINE_SCRIPT_EXECUTOR_RE.search(executable_command)
             ):
                 inline_scripts += 1
