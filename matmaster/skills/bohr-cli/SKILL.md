@@ -8,15 +8,31 @@ description: "Use Bohrium CLI (bohr) for platform operations: job/node/sandbox m
 ## Capability Gate
 
 - 需要 `bohr` 可执行文件在 PATH 中（`npm install -g @dptech-corp/bohr-cli`）
-- 需要有效认证：`bohr auth login --ak $BOHRIUM_ACCESS_KEY` 或已有 `~/.bohrium/cfg.yaml`
+- 需要有效认证（见下节）：环境变量 `BOHR_ACCESS_KEY`、`bohr auth login`（AK 或设备码）或已有 `~/.bohrium/cfg.yaml`
 - 验证：`bohr auth status --verify`
 
 ## 认证
 
+沙箱内平台注入的是 `BOHRIUM_ACCESS_KEY`（CLI 不直接读它），两种用法任选：
+
 ```bash
-bohr auth login --ak "$BOHRIUM_ACCESS_KEY"
-bohr auth status --verify
+export BOHR_ACCESS_KEY="$BOHRIUM_ACCESS_KEY"   # CLI 直读该变量，免 login
+bohr auth login --ak "$BOHRIUM_ACCESS_KEY"     # 或持久化到 ~/.bohrium/cfg.yaml
+bohr auth status --verify                       # 校验；输出含 logged_in/auth_method/host
 ```
+
+无 AK 或 AK 失效（401）时，改用设备码流程让用户在浏览器完成授权，不要要求用户在对话中粘贴 AK：
+
+```bash
+bohr auth login --device --no-wait --json   # 返回 verification URL 和 device_code，把 URL 交给用户
+bohr auth login --device-code <code>        # 用户授权后执行，轮询直至登录完成
+```
+
+认证失败排障：
+
+- 401 响应带 `retryable: false`：同一凭证登录失败一次即止，不要循环重试；引导用户走设备码流程或更新凭证。
+- 回显 AK 时只显示前几位掩码；`bohr auth token` 会输出完整凭证，不要把它打印到对话或写进产物文件。
+- `auth status` 的 `host` 必须与凭证所属环境一致（默认生产 `open.bohrium.com`，可用 `BOHR_OPENAPI_HOST` 覆盖）；host 与 AK 环境不匹配时 401 与凭证无效表现相同，先确认 host 再下结论。
 
 ## 全局选项
 
