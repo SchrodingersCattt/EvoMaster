@@ -555,17 +555,17 @@ questions:
     value:
       filename: e10_auth_diag.json
       pattern: '"recommended_next_step"\s*:\s*"[^"]*(设备码|device|凭证|更新|重新生成|新的\s*AK)'
-  - key: ak_login_attempts_bounded
+  - key: ak_probe_bounded
     value:
       operations:
-      - auth.login
-      argv_regex: '(?:^|\s)--ak(?:\s|=|$)'
+      - auth
+      - job
       min_matches: 1
-      max_matches: 2
+      max_matches: 6
       require_ok: false
   - key: turn_budget
     value:
-      max: 8
+      max: 15
   scoring_checklist:
   - id: artifact
     criterion: e10_auth_diag.json written to workspace.
@@ -592,9 +592,10 @@ questions:
     criterion: Suggests device-code flow or credential renewal instead of dead-ending.
     axis: correctness
     verify: text_file_regex
-  - id: ak_login_attempts_bounded
-    criterion: AK login tried at least once but at most twice (401 is not retryable),
-      grounded on execution receipts.
+  - id: ak_probe_bounded
+    criterion: Platform actually probed with the given AK (via --ak login or the
+      BOHR_ACCESS_KEY env route) and total auth/job calls bounded at 6 — no blind
+      retry flailing. Mechanism-agnostic, grounded on execution receipts.
     axis: grounding
     verify: bohr_cli_operation_invoked
     weight: 2.0
