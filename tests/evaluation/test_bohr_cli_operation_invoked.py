@@ -112,14 +112,94 @@ def _question(value: object) -> None:
     )
 
 
+def test_max_matches_bounds_attempt_count() -> None:
+    # Discipline check: "at most two attempts" fails on the third invocation.
+    receipts = [_receipt("auth.login", ok=False) for _ in range(3)]
+    passed, reason = check_bohr_cli_operation_invoked(
+        receipts=receipts,
+        operations=["auth.login"],
+        require_ok=False,
+        max_matches=2,
+    )
+    assert passed is False
+    assert "expected=[1,2]" in reason
+
+    passed, _ = check_bohr_cli_operation_invoked(
+        receipts=receipts[:2],
+        operations=["auth.login"],
+        require_ok=False,
+        max_matches=2,
+    )
+    assert passed is True
+
+
+def test_exactly_one_call_semantics() -> None:
+    one = [_receipt("auth.login", ok=True)]
+    passed, _ = check_bohr_cli_operation_invoked(
+        receipts=one, operations=["auth.login"], require_ok=False, max_matches=1
+    )
+    assert passed is True
+    passed, _ = check_bohr_cli_operation_invoked(
+        receipts=one * 2, operations=["auth.login"], require_ok=False, max_matches=1
+    )
+    assert passed is False
+
+
+def test_argv_regex_matches_redacted_flags() -> None:
+    # The launcher preserves flags and redacts values/auth positionals; the
+    # two-step pattern must accept `--device --no-wait` and reject the
+    # blocking bare login and `--device-code` polling.
+    two_step = _receipt(
+        "auth.login", argv=["auth", "<redacted>", "--device", "--no-wait", "--json"]
+    )
+    bare = _receipt("auth.login", argv=["auth", "<redacted>"])
+    polling = _receipt(
+        "auth.login", argv=["auth", "<redacted>", "--device-code", "<redacted>"]
+    )
+    pattern = r"(?=.*--device(?:\s|$))(?=.*--no-wait(?:\s|$))"
+    passed, reason = check_bohr_cli_operation_invoked(
+        receipts=[two_step, bare, polling],
+        operations=["auth.login"],
+        argv_regex=pattern,
+    )
+    assert passed is True
+    assert "matched=1" in reason
+    passed, _ = check_bohr_cli_operation_invoked(
+        receipts=[bare, polling], operations=["auth.login"], argv_regex=pattern
+    )
+    assert passed is False
+
+
+def test_argv_regex_invalid_pattern_fails_closed() -> None:
+    receipts = [_receipt("auth.login")]
+    passed, reason = check_bohr_cli_operation_invoked(
+        receipts=receipts, operations=["auth.login"], argv_regex="(["
+    )
+    assert passed is False
+    assert "invalid argv_regex" in reason
+
+
 def test_reference_requires_operations_list() -> None:
     _question({"operations": ["lkm.search"], "min_matches": 1})  # valid
+    _question(
+        {
+            "operations": ["auth.login"],
+            "min_matches": 1,
+            "max_matches": 2,
+            "require_ok": False,
+            "argv_regex": r"(?:^|\s)--ak(?:\s|=|$)",
+        }
+    )  # valid with bounded count and argv narrowing
     for bad in (
         {"min_matches": 1},
         {"operations": []},
         {"operations": [""]},
         {"operations": "lkm.search", "unknown": 1},
         {"operations": ["lkm.search"], "min_matches": 0},
+        {"operations": ["lkm.search"], "min_matches": 2, "max_matches": 1},
+        {"operations": ["lkm.search"], "max_matches": "2"},
+        {"operations": ["lkm.search"], "argv_regex": ""},
+        {"operations": ["lkm.search"], "argv_regex": "(["},
     ):
         with pytest.raises(
             PydanticValidationError, match="bohr_cli_operation_invoked reference"

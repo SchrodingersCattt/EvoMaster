@@ -556,12 +556,13 @@ questions:
       filename: e10_auth_diag.json
       pattern: '"recommended_next_step"\s*:\s*"[^"]*(设备码|device|凭证|更新|重新生成|新的\s*AK)'
   - key: ak_login_attempts_bounded
-    tool_name: Bash
-    tool_arg: command
     value:
-      pattern: '(?:^|[\n;&|]\s*)(?:[A-Za-z_][A-Za-z0-9_]*=(?:\$\([^)]*\)|"[^"]*"|\x27[^\x27]*\x27|[^\s;&|])*\s+)*(?:[^\s;&|]+/)?bohr\s+auth\s+login\s(?=[^\n;&|]*--ak\b)'
+      operations:
+      - auth.login
+      argv_regex: '(?:^|\s)--ak(?:\s|=|$)'
       min_matches: 1
       max_matches: 2
+      require_ok: false
   - key: turn_budget
     value:
       max: 8
@@ -592,9 +593,10 @@ questions:
     axis: correctness
     verify: text_file_regex
   - id: ak_login_attempts_bounded
-    criterion: AK login tried at least once but at most twice (401 is not retryable).
+    criterion: AK login tried at least once but at most twice (401 is not retryable),
+      grounded on execution receipts.
     axis: grounding
-    verify: tool_args_regex
+    verify: bohr_cli_operation_invoked
     weight: 2.0
   - id: turn_budget
     criterion: Agent completes within turn budget.
@@ -630,18 +632,18 @@ questions:
       filename: e11_device_auth.json
       pattern: '"expires_in"\s*:\s*\d+'
   - key: two_step_flow_used
-    tool_name: Bash
-    tool_arg: command
     value:
-      pattern: '(?:^|[\n;&|]\s*)(?:[A-Za-z_][A-Za-z0-9_]*=(?:\$\([^)]*\)|"[^"]*"|\x27[^\x27]*\x27|[^\s;&|])*\s+)*(?:[^\s;&|]+/)?bohr\s+auth\s+login\s(?=[^\n;&|]*--device\b)(?=[^\n;&|]*--no-wait\b)'
+      operations:
+      - auth.login
+      argv_regex: '(?=.*--device(?:\s|$))(?=.*--no-wait(?:\s|$))'
       min_matches: 1
   - key: single_login_call
-    tool_name: Bash
-    tool_arg: command
     value:
-      pattern: '(?:^|[\n;&|]\s*)(?:[A-Za-z_][A-Za-z0-9_]*=(?:\$\([^)]*\)|"[^"]*"|\x27[^\x27]*\x27|[^\s;&|])*\s+)*(?:[^\s;&|]+/)?bohr\s+auth\s+login\b'
+      operations:
+      - auth.login
       min_matches: 1
       max_matches: 1
+      require_ok: false
   - key: turn_budget
     value:
       max: 6
@@ -663,16 +665,18 @@ questions:
     axis: correctness
     verify: text_file_regex
   - id: two_step_flow_used
-    criterion: Non-blocking two-step device flow (--device --no-wait) was used.
+    criterion: Non-blocking two-step device flow (--device --no-wait) was used and
+      exited cleanly, grounded on execution receipts.
     axis: grounding
-    verify: tool_args_regex
+    verify: bohr_cli_operation_invoked
     weight: 2.0
   - id: single_login_call
-    criterion: Exactly one auth login invocation — combined with the two-step check
-      this rules out blocking flag-less login (which rotates the code and voids the
-      user's authorization) and --device-code polling the user forbade.
+    criterion: Exactly one auth login invocation on receipts — combined with the
+      two-step check this rules out blocking flag-less login (which rotates the
+      code and voids the user's authorization) and --device-code polling the user
+      forbade.
     axis: correctness
-    verify: tool_args_regex
+    verify: bohr_cli_operation_invoked
     weight: 2.0
   - id: turn_budget
     criterion: Agent completes within turn budget.

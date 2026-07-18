@@ -181,11 +181,15 @@ def check_bohr_cli_operation_invoked(
     operations = cfg.get("operations") or []
     if isinstance(operations, str):
         operations = [operations]
+    raw_max = cfg.get("max_matches")
+    argv_regex = cfg.get("argv_regex")
     return _check_bohr_cli_operation_invoked(
         receipts=evidence.bohr_cli_receipts,
         operations=list(operations),
         min_matches=int(cfg.get("min_matches", 1)),
         require_ok=bool(cfg.get("require_ok", True)),
+        max_matches=int(raw_max) if raw_max is not None else None,
+        argv_regex=str(argv_regex) if argv_regex is not None else None,
     )
 
 
