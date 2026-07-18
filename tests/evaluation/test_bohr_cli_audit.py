@@ -100,6 +100,39 @@ def test_operation_detection_does_not_treat_flag_value_as_command_noun(
     assert _receipts(receipt_path)[0]['operation'] == 'machine.list'
 
 
+def test_positional_argument_commands_record_bare_noun_operation() -> None:
+    from evaluation.scripts.devshell.bohr_cli_audit import _operation
+
+    # Free-text positional arguments are data, never a subcommand, and must
+    # not leak into the operation field.
+    assert (
+        _operation(['mentor', '石墨烯纳米带的边缘效应怎么影响电子输运？']) == 'mentor'
+    )
+    assert (
+        _operation(['mentor', 'edge effects?', '--discipline', 'Physics']) == 'mentor'
+    )
+    assert (
+        _operation(['mentor', '--discipline', 'Physics', 'edge effects?']) == 'mentor'
+    )
+    assert _operation(['chat', '从文献中提取晶体学数据']) == 'chat'
+    assert _operation(['search', 'graphene nanoribbon transport']) == 'search'
+
+
+def test_subcommand_parsing_and_bare_nouns_stay_informative() -> None:
+    from evaluation.scripts.devshell.bohr_cli_audit import _operation
+
+    # Subcommand commands keep noun.verb.
+    assert _operation(['job', 'submit', '-i', 'job.json']) == 'job.submit'
+    assert _operation(['pdf', 'parse', '--help']) == 'pdf.parse'
+    assert _operation(['lkm', 'search', 'perovskite ion migration']) == 'lkm.search'
+    # A noun with no subcommand token records the bare noun, not "unknown".
+    assert _operation(['doctor']) == 'doctor'
+    assert _operation(['doctor', '--offline']) == 'doctor'
+    assert _operation(['pdf', '--help']) == 'pdf'
+    # No known noun at all stays unknown.
+    assert _operation(['--version']) == 'unknown'
+
+
 def test_json_submit_is_replayed_and_snapshots_safe_input_fields(
     tmp_path: Path,
 ) -> None:

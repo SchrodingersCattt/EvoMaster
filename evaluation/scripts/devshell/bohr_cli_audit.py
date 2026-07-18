@@ -59,6 +59,10 @@ _COMMAND_NOUNS = frozenset(
 _GLOBAL_OPTIONS_WITH_VALUES = frozenset(
     {"-o", "--format", "--output", "--output-format", "-q", "--query"}
 )
+# Commands whose first positional token is free-form user text (a question or
+# query), not a subcommand. Their operation is the bare noun; the argument must
+# never be embedded in the operation field of a receipt.
+_POSITIONAL_ARGUMENT_NOUNS = frozenset({"chat", "mentor", "search"})
 _SECRET_FLAGS = frozenset(
     {
         "--access-key",
@@ -121,6 +125,8 @@ def _operation(argv: list[str]) -> str:
         noun = _normalise_token(raw_noun)
         if noun not in _COMMAND_NOUNS:
             continue
+        if noun in _POSITIONAL_ARGUMENT_NOUNS:
+            return noun
         cursor = index + 1
         while cursor < len(argv):
             raw_verb = argv[cursor]
@@ -131,6 +137,9 @@ def _operation(argv: list[str]) -> str:
                     cursor += 1
                 continue
             return f"{noun}.{_normalise_token(raw_verb)}"
+        # Noun with no subcommand token (e.g. `bohr doctor`, `bohr pdf --help`):
+        # record the bare noun rather than falling through to "unknown".
+        return noun
     return "unknown"
 
 
