@@ -232,7 +232,9 @@ def check_bohr_cli_operation_invoked(
     whose parsed operation embeds the argument (``mentor.<question text>``),
     while a fully qualified entry (``pdf.parse``) stays exact.
     """
-    wanted = {str(operation).strip() for operation in operations if str(operation).strip()}
+    wanted = {
+        str(operation).strip() for operation in operations if str(operation).strip()
+    }
     if not wanted:
         return False, 'bohr_cli_operation_invoked: no operations configured'
 
