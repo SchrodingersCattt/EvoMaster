@@ -8,16 +8,12 @@ from pydantic import ValidationError as PydanticValidationError
 from evaluation.core.evidence import BohrCliReceiptRecord
 from evaluation.core.schemas import QuestionItem, ReferenceAnswer, ScoringCheckItem
 from evaluation.validators.bohr_cli import check_bohr_cli_operation_invoked
+from tests.evaluation.bohr_cli_receipt_helpers import make_receipt
 
 
 def _receipt(operation: str, *, ok: bool = True, **kwargs) -> BohrCliReceiptRecord:
-    return BohrCliReceiptRecord(
-        schema_version="bohr_cli_receipt_v1",
-        operation=operation,
-        exit_code=0 if ok else 1,
-        ok=ok,
-        **kwargs,
-    )
+    # 薄包装保留 ok→exit_code 的耦合便利，schema 默认值走共享工厂
+    return make_receipt(operation=operation, exit_code=0 if ok else 1, ok=ok, **kwargs)
 
 
 def test_exact_operation_match_requires_success_by_default() -> None:

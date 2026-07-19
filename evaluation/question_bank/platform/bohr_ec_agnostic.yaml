@@ -572,7 +572,8 @@ questions:
     axis: correctness
     verify: artifact_exists
   - id: ak_masked_prefix_only
-    criterion: AK recorded with only the first 8 characters visible.
+    criterion: Masked AK keeps the e10adc39 prefix; full-key leakage is caught
+      separately by full_ak_not_leaked, the two checks together prove masking.
     axis: correctness
     verify: text_file_regex
   - id: full_ak_not_leaked
