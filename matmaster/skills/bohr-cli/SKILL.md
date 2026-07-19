@@ -266,4 +266,3 @@ bohr project members <id>
 bohr project create -n "<name>" [-t <total_limit>] [-m <month_limit>]
 bohr project delete <id>
 ```
-

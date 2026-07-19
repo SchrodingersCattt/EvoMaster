@@ -26,10 +26,10 @@ def _artifact_temperature_jobs(data: dict) -> dict[int, int]:
         if not isinstance(node, dict):
             continue
         normalised = {_normalise_key(key): value for key, value in node.items()}
-        if 'temperaturek' not in normalised or 'jobid' not in normalised:
+        if "temperaturek" not in normalised or "jobid" not in normalised:
             continue
-        temperature = _positive_int(normalised['temperaturek'])
-        job_id = _positive_int(normalised['jobid'])
+        temperature = _positive_int(normalised["temperaturek"])
+        job_id = _positive_int(normalised["jobid"])
         if temperature is not None and job_id is not None:
             jobs[temperature] = job_id
     return jobs
@@ -38,13 +38,13 @@ def _artifact_temperature_jobs(data: dict) -> dict[int, int]:
 def _load_json_object(root: Path, filename: str) -> tuple[dict, str | None]:
     path = _resolve_file(root, filename)
     if path is None:
-        return {}, f'{filename} not found in workspace'
+        return {}, f"{filename} not found in workspace"
     try:
-        data = json.loads(path.read_text(encoding='utf-8'))
+        data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError) as exc:
-        return {}, f'{filename}: invalid JSON ({exc})'
+        return {}, f"{filename}: invalid JSON ({exc})"
     if not isinstance(data, dict):
-        return {}, f'{filename}: top-level JSON value must be an object'
+        return {}, f"{filename}: top-level JSON value must be an object"
     return data, None
 
 
@@ -58,7 +58,7 @@ def _artifact_poll_count(data: dict) -> int:
                 isinstance(item, dict)
                 and bool(
                     {_normalise_key(key) for key in item}
-                    & {'status', 'webstatus', 'state'}
+                    & {"status", "webstatus", "state"}
                 )
                 for item in node
             )
@@ -88,23 +88,23 @@ def _artifact_contains_command(data: dict, expected: str) -> bool:
 
 def _artifact_unsuccessful_outcome(data: dict) -> str | None:
     unsuccessful = {
-        'error',
-        'failed',
-        'failure',
-        'pending',
-        'running',
-        'stopped',
-        'timedout',
-        'timeout',
+        "error",
+        "failed",
+        "failure",
+        "pending",
+        "running",
+        "stopped",
+        "timedout",
+        "timeout",
     }
     for node in _walk_json(data):
         if not isinstance(node, dict):
             continue
         for raw_key, raw_value in node.items():
             if _normalise_key(raw_key) not in {
-                'finalstatus',
-                'outcome',
-                'resultstatus',
+                "finalstatus",
+                "outcome",
+                "resultstatus",
             }:
                 continue
             if isinstance(raw_value, str):
@@ -122,8 +122,8 @@ def _artifact_records_saved_log(data: dict, log_filename: str) -> bool:
             continue
         for raw_key, raw_value in node.items():
             normalised_key = _normalise_key(raw_key)
-            records_saved_log = normalised_key == 'logsaved' or (
-                'log' in normalised_key and 'saved' in normalised_key
+            records_saved_log = normalised_key == "logsaved" or (
+                "log" in normalised_key and "saved" in normalised_key
             )
             if not records_saved_log:
                 continue
@@ -132,10 +132,10 @@ def _artifact_records_saved_log(data: dict, log_filename: str) -> bool:
             if isinstance(raw_value, str):
                 normalised = raw_value.strip().lower()
                 if Path(raw_value).name == log_filename or normalised in {
-                    'saved',
-                    'success',
-                    'succeeded',
-                    'true',
+                    "saved",
+                    "success",
+                    "succeeded",
+                    "true",
                 }:
                     return True
     return False
@@ -186,17 +186,17 @@ def check_bohr_cli_operation_invoked(
         str(operation).strip() for operation in operations if str(operation).strip()
     }
     if not wanted:
-        return False, 'bohr_cli_operation_invoked: no operations configured'
+        return False, "bohr_cli_operation_invoked: no operations configured"
     argv_pattern: re.Pattern[str] | None = None
     if argv_regex is not None:
         try:
             argv_pattern = re.compile(argv_regex)
         except re.error as exc:
-            return False, f'bohr_cli_operation_invoked: invalid argv_regex: {exc}'
+            return False, f"bohr_cli_operation_invoked: invalid argv_regex: {exc}"
 
     def _matches(operation: str) -> bool:
         return any(
-            operation == entry or operation.startswith(f'{entry}.') for entry in wanted
+            operation == entry or operation.startswith(f"{entry}.") for entry in wanted
         )
 
     matched = 0
@@ -209,24 +209,20 @@ def check_bohr_cli_operation_invoked(
         if require_ok and not (receipt.ok and receipt.exit_code == 0):
             continue
         if argv_pattern is not None and not argv_pattern.search(
-            ' '.join(re.sub(r'\s+', '_', token) for token in receipt.argv)
+            " ".join(re.sub(r"\s+", "_", token) for token in receipt.argv)
         ):
             continue
         matched += 1
         observed.add(receipt.operation)
-    ok_note = 'ok' if require_ok else 'any-exit'
+    ok_note = "ok" if require_ok else "any-exit"
     expected = (
-        f'>={min_matches}'
-        if max_matches is None
-        else f'[{min_matches},{max_matches}]'
+        f">={min_matches}" if max_matches is None else f"[{min_matches},{max_matches}]"
     )
-    passed = matched >= min_matches and (
-        max_matches is None or matched <= max_matches
-    )
+    passed = matched >= min_matches and (max_matches is None or matched <= max_matches)
     return (
         passed,
-        f'operation receipts matched={matched} ({ok_note}) '
-        f'for {sorted(wanted)}; observed={sorted(observed)}; expected={expected}',
+        f"operation receipts matched={matched} ({ok_note}) "
+        f"for {sorted(wanted)}; observed={sorted(observed)}; expected={expected}",
     )
 
 
@@ -236,11 +232,11 @@ def _successful_terminal_status(value: int | str | None) -> bool:
     if not isinstance(value, str):
         return False
     return value.strip().lower() in {
-        '2',
-        'completed',
-        'finished',
-        'succeeded',
-        'success',
+        "2",
+        "completed",
+        "finished",
+        "succeeded",
+        "success",
     }
 
 
@@ -259,7 +255,7 @@ def _successful_terminal_receipt(receipt: BohrCliReceiptRecord) -> bool:
 def _receipt_argv_ids(receipt: BohrCliReceiptRecord) -> set[int]:
     identifiers: set[int] = set()
     for argument in receipt.argv:
-        match = re.search(r'(?:^|=)([1-9]\d*)$', argument)
+        match = re.search(r"(?:^|=)([1-9]\d*)$", argument)
         if match:
             identifiers.add(int(match.group(1)))
     return identifiers
@@ -267,7 +263,7 @@ def _receipt_argv_ids(receipt: BohrCliReceiptRecord) -> set[int]:
 
 def _receipt_flag_value(receipt: BohrCliReceiptRecord, names: set[str]) -> str | None:
     for index, argument in enumerate(receipt.argv):
-        key, separator, value = argument.partition('=')
+        key, separator, value = argument.partition("=")
         if key in names and separator:
             return value
         if argument in names and index + 1 < len(receipt.argv):
@@ -276,18 +272,18 @@ def _receipt_flag_value(receipt: BohrCliReceiptRecord, names: set[str]) -> str |
 
 
 def _is_job_gpu_machine_query(receipt: BohrCliReceiptRecord) -> bool:
-    if not _successful_mutation(receipt, 'machine.list'):
+    if not _successful_mutation(receipt, "machine.list"):
         return False
     choose_type = _receipt_flag_value(
         receipt,
-        {'-c', '--chooseType', '--choose-type', '--choose_type'},
+        {"-c", "--chooseType", "--choose-type", "--choose_type"},
     )
-    scene = _receipt_flag_value(receipt, {'-s', '--scene'})
+    scene = _receipt_flag_value(receipt, {"-s", "--scene"})
     return (
         isinstance(choose_type, str)
-        and choose_type.casefold() == 'gpu'
+        and choose_type.casefold() == "gpu"
         and isinstance(scene, str)
-        and scene.casefold() == 'job'
+        and scene.casefold() == "job"
     )
 
 
@@ -322,33 +318,33 @@ def check_bohr_job_upgrade_execution(
     submits = [
         (index, receipt)
         for index, receipt in indexed_receipts
-        if _successful_mutation(receipt, 'job.submit')
+        if _successful_mutation(receipt, "job.submit")
     ]
     if len(submits) != 1:
-        return False, f'expected 1 successful job submission, recorded {len(submits)}'
+        return False, f"expected 1 successful job submission, recorded {len(submits)}"
 
     submit_index, submit = submits[0]
     if not submit.captured_json or not submit.ids.job_ids:
-        return False, 'job submission has no parsed job identifier'
+        return False, "job submission has no parsed job identifier"
     if submit.request.image_address != image:
-        return False, 'job submission does not preserve the source image'
+        return False, "job submission does not preserve the source image"
     if not _shell_commands_equivalent(submit.request.command, command):
-        return False, 'job submission does not preserve the source command'
+        return False, "job submission does not preserve the source command"
     machine_type = submit.request.machine_type
     if not isinstance(machine_type, str) or not re.search(
         target_machine_pattern, machine_type
     ):
-        return False, 'job submission does not use an A100 machine type'
+        return False, "job submission does not use an A100 machine type"
 
     source_queries = [
         receipt
         for index, receipt in indexed_receipts
         if index < submit_index
-        and _successful_mutation(receipt, 'job.describe')
+        and _successful_mutation(receipt, "job.describe")
         and seed_id in receipt.request.bohr_job_ids
     ]
     if not source_queries:
-        return False, 'source job was not successfully queried before submission'
+        return False, "source job was not successfully queried before submission"
 
     machine_queries = [
         receipt
@@ -356,24 +352,24 @@ def check_bohr_job_upgrade_execution(
         if index < submit_index and _is_job_gpu_machine_query(receipt)
     ]
     if not machine_queries:
-        return False, 'job-scene GPU machines were not queried before submission'
+        return False, "job-scene GPU machines were not queried before submission"
 
     artifact_ids = _artifact_job_ids(artifact)
     submitted_ids = set(submit.ids.job_ids)
     if seed_id not in artifact_ids:
-        return False, f'{filename}: source job identifier does not match CLI request'
+        return False, f"{filename}: source job identifier does not match CLI request"
     if not submitted_ids.intersection(artifact_ids):
         return (
             False,
-            f'{filename}: resubmitted job identifier does not match CLI response',
+            f"{filename}: resubmitted job identifier does not match CLI response",
         )
     if seed_id in submitted_ids:
-        return False, 'job submission response reuses the source job identifier'
+        return False, "job submission response reuses the source job identifier"
 
     return (
         True,
-        'source job and GPU machines were queried before one matching A100 '
-        'resubmission, and the CLI identifiers were recorded',
+        "source job and GPU machines were queried before one matching A100 "
+        "resubmission, and the CLI identifiers were recorded",
     )
 
 
@@ -406,39 +402,39 @@ def check_bohr_job_stop_execution(
     submits = [
         (index, receipt)
         for index, receipt in indexed_receipts
-        if _successful_mutation(receipt, 'job.submit')
+        if _successful_mutation(receipt, "job.submit")
     ]
     if len(submits) != 1:
-        return False, f'expected 1 successful job submission, recorded {len(submits)}'
+        return False, f"expected 1 successful job submission, recorded {len(submits)}"
 
     submit_index, submit = submits[0]
     if not submit.captured_json or not submit.ids.bohr_job_ids:
-        return False, 'job submission has no parsed Bohr job identifier'
+        return False, "job submission has no parsed Bohr job identifier"
     if not submit.ids.platform_job_ids:
-        return False, 'job submission has no parsed platform job identifier'
+        return False, "job submission has no parsed platform job identifier"
     if submit.request.image_address != image:
-        return False, 'job submission does not match expected image'
+        return False, "job submission does not match expected image"
     if submit.request.machine_type != machine_type:
-        return False, 'job submission does not match expected machine type'
+        return False, "job submission does not match expected machine type"
     if not _shell_commands_equivalent(submit.request.command, command):
-        return False, 'job submission does not match expected command'
-    if not (submit.request.job_name or '').startswith(job_name_prefix):
-        return False, 'job submission does not use the expected unique name prefix'
+        return False, "job submission does not match expected command"
+    if not (submit.request.job_name or "").startswith(job_name_prefix):
+        return False, "job submission does not use the expected unique name prefix"
 
     bohr_job_ids = set(submit.ids.bohr_job_ids)
     describes = [
         (index, receipt)
         for index, receipt in indexed_receipts
         if index > submit_index
-        and _successful_mutation(receipt, 'job.describe')
+        and _successful_mutation(receipt, "job.describe")
         and receipt.captured_json
         and bohr_job_ids.intersection(receipt.request.bohr_job_ids)
     ]
     if len(describes) < 2:
-        return False, 'submitted job has fewer than two successful status queries'
+        return False, "submitted job has fewer than two successful status queries"
 
     submitted_job_ids = set(submit.ids.job_ids)
-    stop_operations = {'job.terminate', 'job.kill', 'job.cancel', 'job.+cancel'}
+    stop_operations = {"job.terminate", "job.kill", "job.cancel", "job.+cancel"}
     successful_controls: list[tuple[int, BohrCliReceiptRecord]] = []
     for index, receipt in indexed_receipts:
         if index <= submit_index or receipt.operation not in stop_operations:
@@ -463,14 +459,14 @@ def check_bohr_job_stop_execution(
         None,
     )
     if lifecycle_control is None:
-        return False, 'no successful stop of the submitted job between status queries'
+        return False, "no successful stop of the submitted job between status queries"
 
     if not submitted_job_ids.intersection(_artifact_job_ids(artifact)):
-        return False, f'{filename}: recorded job identifier does not match CLI receipts'
+        return False, f"{filename}: recorded job identifier does not match CLI receipts"
 
     return (
         True,
-        'one self-submitted job was queried, stopped, queried again, and recorded',
+        "one self-submitted job was queried, stopped, queried again, and recorded",
     )
 
 
@@ -493,61 +489,61 @@ def check_bohr_parameter_sweep_execution(
     creates = [
         receipt
         for receipt in receipts
-        if _successful_mutation(receipt, 'job_group.create')
+        if _successful_mutation(receipt, "job_group.create")
     ]
     submits = [
-        receipt for receipt in receipts if _successful_mutation(receipt, 'job.submit')
+        receipt for receipt in receipts if _successful_mutation(receipt, "job.submit")
     ]
     if len(creates) != 1:
         return (
             False,
-            f'expected 1 successful job-group creation, recorded {len(creates)}',
+            f"expected 1 successful job-group creation, recorded {len(creates)}",
         )
     if len(submits) != 8:
-        return False, f'expected 8 successful job submissions, recorded {len(submits)}'
+        return False, f"expected 8 successful job submissions, recorded {len(submits)}"
 
     create = creates[0]
     if not create.captured_json or not create.ids.group_ids:
-        return False, 'job-group creation has no parsed JSON group identifier'
+        return False, "job-group creation has no parsed JSON group identifier"
 
     submitted_group_ids: set[int] = set()
     by_temperature: dict[int, BohrCliReceiptRecord] = {}
     for receipt in submits:
         if not receipt.captured_json or not receipt.ids.job_ids:
-            return False, 'a job submission has no parsed JSON job identifier'
+            return False, "a job submission has no parsed JSON job identifier"
         if len(receipt.request.job_group_ids) != 1:
-            return False, 'each job submission must target one recorded job group'
+            return False, "each job submission must target one recorded job group"
         submitted_group_ids.update(receipt.request.job_group_ids)
         if len(receipt.request.temperatures_k) != 1:
-            return False, 'each job submission must contain one recoverable temperature'
+            return False, "each job submission must contain one recoverable temperature"
         temperature = receipt.request.temperatures_k[0]
         if temperature in by_temperature:
-            return False, f'temperature {temperature} K was submitted more than once'
+            return False, f"temperature {temperature} K was submitted more than once"
         by_temperature[temperature] = receipt
 
     if len(submitted_group_ids) != 1:
-        return False, 'job submissions do not all target the same job group'
+        return False, "job submissions do not all target the same job group"
     submitted_group_id = next(iter(submitted_group_ids))
     if submitted_group_id not in create.ids.group_ids:
         return (
             False,
-            'submitted job group was not returned by the recorded group creation',
+            "submitted job group was not returned by the recorded group creation",
         )
 
     artifact_jobs = _artifact_temperature_jobs(artifact)
     expected_temperatures = set(range(300, 1001, 100))
     if set(by_temperature) != expected_temperatures:
-        return False, 'execution receipts do not cover 300-1000 K by 100 K once'
+        return False, "execution receipts do not cover 300-1000 K by 100 K once"
     for temperature, artifact_job_id in artifact_jobs.items():
         receipt = by_temperature.get(temperature)
         if receipt is None or artifact_job_id not in receipt.ids.job_ids:
             return False, (
-                f'{temperature} K artifact job ID does not match its CLI response'
+                f"{temperature} K artifact job ID does not match its CLI response"
             )
 
     return (
         True,
-        'one group creation and eight grouped submissions match b3_jobs.json',
+        "one group creation and eight grouped submissions match b3_jobs.json",
     )
 
 
@@ -567,23 +563,23 @@ def check_bohr_job_monitor_execution(
     if artifact_error:
         return False, artifact_error
     if _resolve_file(root, log_filename) is None:
-        return False, f'{log_filename} not found in workspace'
+        return False, f"{log_filename} not found in workspace"
 
     indexed_receipts = list(enumerate(receipts))
     submits = [
         (index, receipt)
         for index, receipt in indexed_receipts
-        if _successful_mutation(receipt, 'job.submit')
+        if _successful_mutation(receipt, "job.submit")
     ]
     if len(submits) != 1:
-        return False, f'expected 1 successful job submission, recorded {len(submits)}'
+        return False, f"expected 1 successful job submission, recorded {len(submits)}"
 
     submit_index, submit = submits[0]
     if not submit.captured_json or not submit.ids.bohr_job_ids:
-        return False, 'job submission has no parsed Bohr job identifier'
+        return False, "job submission has no parsed Bohr job identifier"
     expected_request = {
-        'image': (submit.request.image_address, image),
-        'machine type': (submit.request.machine_type, machine_type),
+        "image": (submit.request.image_address, image),
+        "machine type": (submit.request.machine_type, machine_type),
     }
     mismatches = [
         label
@@ -593,7 +589,7 @@ def check_bohr_job_monitor_execution(
     if mismatches:
         return False, f'job submission does not match expected {", ".join(mismatches)}'
     if not _shell_commands_equivalent(submit.request.command, command):
-        return False, 'job submission does not match expected command'
+        return False, "job submission does not match expected command"
 
     selected_describes: list[tuple[int, BohrCliReceiptRecord]] | None = None
     terminal_index: int | None = None
@@ -602,7 +598,7 @@ def check_bohr_job_monitor_execution(
             (index, receipt)
             for index, receipt in indexed_receipts
             if index > submit_index
-            and _successful_mutation(receipt, 'job.describe')
+            and _successful_mutation(receipt, "job.describe")
             and receipt.captured_json
             and bohr_job_id in receipt.request.bohr_job_ids
         ]
@@ -627,8 +623,8 @@ def check_bohr_job_monitor_execution(
     if selected_describes is None or terminal_index is None:
         return (
             False,
-            'no submitted job has two successful polls and terminal '
-            'successful-status/exitCode=0/endTime evidence',
+            "no submitted job has two successful polls and terminal "
+            "successful-status/exitCode=0/endTime evidence",
         )
 
     platform_job_ids = set(submit.ids.platform_job_ids)
@@ -638,31 +634,31 @@ def check_bohr_job_monitor_execution(
         receipt
         for index, receipt in indexed_receipts
         if index > terminal_index
-        and _successful_mutation(receipt, 'job.log')
+        and _successful_mutation(receipt, "job.log")
         and platform_job_ids.intersection(receipt.request.platform_job_ids)
     ]
     if not successful_logs:
-        return False, 'no successful post-completion log retrieval for the same job'
+        return False, "no successful post-completion log retrieval for the same job"
 
     receipt_job_ids = set(submit.ids.job_ids)
     for _index, receipt in selected_describes:
         receipt_job_ids.update(receipt.ids.job_ids)
     if not receipt_job_ids.intersection(_artifact_job_ids(artifact)):
-        return False, f'{filename}: recorded job identifier does not match CLI receipts'
+        return False, f"{filename}: recorded job identifier does not match CLI receipts"
     if _artifact_poll_count(artifact) < 2:
-        return False, f'{filename}: monitoring record contains fewer than two polls'
-    for label, expected in (('image', image), ('machine type', machine_type)):
+        return False, f"{filename}: monitoring record contains fewer than two polls"
+    for label, expected in (("image", image), ("machine type", machine_type)):
         if not _artifact_contains(artifact, expected):
-            return False, f'{filename}: monitoring record does not contain {label}'
+            return False, f"{filename}: monitoring record does not contain {label}"
     if not _artifact_contains_command(artifact, command):
-        return False, f'{filename}: monitoring record does not contain command'
+        return False, f"{filename}: monitoring record does not contain command"
     unsuccessful_outcome = _artifact_unsuccessful_outcome(artifact)
     if unsuccessful_outcome is not None:
-        return False, f'{filename}: monitoring record reports {unsuccessful_outcome}'
+        return False, f"{filename}: monitoring record reports {unsuccessful_outcome}"
     if not _artifact_records_saved_log(artifact, log_filename):
-        return False, f'{filename}: monitoring record does not record the saved log'
+        return False, f"{filename}: monitoring record does not record the saved log"
 
     return (
         True,
-        'one submitted job was polled to exitCode=0 and its log was retrieved',
+        "one submitted job was polled to exitCode=0 and its log was retrieved",
     )
