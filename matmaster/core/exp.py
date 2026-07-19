@@ -761,6 +761,9 @@ class Exp:
                 default_max_runtime_seconds=(
                     ctx.request.bohrium_job_max_runtime_seconds
                 ),
+                default_max_wait_time_seconds=(
+                    ctx.request.bohrium_job_max_wait_time_seconds
+                ),
             ),
         ]
 

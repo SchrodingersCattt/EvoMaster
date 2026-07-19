@@ -305,6 +305,7 @@ class AgentRunService:
         cancel_controller: CancellationController | None = None,
         submit_confirmation_enabled: bool = False,
         bohrium_job_max_runtime_seconds: int | None = None,
+        bohrium_job_max_wait_time_seconds: int | None = None,
         bohrium_node_sku_id: int | None = None,
         bohrium_node_lifecycle_policy: str = "run_end",
         bohrium_node_idle_timeout_seconds: int | None = None,
@@ -668,6 +669,9 @@ class AgentRunService:
                     user_instructions=user_instructions,
                     active_skills=frozenset(),
                     bohrium_job_max_runtime_seconds=(bohrium_job_max_runtime_seconds),
+                    bohrium_job_max_wait_time_seconds=(
+                        bohrium_job_max_wait_time_seconds
+                    ),
                     ports=AgentRunPorts(
                         child_event_forward_sink=figure_coordinator.child_event_sink,
                         compaction=wiring.compaction,

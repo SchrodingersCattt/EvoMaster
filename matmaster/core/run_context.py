@@ -58,6 +58,7 @@ class AgentRunRequest(BaseModel):
     user_instructions: UserInstructions | None = None
     active_skills: frozenset[str] = Field(default_factory=frozenset)
     bohrium_job_max_runtime_seconds: int | None = Field(default=None, gt=0)
+    bohrium_job_max_wait_time_seconds: int | None = Field(default=None, gt=0)
     ports: AgentRunPorts = Field(
         default_factory=AgentRunPorts,
         repr=False,

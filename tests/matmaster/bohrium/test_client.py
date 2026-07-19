@@ -418,6 +418,7 @@ def test_add_job_sandbox(monkeypatch: pytest.MonkeyPatch) -> None:
         job_name="demo",
         disk_size=50,
         max_runtime_seconds=7200,
+        max_wait_time_seconds=900,
         session_id="sess-123",
         round_id="inv-456",
     )
@@ -425,6 +426,7 @@ def test_add_job_sandbox(monkeypatch: pytest.MonkeyPatch) -> None:
     assert calls[0]["projectId"] == 42
     assert calls[0]["sourceCode"] == "matmaster"
     assert calls[0]["maxRunTime"] == 7200
+    assert calls[0]["maxWaitTime"] == 900
     assert calls[0]["sessionId"] == "sess-123"
     assert calls[0]["roundId"] == "inv-456"
 
@@ -457,7 +459,7 @@ def test_add_job_sandbox_omits_session_round_when_absent(
     assert "roundId" not in calls[0]
 
 
-def test_add_job_non_sandbox_includes_max_runtime(
+def test_add_job_non_sandbox_includes_max_runtime_but_not_max_wait_time(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     calls: list[dict] = []
@@ -482,9 +484,11 @@ def test_add_job_non_sandbox_includes_max_runtime(
         job_name="demo",
         disk_size=50,
         max_runtime_seconds=3600,
+        max_wait_time_seconds=900,
     )
 
     assert calls[0]["maxRunTime"] == 3600
+    assert "maxWaitTime" not in calls[0]
 
 
 class _FakeSpan:

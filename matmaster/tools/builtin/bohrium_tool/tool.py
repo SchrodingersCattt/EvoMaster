@@ -91,6 +91,7 @@ def submit_job_via_runtime(
     workdir: Path,
     session,
     max_runtime_seconds: int | None = None,
+    max_wait_time_seconds: int | None = None,
     session_id: str | None = None,
     invocation_id: str | None = None,
     allow_local_paths: bool = True,
@@ -103,6 +104,8 @@ def submit_job_via_runtime(
         span.set_attribute("bohrium.disk_size", disk_size)
         if max_runtime_seconds is not None:
             span.set_attribute("bohrium.max_runtime_seconds", max_runtime_seconds)
+        if max_wait_time_seconds is not None:
+            span.set_attribute("bohrium.max_wait_time_seconds", max_wait_time_seconds)
         try:
             if not cmd.rstrip().endswith(CMD_LOG_SUFFIX):
                 raise BohriumError(
@@ -133,6 +136,7 @@ def submit_job_via_runtime(
                 job_name=job_name,
                 disk_size=disk_size,
                 max_runtime_seconds=max_runtime_seconds,
+                max_wait_time_seconds=max_wait_time_seconds,
                 session_id=session_id,
                 round_id=invocation_id,
             )
@@ -325,6 +329,7 @@ class BohriumTool(BuiltinTool):
         invocation_id: str | None = None,
         allow_local_paths: bool = True,
         default_max_runtime_seconds: int | None = None,
+        default_max_wait_time_seconds: int | None = None,
     ) -> None:
         super().__init__(
             session=session,
@@ -337,8 +342,10 @@ class BohriumTool(BuiltinTool):
         self._invocation_id = invocation_id
         self._allow_local_paths = allow_local_paths
         self._default_max_runtime_seconds = default_max_runtime_seconds
+        self._default_max_wait_time_seconds = default_max_wait_time_seconds
         self.submit_review_provider = BohriumSubmitReviewProvider(
-            default_max_runtime_seconds=default_max_runtime_seconds
+            default_max_runtime_seconds=default_max_runtime_seconds,
+            default_max_wait_time_seconds=default_max_wait_time_seconds,
         )
 
     # prompt() keeps workflow + cross-skill rules only. Per-software image/machine/cmd
@@ -558,6 +565,7 @@ class BohriumTool(BuiltinTool):
         job_name = exec_args["job_name"]
         disk_size = exec_args["disk_size"]
         max_runtime_seconds = exec_args.get("max_runtime_seconds")
+        max_wait_time_seconds = exec_args.get("max_wait_time_seconds")
 
         ctx: BohriumContext | None = None
         try:
@@ -571,6 +579,7 @@ class BohriumTool(BuiltinTool):
                 job_name=str(job_name),
                 disk_size=disk_size,
                 max_runtime_seconds=max_runtime_seconds,
+                max_wait_time_seconds=max_wait_time_seconds,
                 workdir=self._workdir or Path("."),
                 session=self._session,
                 session_id=self._session_id,

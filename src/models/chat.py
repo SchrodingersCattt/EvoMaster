@@ -583,6 +583,11 @@ class ChatSendRequest(BaseModel):
         gt=0,
         description="可选，本轮 Bohrium job 最大运行时间（秒）；透传为 launching job/add 的 maxRunTime，未传则使用平台默认",
     )
+    bohrium_job_max_wait_time_seconds: int | None = Field(
+        default=None,
+        gt=0,
+        description="可选，本轮 Bohrium job 最长排队时间（秒）；透传为 launching sandbox job/add 的 maxWaitTime，未传则由 launching 默认兜底（30 分钟）",
+    )
     bohrium_node_sku_id: int | None = Field(
         default=None,
         gt=0,

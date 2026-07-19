@@ -21,6 +21,7 @@ def _make_ctx(
     session_type: str = "local",
     metadata_source: str = "",
     max_runtime_seconds: int | None = None,
+    max_wait_time_seconds: int | None = None,
 ) -> AgentRunContext:
     env_kwargs: dict = {
         "workdir": workdir,
@@ -36,6 +37,7 @@ def _make_ctx(
         request=AgentRunRequest(
             llm_provider=MockLLMProvider(),
             bohrium_job_max_runtime_seconds=max_runtime_seconds,
+            bohrium_job_max_wait_time_seconds=max_wait_time_seconds,
         ),
     )
 
@@ -97,3 +99,9 @@ def test_bohrium_tool_receives_run_max_runtime_default(tmp_path: Path) -> None:
     tool = _build_bohrium_tool(_make_ctx(workdir=tmp_path, max_runtime_seconds=7200))
 
     assert tool._default_max_runtime_seconds == 7200
+
+
+def test_bohrium_tool_receives_run_max_wait_time_default(tmp_path: Path) -> None:
+    tool = _build_bohrium_tool(_make_ctx(workdir=tmp_path, max_wait_time_seconds=900))
+
+    assert tool._default_max_wait_time_seconds == 900

@@ -339,6 +339,22 @@ def _run_worker_loop() -> None:
                     session_id,
                     task_id,
                 )
+        bohrium_job_max_wait_time_seconds = None
+        raw_max_wait_time = payload.get("bohrium_job_max_wait_time_seconds")
+        if raw_max_wait_time not in (None, ""):
+            try:
+                parsed_max_wait_time = int(raw_max_wait_time)
+                if parsed_max_wait_time > 0:
+                    bohrium_job_max_wait_time_seconds = parsed_max_wait_time
+            except (TypeError, ValueError):
+                logger.warning(
+                    "Agent worker: ignore invalid "
+                    "bohrium_job_max_wait_time_seconds=%r "
+                    "session_id=%s task_id=%s",
+                    raw_max_wait_time,
+                    session_id,
+                    task_id,
+                )
         raw_workspace = payload.get("workspace")
         workspace = (
             raw_workspace.strip() or None if isinstance(raw_workspace, str) else None
@@ -492,6 +508,9 @@ def _run_worker_loop() -> None:
                     "bohrium_required": bohrium_required,
                     "bohrium_job_max_runtime_seconds": (
                         bohrium_job_max_runtime_seconds
+                    ),
+                    "bohrium_job_max_wait_time_seconds": (
+                        bohrium_job_max_wait_time_seconds
                     ),
                     "bohrium_node_sku_id": bohrium_node_sku_id,
                     "bohrium_node_lifecycle_policy": node_lifecycle_policy.value,

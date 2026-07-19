@@ -139,8 +139,71 @@ def test_submit_ignores_agent_provided_max_runtime(tmp_path, monkeypatch):
     assert captured["max_runtime_seconds"] == 7200
 
 
+def test_submit_uses_tool_default_max_wait_time(tmp_path, monkeypatch):
+    tool = BohriumTool(workdir=tmp_path, default_max_wait_time_seconds=900)
+    captured: dict[str, object] = {}
+
+    _patch_bridge(monkeypatch)
+
+    def fake_submit_job_via_runtime(**kwargs):
+        captured.update(kwargs)
+        return BohriumSubmittedJob(job_id="job-123", raw_add_response={})
+
+    monkeypatch.setattr(
+        bohrium_tool_module,
+        "submit_job_via_runtime",
+        fake_submit_job_via_runtime,
+    )
+
+    result = tool._submit(
+        {
+            "action": "submit",
+            "input_dir": "inputs",
+            "image": "test:latest",
+            "cmd": "run",
+        }
+    )
+
+    assert result.status == "success"
+    assert captured["max_wait_time_seconds"] == 900
+
+
+def test_submit_ignores_agent_provided_max_wait_time(tmp_path, monkeypatch):
+    tool = BohriumTool(workdir=tmp_path, default_max_wait_time_seconds=900)
+    captured: dict[str, object] = {}
+
+    _patch_bridge(monkeypatch)
+
+    def fake_submit_job_via_runtime(**kwargs):
+        captured.update(kwargs)
+        return BohriumSubmittedJob(job_id="job-123", raw_add_response={})
+
+    monkeypatch.setattr(
+        bohrium_tool_module,
+        "submit_job_via_runtime",
+        fake_submit_job_via_runtime,
+    )
+
+    result = tool._submit(
+        {
+            "action": "submit",
+            "input_dir": "inputs",
+            "image": "test:latest",
+            "cmd": "run",
+            "max_wait_time_seconds": 600,
+        }
+    )
+
+    assert result.status == "success"
+    assert captured["max_wait_time_seconds"] == 900
+
+
 def test_submit_schema_does_not_expose_max_runtime():
     assert "max_runtime_seconds" not in BohriumTool.json_schema["properties"]
+
+
+def test_submit_schema_does_not_expose_max_wait_time():
+    assert "max_wait_time_seconds" not in BohriumTool.json_schema["properties"]
 
 
 def test_submit_optout_rejects_oversized_args_before_runtime(tmp_path, monkeypatch):

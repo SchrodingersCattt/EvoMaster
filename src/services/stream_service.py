@@ -227,6 +227,7 @@ class ChatStreamService:
         bohrium_required: bool = False,
         bohrium_submit_confirmation_required: bool | None = None,
         bohrium_job_max_runtime_seconds: int | None = None,
+        bohrium_job_max_wait_time_seconds: int | None = None,
         bohrium_node_sku_id: int | None = None,
         bohrium_node_lifecycle_policy: str = "run_end",
         bohrium_node_idle_timeout_seconds: int | None = None,
@@ -283,6 +284,7 @@ class ChatStreamService:
                 bohrium_submit_confirmation_required
             ),
             "bohrium_job_max_runtime_seconds": bohrium_job_max_runtime_seconds,
+            "bohrium_job_max_wait_time_seconds": bohrium_job_max_wait_time_seconds,
             "bohrium_node_sku_id": bohrium_node_sku_id,
             "bohrium_node_lifecycle_policy": bohrium_node_lifecycle_policy,
             "bohrium_node_idle_timeout_seconds": bohrium_node_idle_timeout_seconds,
@@ -711,6 +713,7 @@ class ChatStreamService:
                 effective_submit_confirmation_required
             ),
             bohrium_job_max_runtime_seconds=req.bohrium_job_max_runtime_seconds,
+            bohrium_job_max_wait_time_seconds=(req.bohrium_job_max_wait_time_seconds),
             bohrium_node_sku_id=req.bohrium_node_sku_id,
             bohrium_node_lifecycle_policy=req.bohrium_node_lifecycle_policy,
             bohrium_node_idle_timeout_seconds=(req.bohrium_node_idle_timeout_seconds),

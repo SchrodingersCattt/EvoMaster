@@ -27,6 +27,7 @@ class UserRuntimePreference:
     org_id: str | None = None
     user_bohrium_submit_confirmation_required: bool | None = None
     bohrium_job_max_runtime_seconds: int | None = None
+    bohrium_job_max_wait_time_seconds: int | None = None
     bohrium_node_sku_id: int | None = None
     bohrium_node_lifecycle_policy: str = "run_end"
     bohrium_node_idle_timeout_seconds: int | None = None
@@ -76,6 +77,9 @@ def get_user_runtime_preference(
             user_level.bohrium_submit_confirmation_required
         ),
         bohrium_job_max_runtime_seconds=user_level.bohrium_job_max_runtime_seconds,
+        bohrium_job_max_wait_time_seconds=(
+            user_level.bohrium_job_max_wait_time_seconds
+        ),
         bohrium_node_sku_id=user_level.bohrium_node_sku_id,
         bohrium_node_lifecycle_policy=user_level.bohrium_node_lifecycle_policy,
         bohrium_node_idle_timeout_seconds=(

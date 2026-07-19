@@ -206,6 +206,7 @@ def add_job(
     job_name: str,
     disk_size: int,
     max_runtime_seconds: int | None = None,
+    max_wait_time_seconds: int | None = None,
     session_id: str | None = None,
     round_id: str | None = None,
 ) -> dict[str, Any]:
@@ -222,6 +223,8 @@ def add_job(
         }
         if max_runtime_seconds is not None:
             payload["maxRunTime"] = max_runtime_seconds
+        if max_wait_time_seconds is not None:
+            payload["maxWaitTime"] = max_wait_time_seconds
         # sandbox job/add accepts sessionId/roundId for source attribution.
         # session_id == MatMaster session; round_id == agent run invocation_id.
         if session_id:
@@ -257,6 +260,8 @@ def add_job(
         span.set_attribute("bohrium.disk_size", disk_size)
         if max_runtime_seconds is not None:
             span.set_attribute("bohrium.max_runtime_seconds", max_runtime_seconds)
+        if ctx.sandbox and max_wait_time_seconds is not None:
+            span.set_attribute("bohrium.max_wait_time_seconds", max_wait_time_seconds)
         created_job_id = create_data.get("jobId") or create_data.get("id")
         if created_job_id not in (None, ""):
             span.set_attribute("bohrium.created_job_id", str(created_job_id).strip())

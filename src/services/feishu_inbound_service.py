@@ -98,6 +98,9 @@ async def _run_agent_and_reply_feishu(
             runtime_pref.user_bohrium_submit_confirmation_required
         ),
         bohrium_job_max_runtime_seconds=runtime_pref.bohrium_job_max_runtime_seconds,
+        bohrium_job_max_wait_time_seconds=(
+            runtime_pref.bohrium_job_max_wait_time_seconds
+        ),
         bohrium_node_sku_id=runtime_pref.bohrium_node_sku_id,
         bohrium_node_lifecycle_policy=runtime_pref.bohrium_node_lifecycle_policy,
         bohrium_node_idle_timeout_seconds=(

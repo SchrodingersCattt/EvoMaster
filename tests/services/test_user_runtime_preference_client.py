@@ -42,6 +42,7 @@ def test_get_user_runtime_preference_combines_tools_preference_and_latest_org(
                     "last_selected_model": "matmaster/qwen",
                     "bohrium_submit_confirmation_required": False,
                     "bohrium_job_max_runtime_seconds": "7200",
+                    "bohrium_job_max_wait_time_seconds": "900",
                     "bohrium_node_sku_id": "12345",
                     "bohrium_node_lifecycle_policy": "idle_timeout",
                     "bohrium_node_idle_timeout_seconds": 1800,
@@ -63,6 +64,7 @@ def test_get_user_runtime_preference_combines_tools_preference_and_latest_org(
     assert pref.org_id == "org-1"
     assert pref.user_bohrium_submit_confirmation_required is False
     assert pref.bohrium_job_max_runtime_seconds == 7200
+    assert pref.bohrium_job_max_wait_time_seconds == 900
     assert pref.bohrium_node_sku_id == 12345
     assert pref.bohrium_node_lifecycle_policy == "idle_timeout"
     assert pref.bohrium_node_idle_timeout_seconds == 1800
@@ -99,6 +101,7 @@ def test_get_user_runtime_preference_fail_soft_when_tools_server_fails(
     assert pref.org_id == "org-1"
     assert pref.user_bohrium_submit_confirmation_required is None
     assert pref.bohrium_job_max_runtime_seconds is None
+    assert pref.bohrium_job_max_wait_time_seconds is None
     assert pref.bohrium_node_sku_id is None
     assert pref.bohrium_node_lifecycle_policy == "run_end"
     assert pref.bohrium_node_idle_timeout_seconds is None
