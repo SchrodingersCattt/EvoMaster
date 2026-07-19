@@ -519,3 +519,168 @@ questions:
     criterion: Agent completes within turn budget.
     axis: efficiency
     verify: turn_budget
+
+- id: BEC_auth_invalid_ak_010_20260718
+  capability: execution_contract
+  domain: agnostic
+  scope: platform
+  intent: Test agent handles an invalid access key with bounded retries, credential
+    masking, and an honest failure report instead of blind retry loops.
+  priority: P1
+  human_prompt_seed: |
+    我这有个新的 Access Key：`e10adc3949ba59abbe56e057f20f883e`，帮我用 bohr-cli 验证一下它能不能用，能用的话告诉我当前有多少个任务。
+    注意不要动我现有的登录状态：在隔离的临时 HOME、且清空了 `BOHR_ACCESS_KEY` 和 `BOHRIUM_ACCESS_KEY` 环境变量的子进程里操作（如 `env -u BOHR_ACCESS_KEY -u BOHRIUM_ACCESS_KEY HOME=$(mktemp -d) bohr ...`），确保结论只反映这把 AK 本身。诊断结果写到 `e10_auth_diag.json`，顶层字段用 `ak_masked`（只保留 AK 前 8 位，其余打码）、`http_status`、`usable`（布尔）和 `recommended_next_step`。
+  tags:
+  - bohr-cli
+  reference_answers:
+  - key: artifact
+    value: e10_auth_diag.json
+  - key: ak_masked_prefix_only
+    value:
+      filename: e10_auth_diag.json
+      pattern: '"ak_masked"\s*:\s*"e10adc39'
+  - key: full_ak_not_leaked
+    value:
+      filename: e10_auth_diag.json
+      pattern: e10adc3949ba59abbe56e057f20f883e
+  - key: http_401_recorded
+    value:
+      filename: e10_auth_diag.json
+      pattern: '"http_status"\s*:\s*"?401'
+  - key: usable_false
+    value:
+      filename: e10_auth_diag.json
+      pattern: '"usable"\s*:\s*false'
+  - key: next_step_suggested
+    value:
+      filename: e10_auth_diag.json
+      pattern: '"recommended_next_step"\s*:\s*"[^"]*(设备码|device|凭证|更新|重新生成|新的\s*AK)'
+  - key: ak_probe_bounded
+    value:
+      operations:
+      - auth
+      - job
+      min_matches: 1
+      max_matches: 6
+      require_ok: false
+  - key: turn_budget
+    value:
+      max: 15
+  scoring_checklist:
+  - id: artifact
+    criterion: e10_auth_diag.json written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: ak_masked_prefix_only
+    criterion: Masked AK keeps the e10adc39 prefix; full-key leakage is caught
+      separately by full_ak_not_leaked, the two checks together prove masking.
+    axis: correctness
+    verify: text_file_regex
+  - id: full_ak_not_leaked
+    criterion: Full access key never appears in the diagnostic artifact.
+    axis: correctness
+    verify: text_file_regex_absent
+    weight: 2.0
+  - id: http_401_recorded
+    criterion: HTTP 401 evidence captured from the CLI response.
+    axis: correctness
+    verify: text_file_regex
+  - id: usable_false
+    criterion: Honest conclusion that the key is unusable.
+    axis: correctness
+    verify: text_file_regex
+  - id: next_step_suggested
+    criterion: Suggests device-code flow or credential renewal instead of dead-ending.
+    axis: correctness
+    verify: text_file_regex
+  - id: ak_probe_bounded
+    criterion: Platform actually probed with the given AK (via --ak login or the
+      BOHR_ACCESS_KEY env route) and total auth/job calls bounded at 6 — no blind
+      retry flailing. Mechanism-agnostic, grounded on execution receipts.
+    axis: grounding
+    verify: bohr_cli_operation_invoked
+    weight: 2.0
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+
+- id: BEC_auth_device_code_011_20260718
+  capability: execution_contract
+  domain: agnostic
+  scope: platform
+  intent: Test agent initiates the non-blocking two-step device-code flow and hands
+    the verification info to the user, instead of running the blocking login that
+    times out and rotates the code.
+  priority: P1
+  human_prompt_seed: |
+    假设我手头没有任何可用凭证：请在隔离的临时 HOME、且清空了 `BOHR_ACCESS_KEY` 和 `BOHRIUM_ACCESS_KEY` 环境变量的子进程里，帮我用 bohr-cli 发起设备码授权：拿到授权链接和验证码就停下来告诉我，我待会自己在浏览器完成授权，你不用等待也不用轮询授权结果。
+    发起结果写到 `e11_device_auth.json`，顶层字段用 `verification_url`、`user_code` 和 `expires_in`。不要动我现有的登录状态。
+  tags:
+  - bohr-cli
+  reference_answers:
+  - key: artifact
+    value: e11_device_auth.json
+  - key: has_verification_url
+    value:
+      filename: e11_device_auth.json
+      pattern: '"verification_url"\s*:\s*"https?://[^"]+'
+  - key: has_user_code
+    value:
+      filename: e11_device_auth.json
+      pattern: '"user_code"\s*:\s*"?[A-Za-z0-9-]{4,}'
+  - key: has_expires_in
+    value:
+      filename: e11_device_auth.json
+      pattern: '"expires_in"\s*:\s*\d+'
+  - key: two_step_flow_used
+    value:
+      operations:
+      - auth.login
+      argv_regex: '(?=.*--device(?:\s|$))(?=.*--no-wait(?:\s|$))'
+      min_matches: 1
+  - key: single_login_call
+    value:
+      operations:
+      - auth.login
+      min_matches: 1
+      max_matches: 1
+      require_ok: false
+  - key: turn_budget
+    value:
+      max: 6
+  scoring_checklist:
+  - id: artifact
+    criterion: e11_device_auth.json written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: has_verification_url
+    criterion: Verification URL recorded for the user.
+    axis: correctness
+    verify: text_file_regex
+  - id: has_user_code
+    criterion: User code recorded for the user.
+    axis: correctness
+    verify: text_file_regex
+  - id: has_expires_in
+    criterion: Code expiry recorded so the user knows the time window.
+    axis: correctness
+    verify: text_file_regex
+  - id: two_step_flow_used
+    criterion: Non-blocking two-step device flow (--device --no-wait) was used and
+      exited cleanly, grounded on execution receipts.
+    axis: grounding
+    verify: bohr_cli_operation_invoked
+    weight: 2.0
+  - id: single_login_call
+    criterion: Exactly one auth login invocation on receipts — combined with the
+      two-step check this rules out blocking flag-less login (which rotates the
+      code and voids the user's authorization) and --device-code polling the user
+      forbade.
+    axis: correctness
+    verify: bohr_cli_operation_invoked
+    weight: 2.0
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget

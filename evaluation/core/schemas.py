@@ -729,7 +729,13 @@ class QuestionItem(BaseModel):
                 raise ValueError(
                     f"bohr_cli_operation_invoked reference '{item.id}' must be an object"
                 )
-            unknown = set(config) - {"operations", "min_matches", "require_ok"}
+            unknown = set(config) - {
+                "operations",
+                "min_matches",
+                "max_matches",
+                "require_ok",
+                "argv_regex",
+            }
             if unknown:
                 raise ValueError(
                     f"bohr_cli_operation_invoked reference '{item.id}' has unsupported "
@@ -753,6 +759,34 @@ class QuestionItem(BaseModel):
                     f"bohr_cli_operation_invoked reference '{item.id}' requires "
                     "min_matches >= 1"
                 )
+            max_matches = config.get("max_matches")
+            if max_matches is not None and (
+                type(max_matches) is not int or max_matches < min_matches
+            ):
+                raise ValueError(
+                    f"bohr_cli_operation_invoked reference '{item.id}' requires "
+                    "max_matches >= min_matches"
+                )
+            require_ok = config.get("require_ok")
+            if require_ok is not None and type(require_ok) is not bool:
+                raise ValueError(
+                    f"bohr_cli_operation_invoked reference '{item.id}' requires "
+                    "require_ok to be a boolean"
+                )
+            argv_regex = config.get("argv_regex")
+            if argv_regex is not None:
+                if not isinstance(argv_regex, str) or not argv_regex:
+                    raise ValueError(
+                        f"bohr_cli_operation_invoked reference '{item.id}' requires "
+                        "argv_regex to be a non-empty regex string"
+                    )
+                try:
+                    re.compile(argv_regex)
+                except re.error as exc:
+                    raise ValueError(
+                        f"bohr_cli_operation_invoked reference '{item.id}' has "
+                        f"invalid argv_regex: {exc}"
+                    ) from exc
         # Safety questions (capability='safety_refusal') may skip reference_answers
         if self.capability != "safety_refusal" and not self.reference_answers:
             raise ValueError("non-safety questions must include reference_answers")
