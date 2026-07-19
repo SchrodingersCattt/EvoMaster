@@ -23,8 +23,8 @@ import urllib.request
 from typing import Any
 
 SHARE_URL_PATTERNS = [
-    # chat/share 为现行路径；chat-evo/share 为历史路径，对外帮助文档仍有存量链接
-    re.compile(r"https?://[^/]+/matmaster/chat(?:-evo)?/share/([a-f0-9]+)"),
+    # 仅支持现行 chat/share 路径；chat-evo 历史链接明确不兼容（产品决定）
+    re.compile(r"https?://[^/]+/matmaster/chat/share/([a-f0-9]+)"),
 ]
 
 API_PATH_TEMPLATE = (
@@ -43,8 +43,6 @@ def parse_share_url(url_or_id: str) -> tuple[str, str]:
         if m:
             session_id = m.group(1)
             base_end = url_or_id.find("/matmaster/chat/share/")
-            if base_end == -1:
-                base_end = url_or_id.find("/matmaster/chat-evo/share/")
             base_url = url_or_id[:base_end]
             return base_url, session_id
     if re.fullmatch(r"[a-f0-9]{16,64}", url_or_id):

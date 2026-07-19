@@ -1,6 +1,6 @@
 ---
 name: session-analyzer
-description: Analyze a MatMaster shared session from its share link. Extracts key decisions, conclusions, tool usage trace, and errors. Use when the user pastes a MatMaster share URL (e.g. matmaster.*.bohrium.com/matmaster/chat/share/..., legacy chat-evo/share links also accepted).
+description: Analyze a MatMaster shared session from its share link. Extracts key decisions, conclusions, tool usage trace, and errors. Use when the user pastes a MatMaster share URL (e.g. matmaster.*.bohrium.com/matmaster/chat/share/...).
 ---
 
 # Session Analyzer
