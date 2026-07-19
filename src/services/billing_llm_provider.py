@@ -145,6 +145,7 @@ class BillingLLMProvider:
         self._run_state = run_state
         self._pending: set[asyncio.Task] = set()
         self._http_session: aiohttp.ClientSession | None = None
+        self._enter_count = 0
         self._spawn_id_var: ContextVar[str | None] = ContextVar(
             "billing_spawn_id",
             default=None,
@@ -154,9 +155,14 @@ class BillingLLMProvider:
         return getattr(self._inner, name)
 
     async def __aenter__(self) -> BillingLLMProvider:
+        # 可重入（与 Transport._enter_count 同款）：子 exp 无 llm 覆盖时继承父 run
+        # 的同一实例并被子内核再次 async with 进入，若无脑重建 session 会把外层
+        # session 覆盖成孤儿（GC 报 Unclosed client session）。
         await self._inner.__aenter__()
-        # 一次 run 内复用一个 session 的连接池，避免每次上报重新握手。
-        self._http_session = aiohttp.ClientSession()
+        self._enter_count += 1
+        if self._http_session is None:
+            # 一次 run 内复用一个 session 的连接池，避免每次上报重新握手。
+            self._http_session = aiohttp.ClientSession()
         return self
 
     async def __aexit__(
@@ -165,7 +171,11 @@ class BillingLLMProvider:
         exc_val: BaseException | None,
         exc_tb: object | None,
     ) -> None:
-        # 先 drain 完仍在用 session 的上报任务，再关 session。
+        self._enter_count -= 1
+        if self._enter_count > 0:
+            await self._inner.__aexit__(exc_type, exc_val, exc_tb)
+            return
+        # 最外层退出：先 drain 完仍在用 session 的上报任务，再关 session。
         await self._drain_pending()
         if self._http_session is not None:
             await self._http_session.close()

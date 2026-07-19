@@ -1,12 +1,14 @@
-"""BillingRunState 的 in-run 熔断（预算快照 + 欠费信号）+ call_index 计数。
+"""BillingRunState 的 in-run 熔断（预算快照 + 欠费信号）+ call_index 计数，
+以及 BillingLLMProvider 的可重入 enter/exit 生命周期。
 
-只测同步的成本累加 + 熔断触发逻辑，不触发真实 LLM / HTTP。
+不触发真实 LLM / HTTP 请求（生命周期用例会创建真实 aiohttp session 但不发请求）。
 """
 
 from __future__ import annotations
 
+from clients.matmaster_platform.billing.client import BillingRunContext
 from matmaster.types.cancellation import CancellationController
-from src.services.billing_llm_provider import BillingRunState
+from src.services.billing_llm_provider import BillingLLMProvider, BillingRunState
 
 
 def _state(budget_micro, controller):
@@ -112,3 +114,60 @@ class TestDebtGuard:
         st = _state(None, None)
         st.report_uncovered(100)
         assert st._guard_tripped is False
+
+
+class _FakeInner:
+    def __init__(self):
+        self.enters = 0
+        self.exits = 0
+
+    async def __aenter__(self):
+        self.enters += 1
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        self.exits += 1
+
+
+def _provider(inner):
+    return BillingLLMProvider(
+        inner,
+        run_context=BillingRunContext(session_id="s", task_id="t", invocation_id="i"),
+        model="m",
+        billing_service=object(),
+        run_state=BillingRunState(session_id="s"),
+    )
+
+
+class TestReentrantLifecycle:
+    """可重入 enter/exit：子 exp 无 llm 覆盖时子内核会对父 run 的同一实例再次
+    async with，重入不得覆盖外层 session（孤儿泄漏）或提前关闭它。"""
+
+    async def test_nested_enter_reuses_outer_session(self):
+        p = _provider(_FakeInner())
+        async with p:
+            outer_session = p._http_session
+            assert outer_session is not None
+            async with p:
+                assert p._http_session is outer_session
+            # 内层退出后 session 仍存活，收尾归最外层
+            assert p._http_session is outer_session
+            assert not outer_session.closed
+        assert outer_session.closed
+        assert p._http_session is None
+
+    async def test_inner_provider_enter_exit_balanced(self):
+        inner = _FakeInner()
+        p = _provider(inner)
+        async with p:
+            async with p:
+                pass
+        assert inner.enters == 2
+        assert inner.exits == 2
+
+    async def test_single_use_closes_session(self):
+        p = _provider(_FakeInner())
+        async with p:
+            session = p._http_session
+        assert session.closed
+        assert p._http_session is None
