@@ -267,7 +267,13 @@ class LLMResponse(BaseModel):
     finish_reason: str | None = None
     usage: dict[str, int] = Field(
         default_factory=dict,
-        description="Per-call totals for kernel accumulation (scalar ints).",
+        description=(
+            "Per-call totals for kernel accumulation (scalar ints). Convention "
+            "(all transports): prompt_tokens INCLUDES cache_read_tokens and "
+            "cache_write_tokens (OpenAI-style); total_tokens = prompt + "
+            "completion. Downstream (cache-hit rate, billing uncached "
+            "subtraction) relies on this."
+        ),
     )
     usage_vendor: dict[str, Any] | None = Field(
         default=None,

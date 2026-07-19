@@ -313,21 +313,29 @@ def _usage_value(usage: Any, key: str) -> Any:
     return getattr(usage, key, None)
 
 
+def _positive_usage_int(usage: Any, key: str) -> int:
+    value = _usage_value(usage, key)
+    return value if isinstance(value, int) and value > 0 else 0
+
+
 def _anthropic_usage_to_scalar_dict(usage: Any) -> dict[str, int]:
     if usage is None:
         return {}
-    prompt = int(_usage_value(usage, "input_tokens") or 0)
+    raw_input = int(_usage_value(usage, "input_tokens") or 0)
     completion = int(_usage_value(usage, "output_tokens") or 0)
+    cache_read = _positive_usage_int(usage, "cache_read_input_tokens")
+    cache_write = _positive_usage_int(usage, "cache_creation_input_tokens")
+    # Anthropic 语义的 input_tokens 不含缓存读/写；下游（命中率展示、计费的
+    # uncached 减法）统一按「prompt 含缓存」的 OpenAI 口径消费，故在此归一。
+    prompt = raw_input + cache_read + cache_write
     out = {
         "prompt_tokens": prompt,
         "completion_tokens": completion,
         "total_tokens": prompt + completion,
     }
-    cache_read = _usage_value(usage, "cache_read_input_tokens")
-    if isinstance(cache_read, int) and cache_read > 0:
+    if cache_read:
         out["cache_read_tokens"] = cache_read
-    cache_write = _usage_value(usage, "cache_creation_input_tokens")
-    if isinstance(cache_write, int) and cache_write > 0:
+    if cache_write:
         out["cache_write_tokens"] = cache_write
     details = _usage_value(usage, "output_tokens_details")
     if isinstance(details, dict):

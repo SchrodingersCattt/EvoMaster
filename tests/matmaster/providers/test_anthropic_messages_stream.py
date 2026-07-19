@@ -205,9 +205,9 @@ class TestNormalizeStream:
         chunks = [chunk async for chunk in provider.normalize_stream(_aiter(events))]
 
         assert chunks[-1].usage == {
-            "prompt_tokens": 10,
+            "prompt_tokens": 15,
             "completion_tokens": 5,
-            "total_tokens": 15,
+            "total_tokens": 20,
             "cache_read_tokens": 2,
             "cache_write_tokens": 3,
             "reasoning_tokens": 4,

@@ -3,7 +3,10 @@ from __future__ import annotations
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from matmaster.providers.transports.anthropic_messages import AnthropicMessagesTransport
+from matmaster.providers.transports.anthropic_messages import (
+    AnthropicMessagesTransport,
+    _anthropic_usage_to_scalar_dict,
+)
 from matmaster.types.llm_provider import LLMProvider
 from matmaster.types.messages import ProviderState, ToolCallData, UserMessage
 
@@ -83,9 +86,9 @@ class TestNormalizeResponse:
         ]
         assert result.finish_reason == "tool_calls"
         assert result.usage == {
-            "prompt_tokens": 10,
+            "prompt_tokens": 17,
             "completion_tokens": 5,
-            "total_tokens": 15,
+            "total_tokens": 22,
             "cache_read_tokens": 3,
             "cache_write_tokens": 4,
         }
@@ -98,6 +101,37 @@ class TestNormalizeResponse:
             },
         )
         assert result.usage_vendor is not None
+
+    def test_prompt_tokens_normalize_to_include_cache_read_and_write(self) -> None:
+        # 重缓存场景下 Anthropic 裸 input_tokens 仅个位数，归一后 prompt/total
+        # 须含缓存读/写（dict 入参同时覆盖流式 usage_snapshot 路径）
+        scalar = _anthropic_usage_to_scalar_dict(
+            {
+                "input_tokens": 6,
+                "output_tokens": 703,
+                "cache_read_input_tokens": 179_926,
+                "cache_creation_input_tokens": 60_406,
+            }
+        )
+
+        assert scalar == {
+            "prompt_tokens": 240_338,
+            "completion_tokens": 703,
+            "total_tokens": 241_041,
+            "cache_read_tokens": 179_926,
+            "cache_write_tokens": 60_406,
+        }
+
+    def test_usage_without_cache_fields_keeps_raw_input(self) -> None:
+        scalar = _anthropic_usage_to_scalar_dict(
+            {"input_tokens": 10, "output_tokens": 5}
+        )
+
+        assert scalar == {
+            "prompt_tokens": 10,
+            "completion_tokens": 5,
+            "total_tokens": 15,
+        }
 
     def test_extracts_reasoning_tokens_from_dict_output_details(self) -> None:
         raw = SimpleNamespace(
