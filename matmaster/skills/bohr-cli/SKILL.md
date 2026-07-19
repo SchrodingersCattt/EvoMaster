@@ -12,14 +12,14 @@ description: "Use Bohrium CLI (bohr) for platform operations: job/node/sandbox m
 
 ## 认证
 
-沙箱内平台已注入 CLI 直读的 `BOHR_ACCESS_KEY` 和 `BOHR_OPENAPI_HOST`（同环境端点），常规情况免登录：
+bohr-cli 是面向 Bohrium **生产**平台的第三方工具，固定使用默认生产端点（`open.bohrium.com`），不跟随会话环境：
 
 ```bash
-bohr auth status --verify   # 应显示 logged_in: true / auth_method: access_key，host 与本环境一致
-# 仅当上述变量缺失（旧环境只注入 BOHRIUM_ACCESS_KEY，CLI 不读它）时手动补：
-export BOHR_ACCESS_KEY="$BOHRIUM_ACCESS_KEY"
-bohr auth login --ak "$BOHRIUM_ACCESS_KEY"     # 或持久化到 ~/.bohrium/cfg.yaml
+bohr auth status --verify   # 生产会话已注入 BOHR_ACCESS_KEY，应显示 logged_in: true / auth_method: access_key
 ```
+
+- 生产会话：平台已注入 CLI 直读的 `BOHR_ACCESS_KEY`，免登录。
+- test 会话：环境里的平台凭证属 test 环境，对生产端点无效（401 是预期）——直接走下面的设备码流程，或请用户提供生产 AK（`bohr auth login --ak <生产AK>`）；不要拿 `BOHRIUM_ACCESS_KEY` 反复试。
 
 无 AK 或 AK 失效（401）时，改用设备码流程让用户在浏览器完成授权，不要要求用户在对话中粘贴 AK：
 
@@ -35,7 +35,7 @@ bohr auth login --device-code <code>        # 用户授权后执行，轮询直�
 | 401 且 `retryable: false` | 同一凭证登录失败一次即止；引导设备码流程或请用户更新凭证 |
 | headless 环境需要交互登录 | 禁止无参数 `bohr auth login`——同步阻塞等授权，超时被杀且每次重跑换新验证码；必须用上面的两步式 |
 | `--device-code` 成功但报 `could not obtain access key (failed to parse gateway response ...)` | 已知 CLI/网关兼容问题：vouch token 已生效，job/file 等正常，仅 billing 类受限；如实报告，不要重复登录 |
-| 401 但不确定凭证是否真无效 | 先看 `auth status` 的 `host`（默认生产 `open.bohrium.com`，`BOHR_OPENAPI_HOST` 可覆盖）——host 与凭证环境不匹配时表现与凭证无效完全相同 |
+| 401 但不确定原因 | 先看 `auth status` 的 `host`（应为生产 `open.bohrium.com`，若被 `BOHR_OPENAPI_HOST` 覆盖过先复位）；host 正常则凭证对生产无效——test 会话的平台凭证 401 属预期，走设备码 |
 
 回显 AK 只显示前几位掩码；`bohr auth token` 会输出完整凭证，不要打印到对话或写进产物文件。
 

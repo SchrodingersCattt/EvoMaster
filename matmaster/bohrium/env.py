@@ -6,39 +6,25 @@ from utils.env import BOHRIUM_OPENAPI_BASE_COM
 
 from .types import BohriumCredentials
 
-_OPENAPI_BASE_RE = re.compile(r"https?://openapi(?:\.([a-z0-9-]+))?\.dp\.tech/?$")
-_OPEN_HOST_RE = re.compile(r"https?://open(?:\.[a-z0-9-]+)?\.bohrium\.com/?$")
+# bohr-cli 定位为第三方工具：一律使用其默认的生产端点（open.bohrium.com），
+# 不跟随会话环境，因此不注入 BOHR_OPENAPI_HOST。
+_PROD_BASE_RE = re.compile(r"https?://(openapi\.dp\.tech|open\.bohrium\.com)/?$")
 
 
-def _cli_openapi_host(base_url: str) -> str:
-    """bohr-cli 的 host 属 open[.env].bohrium.com 族，环境必须与凭证一致。
-
-    评测混环境流（SERVICE_ENV=test 但注入 prod 凭证）下不能用进程级常量推导，
-    否则 prod AK 打 test 端点全量 401；按凭证自带的 base_url 推导环境，
-    无法识别时才回落进程环境的 BOHRIUM_OPENAPI_BASE_COM。
-    """
-    raw = (base_url or "").strip().rstrip("/")
-    if _OPEN_HOST_RE.match(raw):
-        return raw
-    m = _OPENAPI_BASE_RE.match(raw)
-    if m:
-        env_part = m.group(1)
-        if env_part:
-            return f"https://open.{env_part}.bohrium.com"
-        return "https://open.bohrium.com"
-    return BOHRIUM_OPENAPI_BASE_COM
+def _is_prod_credential(base_url: str) -> bool:
+    return bool(_PROD_BASE_RE.match((base_url or "").strip()))
 
 
 def build_bohrium_env(credentials: BohriumCredentials) -> dict[str, str]:
     env: dict[str, str] = {}
     if credentials.access_key:
         env["BOHRIUM_ACCESS_KEY"] = credentials.access_key
-        # bohr-cli 只直读 BOHR_ACCESS_KEY（不认 BOHRIUM_ 前缀），注入后免 auth login
-        env["BOHR_ACCESS_KEY"] = credentials.access_key
+        # bohr-cli 只直读 BOHR_ACCESS_KEY（不认 BOHRIUM_ 前缀），且固定打生产：
+        # 仅生产凭证注入可免 auth login；test 凭证对生产端点必 401，
+        # 注入只会制造假登录态，此时 agent 应走设备码或请用户提供生产 AK。
+        if _is_prod_credential(credentials.base_url):
+            env["BOHR_ACCESS_KEY"] = credentials.access_key
     env["BOHRIUM_OPENAPI_BASE_COM"] = BOHRIUM_OPENAPI_BASE_COM
-    # bohr-cli 默认打生产 open.bohrium.com；host 必须与凭证所属环境一致，
-    # 否则跨环境 401 与凭证无效不可区分（prod 凭证下该值即 CLI 默认值）
-    env["BOHR_OPENAPI_HOST"] = _cli_openapi_host(credentials.base_url)
     if credentials.project_id != -1:
         env["BOHRIUM_PROJECT_ID"] = str(credentials.project_id)
     if credentials.user_id is not None:
