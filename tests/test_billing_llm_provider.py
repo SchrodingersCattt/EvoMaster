@@ -6,8 +6,15 @@
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
+import logging
+
+import pytest
+
 from clients.matmaster_platform.billing.client import BillingRunContext
 from matmaster.types.cancellation import CancellationController
+from src.services import billing_llm_provider
 from src.services.billing_llm_provider import BillingLLMProvider, BillingRunState
 
 
@@ -129,12 +136,21 @@ class _FakeInner:
         self.exits += 1
 
 
-def _provider(inner):
+class _FakeBillingService:
+    def __init__(self):
+        self.calls = []
+
+    async def price_llm_usage(self, **kwargs):
+        self.calls.append(kwargs)
+        return {}
+
+
+def _provider(inner, billing_service=None):
     return BillingLLMProvider(
         inner,
         run_context=BillingRunContext(session_id="s", task_id="t", invocation_id="i"),
         model="m",
-        billing_service=object(),
+        billing_service=billing_service or object(),
         run_state=BillingRunState(session_id="s"),
     )
 
@@ -171,3 +187,60 @@ class TestReentrantLifecycle:
             session = p._http_session
         assert session.closed
         assert p._http_session is None
+
+
+class TestExitHardening:
+    """最外层退出的兜底：drain 被取消/超时都不得漏关 session 或漏退 inner。"""
+
+    async def test_cancel_during_drain_still_closes_session(self):
+        inner = _FakeInner()
+        p = _provider(inner)
+        await p.__aenter__()
+        session = p._http_session
+        blocker = asyncio.create_task(asyncio.sleep(30))
+        p._pending.add(blocker)
+
+        exit_task = asyncio.create_task(p.__aexit__(None, None, None))
+        await asyncio.sleep(0.05)  # 让 exit 进入 drain 的 asyncio.wait
+        exit_task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await exit_task
+
+        assert session.closed
+        assert p._http_session is None
+        assert inner.exits == 1
+        blocker.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await blocker
+
+    async def test_drain_timeout_logs_leftover_count(self, monkeypatch, caplog):
+        monkeypatch.setattr(billing_llm_provider, "_DRAIN_TIMEOUT_SECONDS", 0.01)
+        p = _provider(_FakeInner())
+        await p.__aenter__()
+        blocker = asyncio.create_task(asyncio.sleep(30))
+        p._pending.add(blocker)
+
+        with caplog.at_level(logging.WARNING):
+            await p.__aexit__(None, None, None)
+
+        assert "drain timed out" in caplog.text
+        assert "1 in-flight" in caplog.text
+        assert p._http_session is None
+        blocker.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await blocker
+
+
+class TestBillingScopeSpawnId:
+    """billing_scope 打标经模块级 ContextVar 传递到上报参数。"""
+
+    async def test_scope_tags_scheduled_report(self):
+        service = _FakeBillingService()
+        p = _provider(_FakeInner(), billing_service=service)
+        async with p:
+            with p.billing_scope(spawn_id="sp1"):
+                p._schedule_report(call_index=1, usage={"prompt_tokens": 1})
+            p._schedule_report(call_index=2, usage={"prompt_tokens": 2})
+        # __aexit__ 已 drain：两笔上报按调度时捕获的 spawn_id 落地
+        by_index = {c["call_index"]: c["spawn_id"] for c in service.calls}
+        assert by_index == {1: "sp1", 2: None}

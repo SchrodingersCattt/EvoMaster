@@ -17,11 +17,20 @@ from matmaster.types.llm_provider import LLMProvider
 from matmaster.types.messages import LLMResponse, Message, StreamChunk
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
 
 # 成本熔断触发取消时的原因标记：下游（run_agent 收尾）据此把本轮按「额度耗尽中止」
 # 而非「用户取消」对外呈现（语义/文案/运营指标都不同）。
 COST_GUARD_CANCEL_REASON = "cost_guard"
+
+# 模块级 ContextVar（Python 要求顶层创建：Context 持强引用，动态创建的 var
+# 无法回收）。值随 asyncio Task 的 Context 隔离，多实例/多 run 共用一个 var 安全。
+_billing_spawn_id_var: ContextVar[str | None] = ContextVar(
+    "billing_spawn_id",
+    default=None,
+)
+
+# 最外层退出时等待在途上报任务收尾的上限；超时残余任务随 session 关闭而丢单。
+_DRAIN_TIMEOUT_SECONDS = 10.0
 
 
 class BillingRunState:
@@ -146,10 +155,6 @@ class BillingLLMProvider:
         self._pending: set[asyncio.Task] = set()
         self._http_session: aiohttp.ClientSession | None = None
         self._enter_count = 0
-        self._spawn_id_var: ContextVar[str | None] = ContextVar(
-            "billing_spawn_id",
-            default=None,
-        )
 
     def __getattr__(self, name: str) -> Any:
         return getattr(self._inner, name)
@@ -176,24 +181,38 @@ class BillingLLMProvider:
             await self._inner.__aexit__(exc_type, exc_val, exc_tb)
             return
         # 最外层退出：先 drain 完仍在用 session 的上报任务，再关 session。
-        await self._drain_pending()
-        if self._http_session is not None:
-            await self._http_session.close()
-            self._http_session = None
-        await self._inner.__aexit__(exc_type, exc_val, exc_tb)
+        # 两层 finally：drain 中被取消（CancelledError 不入 except Exception）
+        # 或 close 抛错时，session 关闭与 inner 退出也必须执行，否则重现
+        # Unclosed client session 泄漏 / inner（Transport）计数失衡永不关闭。
+        try:
+            await self._drain_pending()
+        finally:
+            try:
+                if self._http_session is not None:
+                    await self._http_session.close()
+                    self._http_session = None
+            finally:
+                await self._inner.__aexit__(exc_type, exc_val, exc_tb)
 
     async def _drain_pending(self) -> None:
         if not self._pending:
             return
-        pending = list(self._pending)
-        try:
-            await asyncio.wait(pending, timeout=10)
-        except Exception:
-            logger.warning("draining billing usage reports failed", exc_info=True)
+        _done, leftover = await asyncio.wait(
+            list(self._pending), timeout=_DRAIN_TIMEOUT_SECONDS
+        )
+        if leftover:
+            # 残余任务将撞上随后关闭的 session 而丢单（fail-open 少收方向）；
+            # 记数让丢单可从日志量化。
+            logger.warning(
+                "billing report drain timed out, %s in-flight reports will be "
+                "lost session_id=%s",
+                len(leftover),
+                self._run_context.session_id,
+            )
 
     @contextmanager
     def billing_scope(self, *, spawn_id: str | None = None):
-        token = self._spawn_id_var.set(spawn_id)
+        token = _billing_spawn_id_var.set(spawn_id)
         try:
             yield
         finally:
@@ -202,9 +221,9 @@ class BillingLLMProvider:
             # 在新 Context 里关闭,reset(token) 会抛 "created in a different
             # Context";此时直接清值,保证 teardown 不中断。
             try:
-                self._spawn_id_var.reset(token)
+                _billing_spawn_id_var.reset(token)
             except ValueError:
-                self._spawn_id_var.set(None)
+                _billing_spawn_id_var.set(None)
 
     async def _report(
         self,
@@ -265,7 +284,7 @@ class BillingLLMProvider:
         task = asyncio.create_task(
             self._report(
                 call_index=call_index,
-                spawn_id=self._spawn_id_var.get(),
+                spawn_id=_billing_spawn_id_var.get(),
                 usage=usage,
             )
         )
