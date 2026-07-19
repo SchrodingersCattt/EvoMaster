@@ -157,6 +157,8 @@ def check_bohr_cli_operation_invoked(
     operations: list[str],
     min_matches: int = 1,
     require_ok: bool = True,
+    max_matches: int | None = None,
+    argv_regex: str | None = None,
 ) -> tuple[bool, str]:
     """Ground a step on execution receipts rather than command-string regex.
 
@@ -170,12 +172,27 @@ def check_bohr_cli_operation_invoked(
     This lets a bare noun (e.g. ``mentor``) cover positional-argument commands
     whose parsed operation embeds the argument (``mentor.<question text>``),
     while a fully qualified entry (``pdf.parse``) stays exact.
+
+    ``max_matches`` bounds the count from above for discipline checks
+    ("at most N attempts", "exactly one call"). ``argv_regex`` further narrows
+    matches by searching the space-joined **redacted** argv — flags are
+    preserved verbatim while secret values and auth positionals appear as
+    ``<redacted>``, so patterns must key on flags (e.g. ``--device``), never on
+    values. Whitespace inside a single argv token is replaced with ``_`` before
+    joining, so flag-shaped text embedded in a free-text value cannot straddle
+    token boundaries and spuriously match a flag-keyed pattern.
     """
     wanted = {
         str(operation).strip() for operation in operations if str(operation).strip()
     }
     if not wanted:
         return False, 'bohr_cli_operation_invoked: no operations configured'
+    argv_pattern: re.Pattern[str] | None = None
+    if argv_regex is not None:
+        try:
+            argv_pattern = re.compile(argv_regex)
+        except re.error as exc:
+            return False, f'bohr_cli_operation_invoked: invalid argv_regex: {exc}'
 
     def _matches(operation: str) -> bool:
         return any(
@@ -191,13 +208,25 @@ def check_bohr_cli_operation_invoked(
             continue
         if require_ok and not (receipt.ok and receipt.exit_code == 0):
             continue
+        if argv_pattern is not None and not argv_pattern.search(
+            ' '.join(re.sub(r'\s+', '_', token) for token in receipt.argv)
+        ):
+            continue
         matched += 1
         observed.add(receipt.operation)
     ok_note = 'ok' if require_ok else 'any-exit'
+    expected = (
+        f'>={min_matches}'
+        if max_matches is None
+        else f'[{min_matches},{max_matches}]'
+    )
+    passed = matched >= min_matches and (
+        max_matches is None or matched <= max_matches
+    )
     return (
-        matched >= min_matches,
+        passed,
         f'operation receipts matched={matched} ({ok_note}) '
-        f'for {sorted(wanted)}; observed={sorted(observed)}; expected>={min_matches}',
+        f'for {sorted(wanted)}; observed={sorted(observed)}; expected={expected}',
     )
 
 

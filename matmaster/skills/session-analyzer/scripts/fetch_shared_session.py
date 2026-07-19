@@ -17,13 +17,14 @@ import argparse
 import json
 import re
 import sys
+import time
 import urllib.error
 import urllib.request
 from typing import Any
 
 SHARE_URL_PATTERNS = [
-    re.compile(r"https?://[^/]+/matmaster/chat-evo/share/([a-f0-9]+)"),
-    re.compile(r"https?://[^/]+/share/([a-f0-9]+)"),
+    # chat/share 为现行路径；chat-evo/share 为历史路径，对外帮助文档仍有存量链接
+    re.compile(r"https?://[^/]+/matmaster/chat(?:-evo)?/share/([a-f0-9]+)"),
 ]
 
 API_PATH_TEMPLATE = (
@@ -41,9 +42,9 @@ def parse_share_url(url_or_id: str) -> tuple[str, str]:
         m = pattern.search(url_or_id)
         if m:
             session_id = m.group(1)
-            base_end = url_or_id.find("/matmaster/chat-evo/share/")
+            base_end = url_or_id.find("/matmaster/chat/share/")
             if base_end == -1:
-                base_end = url_or_id.find("/share/")
+                base_end = url_or_id.find("/matmaster/chat-evo/share/")
             base_url = url_or_id[:base_end]
             return base_url, session_id
     if re.fullmatch(r"[a-f0-9]{16,64}", url_or_id):
@@ -51,11 +52,15 @@ def parse_share_url(url_or_id: str) -> tuple[str, str]:
     raise ValueError(f"Cannot parse session ID from: {url_or_id}")
 
 
-def fetch_sse_events(base_url: str, session_id: str, timeout: int = 30) -> list[dict]:
+def fetch_sse_events(
+    base_url: str, session_id: str, timeout: int = 30, max_seconds: int = 120
+) -> list[dict]:
     """POST to the share stream endpoint and parse SSE events.
 
-    The endpoint returns a chunked SSE stream. We read line-by-line and stop
-    when we see a stream_closed/session_status(idle) event or the connection ends.
+    回放历史里录有每一轮 run 结尾的 stream_closed，且无法与 live 事件区分，
+    因此任何 stream_closed 都不作为终止信号——否则多轮会话被截到第一轮。
+    终止只依赖两件事：服务端关闭连接（idle 会话回放完即关，实测秒级返回）
+    或 max_seconds 墙钟上限（active 会话跟随 live 流最多等到这里）。
     """
     api_url = base_url + API_PATH_TEMPLATE.format(session_id=session_id)
     req = urllib.request.Request(
@@ -71,8 +76,11 @@ def fetch_sse_events(base_url: str, session_id: str, timeout: int = 30) -> list[
         raise RuntimeError(f"HTTP {e.code} from {api_url}: {error_body[:500]}") from e
 
     events: list[dict] = []
+    started = time.monotonic()
     try:
         for raw_line in resp:
+            if time.monotonic() - started > max_seconds:
+                break
             line = raw_line.decode("utf-8", errors="replace").rstrip("\n\r")
             if not line.startswith("data: "):
                 continue
@@ -82,11 +90,6 @@ def fetch_sse_events(base_url: str, session_id: str, timeout: int = 30) -> list[
             except json.JSONDecodeError:
                 continue
             events.append(ev)
-            ev_type = ev.get("type", "")
-            if ev_type == "stream_closed":
-                break
-            if ev_type == "session_status" and ev.get("status") == "idle":
-                break
     except OSError:
         pass
     finally:
@@ -310,6 +313,12 @@ def main():
         default=30,
         help="HTTP request timeout in seconds (default: 30)",
     )
+    parser.add_argument(
+        "--max-seconds",
+        type=int,
+        default=120,
+        help="Wall-clock cap on stream reading (default: 120)",
+    )
     args = parser.parse_args()
 
     try:
@@ -319,7 +328,9 @@ def main():
         sys.exit(1)
 
     try:
-        events = fetch_sse_events(base_url, session_id, timeout=args.timeout)
+        events = fetch_sse_events(
+            base_url, session_id, timeout=args.timeout, max_seconds=args.max_seconds
+        )
     except RuntimeError as e:
         print(json.dumps({"error": str(e)}), file=sys.stderr)
         sys.exit(1)
@@ -341,7 +352,7 @@ def main():
         result = format_raw(events, event_types, args.max_content_len)
 
     result["session_id"] = session_id
-    result["source_url"] = f"{base_url}/matmaster/chat-evo/share/{session_id}"
+    result["source_url"] = f"{base_url}/matmaster/chat/share/{session_id}"
     print(json.dumps(result, ensure_ascii=False, indent=2))
 
 
