@@ -89,6 +89,7 @@ def _send_stream_job(
         "bohrium_required": False,
         "bohrium_submit_confirmation_required": None,
         "bohrium_job_max_runtime_seconds": None,
+        "bohrium_job_max_wait_time_seconds": None,
         "bohrium_node_sku_id": None,
         "workspace": None,
         "origin": None,

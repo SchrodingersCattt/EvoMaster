@@ -24,6 +24,7 @@ class UserLevelRuntimePreference:
     model: str | None = None
     bohrium_submit_confirmation_required: bool | None = None
     bohrium_job_max_runtime_seconds: int | None = None
+    bohrium_job_max_wait_time_seconds: int | None = None
     bohrium_node_sku_id: int | None = None
     bohrium_node_lifecycle_policy: str = "run_end"
     bohrium_node_idle_timeout_seconds: int | None = None
@@ -129,6 +130,9 @@ def get_user_level_runtime_preference(user_id: str) -> UserLevelRuntimePreferenc
         ),
         bohrium_job_max_runtime_seconds=_coerce_positive_int(
             data.get("bohrium_job_max_runtime_seconds")
+        ),
+        bohrium_job_max_wait_time_seconds=_coerce_positive_int(
+            data.get("bohrium_job_max_wait_time_seconds")
         ),
         bohrium_node_sku_id=_coerce_positive_int(data.get("bohrium_node_sku_id")),
         bohrium_node_lifecycle_policy=lifecycle_policy,

@@ -75,6 +75,7 @@ def _canonicalize_submit_args(
     args: dict[str, Any],
     *,
     default_max_runtime_seconds: int | None = None,
+    default_max_wait_time_seconds: int | None = None,
     include_runtime_policy: bool = True,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     canonical: dict[str, Any] = {key: args[key] for key in SUBMIT_FIELDS if key in args}
@@ -105,6 +106,8 @@ def _canonicalize_submit_args(
 
     if include_runtime_policy and default_max_runtime_seconds is not None:
         canonical["max_runtime_seconds"] = default_max_runtime_seconds
+    if include_runtime_policy and default_max_wait_time_seconds is not None:
+        canonical["max_wait_time_seconds"] = default_max_wait_time_seconds
 
     cmd = canonical.get("cmd")
     if cmd:
@@ -124,6 +127,7 @@ def build_review_draft(
     model_args: Any,
     *,
     default_max_runtime_seconds: int | None = None,
+    default_max_wait_time_seconds: int | None = None,
 ) -> SubmitReviewDraft | None:
     """构造 submit_review 展示草稿；None 只表示非 submit。"""
     if not isinstance(model_args, dict) or model_args.get("action") != "submit":
@@ -138,6 +142,7 @@ def build_review_draft(
     canonical, changes = _canonicalize_submit_args(
         model_args,
         default_max_runtime_seconds=default_max_runtime_seconds,
+        default_max_wait_time_seconds=default_max_wait_time_seconds,
         include_runtime_policy=False,
     )
     issues: list[dict[str, Any]] = []
@@ -166,6 +171,7 @@ def normalize_execution_args(
     args: Any,
     *,
     default_max_runtime_seconds: int | None = None,
+    default_max_wait_time_seconds: int | None = None,
 ) -> SubmitExecutionArgs:
     """执行前严格、幂等、无副作用地规范化 submit 参数。"""
     oversized = oversized_submit_fields(args)
@@ -176,6 +182,7 @@ def normalize_execution_args(
     canonical, changes = _canonicalize_submit_args(
         dict(args) if isinstance(args, dict) else {},
         default_max_runtime_seconds=default_max_runtime_seconds,
+        default_max_wait_time_seconds=default_max_wait_time_seconds,
     )
     return SubmitExecutionArgs(arguments=canonical, normalization_changes=changes)
 
@@ -183,8 +190,14 @@ def normalize_execution_args(
 class BohriumSubmitReviewProvider:
     """无状态 Bohrium submit review provider。"""
 
-    def __init__(self, *, default_max_runtime_seconds: int | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        default_max_runtime_seconds: int | None = None,
+        default_max_wait_time_seconds: int | None = None,
+    ) -> None:
         self._default_max_runtime_seconds = default_max_runtime_seconds
+        self._default_max_wait_time_seconds = default_max_wait_time_seconds
 
     def build_review_draft(
         self, model_args: dict[str, Any]
@@ -192,12 +205,14 @@ class BohriumSubmitReviewProvider:
         return build_review_draft(
             model_args,
             default_max_runtime_seconds=self._default_max_runtime_seconds,
+            default_max_wait_time_seconds=self._default_max_wait_time_seconds,
         )
 
     def normalize_execution_args(self, args: dict[str, Any]) -> SubmitExecutionArgs:
         return normalize_execution_args(
             args,
             default_max_runtime_seconds=self._default_max_runtime_seconds,
+            default_max_wait_time_seconds=self._default_max_wait_time_seconds,
         )
 
     def blocked_message(self, status: str) -> str:
