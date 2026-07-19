@@ -260,7 +260,7 @@ def add_job(
         span.set_attribute("bohrium.disk_size", disk_size)
         if max_runtime_seconds is not None:
             span.set_attribute("bohrium.max_runtime_seconds", max_runtime_seconds)
-        if max_wait_time_seconds is not None:
+        if ctx.sandbox and max_wait_time_seconds is not None:
             span.set_attribute("bohrium.max_wait_time_seconds", max_wait_time_seconds)
         created_job_id = create_data.get("jobId") or create_data.get("id")
         if created_job_id not in (None, ""):
