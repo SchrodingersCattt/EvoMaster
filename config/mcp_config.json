@@ -5,16 +5,6 @@
       "transport": "http",
       "url": "https://dart-uuid1754393230.appspace.bohrium.com/mcp?token=b3a955c99823427683843616328023d8"
     },
-    "mat_electron_microscope": {
-      "headers": {},
-      "transport": "sse",
-      "url": "http://root@pkfz1410356.bohrium.tech:50002/sse"
-    },
-    "mat_nmr": {
-      "headers": {},
-      "transport": "sse",
-      "url": "https://nmr-server-matmaster-uuid1764741165.appspace.bohrium.com/sse?token=1467bc01801642c09273966fcd04e3a6"
-    },
     "mat_sg": {
       "headers": {},
       "transport": "http",
@@ -29,11 +19,6 @@
       "headers": {},
       "transport": "http",
       "url": "https://mrdice-uuid1772180309.appspace.bohrium.com/mcp?token=a0d973885b6441eca858e165e90ae9c7"
-    },
-    "mat_xrd": {
-      "headers": {},
-      "transport": "sse",
-      "url": "http://root@pkfz1410356.bohrium.tech:50001/sse"
     }
   }
 }

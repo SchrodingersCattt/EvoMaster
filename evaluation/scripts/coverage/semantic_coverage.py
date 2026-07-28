@@ -175,7 +175,8 @@ SKILL_TAG_MAP: dict[str, list[str]] = {
     "sample-atomic-structures": ["struct_build"],
     "mcp-mat-struct-db": ["meta_database"],
     "checkcif-validator": ["char_diffraction"],
-    "mcp-mat-xrd": ["char_diffraction"],
+    "xrd-phase-identification": ["char_diffraction"],
+    "electron-microscopy-analysis": ["char_microscopy"],
     "pxrd-refinement": ["char_diffraction"],
 }
 

@@ -316,7 +316,7 @@ cases:
       - "Submit my refined CIF to PLATON checkCIF and summarize the alert table"  # [english]
     negative:
       - "帮我做 PXRD 的 Rietveld 精修"                 # → pxrd-refinement
-      - "标定一下这个 XRD 的峰位"                      # → mcp-mat-xrd
+      - "标定一下这个 XRD 的峰位"                      # → xrd-phase-identification
       - "把这个 CIF 转成 POSCAR"                       # → atomic-structure
       - "帮我看一下这个 CIF 的对称性"                  # → atomic-structure
       - "用 GSAS-II 做 Pawley 提取晶胞参数"            # → pxrd-refinement
@@ -335,10 +335,29 @@ cases:
       - "Run a Pawley refinement given space group P 6_3/m m c, output cell + ESD"  # [english]
     negative:
       - "帮我把 CIF 提交到 checkCIF 验证一下"          # → checkcif-validator
-      - "标定一下这个 XRD 峰对应什么物相"              # → mcp-mat-xrd
+      - "标定一下这个 XRD 峰对应什么物相"              # → xrd-phase-identification
       - "用 SHELX 精修这个单晶数据"                    # → (single-crystal, not in scope)
       - "画一下这个 PXRD 数据"                         # → data-analysis
       - "帮我下载石墨烯的 CIF"                         # → atomic-structure
+
+  - skill: xrd-phase-identification
+    positive:
+      - "把这份 .xrdml 原始衍射数据解析成峰表和 CSV"
+      - "这个粉末 XRD 最可能有哪些物相"
+      - "按 Fe、Ni、O 元素约束匹配这条 XRD 谱图"
+      - "从处理后的 2Theta/Intensity CSV 做 XRD 物相检索"
+      - "将 .raw XRD 文件解析后找对应晶相"
+      - "XRD 峰对应哪些参考相，输出匹配分数"
+      - "排除含 C 的相后识别这份衍射图"
+      - "把 .mdi 粉末衍射数据做物相鉴定"
+      - "Identify phases from this powder XRD pattern"
+      - "Parse this XRDML file and export a phase comparison chart"
+    negative:
+      - "用 GSAS-II 跑 Pawley 精修出晶胞"              # → pxrd-refinement
+      - "PXRD + CIF，做 Rietveld 精修"                 # → pxrd-refinement
+      - "画一张 XRD 图，不需要匹配物相"                # → data-analysis
+      - "分析这张 TEM 颗粒图的尺寸"                    # → electron-microscopy-analysis
+      - "帮我做单晶 XRD 的 SHELX 精修"
 
   - skill: aissq-explorer
     positive:
@@ -379,7 +398,7 @@ cases:
       - "给这个晶胞掺杂 5% Mg"                         # → atomic-structure
       - "训练一个 MLIP 势函数"                         # → mlips
 
-  - skill: mcp-mat-nmr
+  - skill: nmr-analysis
     positive:
       - "我有一组 1H 和 13C 化学位移数据，帮我推断分子结构"
       - "这个分子的 NMR 化学位移预测一下"
@@ -397,6 +416,25 @@ cases:
       - "搜索一篇关于 NMR 技术的文献"                  # → paper search, not NMR tool
       - "帮我用 Gaussian 优化这个分子"                  # → other QC software
       - "分析这个质谱数据"                              # → data-analysis
+
+  - skill: electron-microscopy-analysis
+    positive:
+      - "分析这张 TEM 图中的颗粒尺寸分布"
+      - "这张 SEM 图帮我识别颗粒并输出 CSV"
+      - "根据电镜图比例尺计算纳米颗粒平均直径"
+      - "标出 TEM 图里边缘颗粒和遮挡颗粒"
+      - "给这张电子显微镜图生成颗粒标注 overlay"
+      - "从 SEM 图提取颗粒面积、圆度和长宽比"
+      - "检测这张纳米颗粒 TEM 图的颗粒边界"
+      - "电镜图的 scale bar 换算成 nm 后统计粒径"
+      - "Measure particle sizes in this TEM image"
+      - "Run particle recognition on this SEM micrograph"
+    negative:
+      - "这个粉末 XRD 图对应哪些物相"                  # → xrd-phase-identification
+      - "给这个分子预测 13C NMR"                       # → nmr-analysis
+      - "画一张普通图片的 RGB 直方图"                  # → data-analysis
+      - "用 GSAS-II 做 Rietveld 精修"                  # → pxrd-refinement
+      - "识别这张显微照片里的文字"
 
   - skill: bohr-cli
     positive:

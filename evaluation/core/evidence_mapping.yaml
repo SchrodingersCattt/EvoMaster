@@ -110,28 +110,34 @@ mappings:
     detail: "GROMACS MD operation (bash or remote)"
 
   # -------------------------------------------------------------------------
-  # XRD / diffraction analysis (MCP mat_xrd)
+  # XRD / diffraction analysis (skill CLI)
   # -------------------------------------------------------------------------
-  - pattern: "mat_xrd_*"
+  - pattern: "Bash"
+    when_args_contains:
+      command: "xrd_phase_identification.py"
     event_type: "data_analysis"
-    source_type: "mcp_tool"
-    detail: "MCP XRD analysis"
+    source_type: "bash_script"
+    detail: "XRD phase identification via skill CLI"
 
   # -------------------------------------------------------------------------
-  # NMR analysis (MCP mat_nmr)
+  # NMR analysis (skill CLI)
   # -------------------------------------------------------------------------
-  - pattern: "mat_nmr_*"
+  - pattern: "Bash"
+    when_args_contains:
+      command: "nmr_client.py"
     event_type: "data_analysis"
-    source_type: "mcp_tool"
-    detail: "MCP NMR analysis"
+    source_type: "bash_script"
+    detail: "NMR analysis via skill CLI"
 
   # -------------------------------------------------------------------------
-  # Electron microscopy (MCP mat_electron_microscope)
+  # Electron microscopy (skill CLI)
   # -------------------------------------------------------------------------
-  - pattern: "mat_electron_microscope_*"
+  - pattern: "Bash"
+    when_args_contains:
+      command: "analyze_em.py"
     event_type: "data_analysis"
-    source_type: "mcp_tool"
-    detail: "MCP electron microscopy analysis"
+    source_type: "bash_script"
+    detail: "Electron microscopy analysis via skill CLI"
 
   # -------------------------------------------------------------------------
   # Literature retrieval (MCP mat_sn)
