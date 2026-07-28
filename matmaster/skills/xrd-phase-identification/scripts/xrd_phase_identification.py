@@ -6,7 +6,6 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import sys
 from pathlib import Path
 from typing import Any
 
@@ -44,7 +43,11 @@ def _write_artifacts(response: dict[str, Any], output_dir: Path) -> dict[str, An
         key = artifact.get("key")
         name = artifact.get("name")
         content = artifact.get("content")
-        if not isinstance(key, str) or not isinstance(name, str) or not isinstance(content, str):
+        if (
+            not isinstance(key, str)
+            or not isinstance(name, str)
+            or not isinstance(content, str)
+        ):
             raise RuntimeError("XRD service returned an invalid artifact")
         path = output_dir / Path(name).name
         path.write_text(content, encoding="utf-8")

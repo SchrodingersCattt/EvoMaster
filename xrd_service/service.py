@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import sys
 import tempfile
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -12,10 +11,6 @@ from typing import Annotated, Any
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel
-
-VENDOR_DIR = Path(__file__).resolve().parent / "vendor"
-if str(VENDOR_DIR) not in sys.path:
-    sys.path.insert(0, str(VENDOR_DIR))
 
 from xrd_service.vendor.xrd_core.adapter import InMemoryXRDResult
 from xrd_service.vendor.xrd_core.parse import analyze_data, parse_file
@@ -48,12 +43,7 @@ class IdentifyResponse(BaseModel):
 
 
 def _database_path() -> Path:
-    return (
-        Path(__file__).resolve().parent
-        / "vendor"
-        / "xrd_core"
-        / "XRD_database.h5"
-    )
+    return Path(__file__).resolve().parent / "vendor" / "xrd_core" / "XRD_database.h5"
 
 
 @asynccontextmanager
@@ -97,7 +87,9 @@ async def _save_upload(upload: UploadFile, output_dir: Path) -> Path:
     return target
 
 
-def _parse_pattern(input_path: Path, output_dir: Path, baseline_mode: str) -> dict[str, Any]:
+def _parse_pattern(
+    input_path: Path, output_dir: Path, baseline_mode: str
+) -> dict[str, Any]:
     parsed = parse_file(input_path.name, input_path.read_bytes())
     if parsed is None:
         raise RuntimeError("Parser returned no data")
@@ -152,7 +144,9 @@ async def _identify_phases(
 
     frame = pd.read_csv(input_path)
     if not {"2Theta", "Intensity"}.issubset(frame.columns):
-        raise ValueError("Invalid CSV format. Expected columns '2Theta' and 'Intensity'.")
+        raise ValueError(
+            "Invalid CSV format. Expected columns '2Theta' and 'Intensity'."
+        )
     x = frame["2Theta"].tolist()
     y = frame["Intensity"].tolist()
     if not x or not y:
@@ -205,7 +199,9 @@ async def _identify_phases(
 async def health() -> HealthResponse:
     database = _database_path()
     if not database.is_file():
-        raise HTTPException(status_code=503, detail="XRD reference database unavailable.")
+        raise HTTPException(
+            status_code=503, detail="XRD reference database unavailable."
+        )
     return HealthResponse(database_path=str(database))
 
 

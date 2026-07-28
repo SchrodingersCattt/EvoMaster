@@ -35,6 +35,8 @@ def test_identify_rejects_raw_pattern(tmp_path) -> None:
             top_n=5,
             show_top_n=1,
         )
+
+
 def test_parse_pattern_uploads_and_writes_artifacts(tmp_path, monkeypatch) -> None:
     client = _load_xrd_client()
     fixture = (
