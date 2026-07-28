@@ -101,4 +101,4 @@ repos:
       - id: flake8
         additional_dependencies: [ flake8-bugbear ]
         args: [ '--extend-ignore=B008,E501,B036,E203', --max-line-length=88 ]
-        exclude: ^matmaster/skills/xrd-phase-identification/vendor/xrd_core/
+        exclude: ^xrd_service/vendor/xrd_core/
