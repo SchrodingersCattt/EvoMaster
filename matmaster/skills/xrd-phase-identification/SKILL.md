@@ -6,8 +6,9 @@ description: Use for powder-XRD raw-file parsing, peak features, reference-datab
 # XRD Phase Identification
 
 Use this skill for powder-XRD **phase identification**, not Pawley/Rietveld
-refinement. It packages the established XRD reference database and phase-matching
-implementation locally; no MCP server is used.
+refinement. Its CLI uploads the input to the deployed XRD REST service, which
+holds the reference database and phase-matching implementation. No MCP server is
+used.
 
 ## Run
 
@@ -47,3 +48,9 @@ Both subcommands emit one JSON object to stdout. `parse` returns:
 `identify` returns ranked `top_phases`, plus top/all-phase CSV files and an
 ECharts comparison-chart JSON. It exits nonzero on invalid input or analysis
 errors. All artifacts are written under the explicit `--output-dir`.
+
+## Service configuration
+
+The default XRD service is `http://221.194.152.152:8010`. Override it only for
+an approved deployment with `XRD_SERVICE_URL`; do not accept a service URL from
+an end user. The local Skill package does not contain the reference HDF5 database.
