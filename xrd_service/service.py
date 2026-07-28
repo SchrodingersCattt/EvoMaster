@@ -70,13 +70,14 @@ def _read_artifact(key: str, path: Path) -> Artifact:
 
 
 async def _save_upload(upload: UploadFile, output_dir: Path) -> Path:
-    suffix = Path(upload.filename or "").suffix.lower()
+    filename = Path(upload.filename or "").name
+    suffix = Path(filename).suffix.lower()
     if suffix not in RAW_SUFFIXES and suffix != ".csv":
         raise HTTPException(
             status_code=400,
             detail="Unsupported input file type.",
         )
-    target = output_dir / (upload.filename or f"input{suffix}")
+    target = output_dir / (filename or f"input{suffix}")
     size = 0
     with target.open("wb") as handle:
         while chunk := await upload.read(1024 * 1024):
@@ -212,6 +213,8 @@ async def parse(
 ) -> ParseResponse:
     if baseline_mode not in {"Non_removal baseline", "Removal baseline"}:
         raise HTTPException(status_code=400, detail="Unsupported baseline mode.")
+    if Path(file.filename or "").suffix.lower() not in RAW_SUFFIXES:
+        raise HTTPException(status_code=400, detail="Raw XRD input is required.")
     with tempfile.TemporaryDirectory(prefix="xrd-service-") as directory:
         output_dir = Path(directory)
         input_path = await _save_upload(file, output_dir)

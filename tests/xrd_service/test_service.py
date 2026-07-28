@@ -37,6 +37,21 @@ def test_identify_requires_processed_csv(monkeypatch, tmp_path: Path) -> None:
     assert response.status_code == 400
 
 
+def test_parse_rejects_processed_csv(monkeypatch, tmp_path: Path) -> None:
+    from xrd_service import service
+
+    monkeypatch.setattr(service, "_database_path", lambda: tmp_path / "db.h5")
+    (tmp_path / "db.h5").write_bytes(b"placeholder")
+    with TestClient(service.app) as client:
+        response = client.post(
+            "/v1/xrd/parse",
+            files={
+                "file": ("processed.csv", BytesIO(b"2Theta,Intensity\n"), "text/csv")
+            },
+        )
+    assert response.status_code == 400
+
+
 def test_health_reports_vendored_database(monkeypatch, tmp_path: Path) -> None:
     from xrd_service import service
 
