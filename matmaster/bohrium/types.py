@@ -13,6 +13,7 @@ class BohriumCredentials:
     user_id: int | None
     user_no: str
     base_url: str
+    org_id: str = ""
 
     @classmethod
     def from_mapping(cls, values: dict[str, Any]) -> BohriumCredentials:
@@ -29,12 +30,14 @@ class BohriumCredentials:
             user_id = None
         user_no = str(values.get("user_no") or "").strip()
         base_url = str(values.get("base_url") or "").strip().rstrip("/")
+        org_id = str(values.get("org_id") or "").strip()
         return cls(
             access_key=access_key,
             project_id=project_id,
             user_id=user_id,
             user_no=user_no,
             base_url=base_url,
+            org_id=org_id,
         )
 
 

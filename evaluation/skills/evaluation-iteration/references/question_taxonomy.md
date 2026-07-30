@@ -60,7 +60,7 @@ Tags indicate which skill(s) the question exercises. A question can have multipl
 | `struct_transform` | transform-atomic-structure | Structure manipulation |
 | `meta_grounding` | (behavioral) | Boundary recognition, refusal, tool availability |
 | `meta_database` | aissq-explorer / mcp tools | Database/registry queries |
-| `char_diffraction` | xrd-phase-identification | XRD/diffraction analysis |
+| `char_diffraction` | pxrd-phase-identification | XRD/diffraction analysis |
 | `char_microscopy` | electron-microscopy-analysis | Microscopy/image-derived characterization, e.g. TEM/SEM size statistics |
 
 ## Capability vs Tag Decision

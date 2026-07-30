@@ -29,6 +29,8 @@ def build_bohrium_env(credentials: BohriumCredentials) -> dict[str, str]:
         env["BOHRIUM_PROJECT_ID"] = str(credentials.project_id)
     if credentials.user_id is not None:
         env["BOHRIUM_USER_ID"] = str(credentials.user_id)
+    if credentials.org_id:
+        env["BOHRIUM_ORG_ID"] = credentials.org_id
     if credentials.user_no:
         env["BOHRIUM_USER_NO"] = credentials.user_no
     if credentials.base_url:

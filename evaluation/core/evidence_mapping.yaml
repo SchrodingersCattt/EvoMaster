@@ -114,7 +114,7 @@ mappings:
   # -------------------------------------------------------------------------
   - pattern: "Bash"
     when_args_contains:
-      command: "xrd_phase_identification.py"
+      command: "pxrd_phase_identification.py"
     event_type: "data_analysis"
     source_type: "bash_script"
     detail: "XRD phase identification via skill CLI"

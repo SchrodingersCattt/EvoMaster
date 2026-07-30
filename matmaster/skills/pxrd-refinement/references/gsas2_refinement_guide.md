@@ -36,7 +36,7 @@ This is transparent to the user; the input file is **not** modified.
 Accurate starting parameters are critical. Rules of thumb:
 
 - Cell parameters should be within ±2% of the true values.
-- For phase identification, use the `xrd-phase-identification` skill first.
+- For phase identification, use the `pxrd-phase-identification` skill first.
 - For monoclinic/triclinic cells, the angle parameters (β, α, γ) are often known from literature.
 - For multi-pattern data with a phase or structure-setting change, run **separate**
   refinements for each continuous segment with appropriate starting cells — do not chain

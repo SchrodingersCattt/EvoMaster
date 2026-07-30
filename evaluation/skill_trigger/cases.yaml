@@ -316,7 +316,7 @@ cases:
       - "Submit my refined CIF to PLATON checkCIF and summarize the alert table"  # [english]
     negative:
       - "帮我做 PXRD 的 Rietveld 精修"                 # → pxrd-refinement
-      - "标定一下这个 XRD 的峰位"                      # → xrd-phase-identification
+      - "标定一下这个 XRD 的峰位"                      # → pxrd-phase-identification
       - "把这个 CIF 转成 POSCAR"                       # → atomic-structure
       - "帮我看一下这个 CIF 的对称性"                  # → atomic-structure
       - "用 GSAS-II 做 Pawley 提取晶胞参数"            # → pxrd-refinement
@@ -335,12 +335,12 @@ cases:
       - "Run a Pawley refinement given space group P 6_3/m m c, output cell + ESD"  # [english]
     negative:
       - "帮我把 CIF 提交到 checkCIF 验证一下"          # → checkcif-validator
-      - "标定一下这个 XRD 峰对应什么物相"              # → xrd-phase-identification
+      - "标定一下这个 XRD 峰对应什么物相"              # → pxrd-phase-identification
       - "用 SHELX 精修这个单晶数据"                    # → (single-crystal, not in scope)
       - "画一下这个 PXRD 数据"                         # → data-analysis
       - "帮我下载石墨烯的 CIF"                         # → atomic-structure
 
-  - skill: xrd-phase-identification
+  - skill: pxrd-phase-identification
     positive:
       - "把这份 .xrdml 原始衍射数据解析成峰表和 CSV"
       - "这个粉末 XRD 最可能有哪些物相"
@@ -350,11 +350,15 @@ cases:
       - "XRD 峰对应哪些参考相，输出匹配分数"
       - "排除含 C 的相后识别这份衍射图"
       - "把 .mdi 粉末衍射数据做物相鉴定"
+      - "从这个 CIF 模拟 Cu Kα1 粉末 XRD 谱"
+      - "把实验 PXRD 和这个 CIF 的理论衍射峰叠加比较"
+      - "这组变温 PXRD CSV 有多条曲线，分别做候选物相筛选"
       - "Identify phases from this powder XRD pattern"
       - "Parse this XRDML file and export a phase comparison chart"
     negative:
       - "用 GSAS-II 跑 Pawley 精修出晶胞"              # → pxrd-refinement
       - "PXRD + CIF，做 Rietveld 精修"                 # → pxrd-refinement
+      - "从 PXRD 算每个相的质量分数"                  # → quantitative refinement, not screening
       - "画一张 XRD 图，不需要匹配物相"                # → data-analysis
       - "分析这张 TEM 颗粒图的尺寸"                    # → electron-microscopy-analysis
       - "帮我做单晶 XRD 的 SHELX 精修"
@@ -430,7 +434,7 @@ cases:
       - "Measure particle sizes in this TEM image"
       - "Run particle recognition on this SEM micrograph"
     negative:
-      - "这个粉末 XRD 图对应哪些物相"                  # → xrd-phase-identification
+      - "这个粉末 XRD 图对应哪些物相"                  # → pxrd-phase-identification
       - "给这个分子预测 13C NMR"                       # → nmr-analysis
       - "画一张普通图片的 RGB 直方图"                  # → data-analysis
       - "用 GSAS-II 做 Rietveld 精修"                  # → pxrd-refinement

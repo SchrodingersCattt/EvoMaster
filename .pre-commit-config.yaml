@@ -69,21 +69,21 @@ repos:
     hooks:
       - id: pyupgrade
         args: [--py311-plus]
-        exclude: ^matmaster/skills/xrd-phase-identification/vendor/xrd_core/
+        exclude: ^matmaster/skills/pxrd-phase-identification/vendor/xrd_core/
 
   - repo: https://github.com/psf/black
     rev: 26.3.1
     hooks:
       - id: black
         args: [ --skip-string-normalization, --line-length=88, --target-version=py313 ]
-        exclude: ^matmaster/skills/xrd-phase-identification/vendor/xrd_core/
+        exclude: ^matmaster/skills/pxrd-phase-identification/vendor/xrd_core/
 
   - repo: https://github.com/pycqa/isort
     rev: 8.0.1
     hooks:
       - id: isort
         args: [ "--profile", "black" ]
-        exclude: ^matmaster/skills/xrd-phase-identification/vendor/xrd_core/
+        exclude: ^matmaster/skills/pxrd-phase-identification/vendor/xrd_core/
 
   - repo: https://github.com/pycqa/autoflake
     rev: v2.3.3
@@ -93,7 +93,7 @@ repos:
           - --in-place
           - --remove-all-unused-imports
           - --remove-unused-variables
-        exclude: ^matmaster/skills/xrd-phase-identification/vendor/xrd_core/
+        exclude: ^matmaster/skills/pxrd-phase-identification/vendor/xrd_core/
 
   - repo: https://github.com/pycqa/flake8
     rev: 7.3.0

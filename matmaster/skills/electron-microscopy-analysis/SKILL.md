@@ -39,4 +39,4 @@ analysis result.
 ## Scope boundary
 
 This is not an XRD or general image-plotting skill. For powder-XRD phase
-identification, use `xrd-phase-identification`.
+identification, use `pxrd-phase-identification`.

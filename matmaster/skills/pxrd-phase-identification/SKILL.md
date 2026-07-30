@@ -1,5 +1,5 @@
 ---
-name: xrd-phase-identification
+name: pxrd-phase-identification
 description: Use for powder-XRD/PXRD parsing, multi-pattern peak features, chemistry-constrained reference phase candidate screening, CIF-derived ideal XRD simulation, or experimental/CIF PXRD comparison.
 ---
 
@@ -29,7 +29,7 @@ structure solution, or auto-indexing. For those workflows, use `pxrd-refinement`
 ### phase-id (recommended for raw → candidate screening)
 
 ```bash
-python3 "${SKILL_DIR}/scripts/xrd_phase_identification.py" phase-id \
+python3 "${SKILL_DIR}/scripts/pxrd_phase_identification.py" phase-id \
   --input /absolute/path/to/pattern.xy \
   --output-dir /absolute/path/to/xrd-results \
   --chem-include-any Fe,Ni \
@@ -40,7 +40,7 @@ python3 "${SKILL_DIR}/scripts/xrd_phase_identification.py" phase-id \
 ### validate-cif (experimental pattern vs reference CIF)
 
 ```bash
-python3 "${SKILL_DIR}/scripts/xrd_phase_identification.py" validate-cif \
+python3 "${SKILL_DIR}/scripts/pxrd_phase_identification.py" validate-cif \
   --input /absolute/path/to/pattern.xy \
   --cif /absolute/path/to/model.cif \
   --output-dir /absolute/path/to/xrd-results \
@@ -51,7 +51,7 @@ python3 "${SKILL_DIR}/scripts/xrd_phase_identification.py" validate-cif \
 ### parse (raw → standardized CSV, peak features, chart)
 
 ```bash
-python3 "${SKILL_DIR}/scripts/xrd_phase_identification.py" parse \
+python3 "${SKILL_DIR}/scripts/pxrd_phase_identification.py" parse \
   --input /absolute/path/to/pattern.xrdml \
   --output-dir /absolute/path/to/xrd-results \
   --profile standard
@@ -60,7 +60,7 @@ python3 "${SKILL_DIR}/scripts/xrd_phase_identification.py" parse \
 ### identify (processed CSV → reference screening)
 
 ```bash
-python3 "${SKILL_DIR}/scripts/xrd_phase_identification.py" identify \
+python3 "${SKILL_DIR}/scripts/pxrd_phase_identification.py" identify \
   --input /absolute/path/to/xrd-results/pattern_trace_1_raw_data.csv \
   --output-dir /absolute/path/to/xrd-results \
   --chem-include-all O \
@@ -70,7 +70,7 @@ python3 "${SKILL_DIR}/scripts/xrd_phase_identification.py" identify \
 ### simulate (CIF → ideal stick PXRD)
 
 ```bash
-python3 "${SKILL_DIR}/scripts/xrd_phase_identification.py" simulate \
+python3 "${SKILL_DIR}/scripts/pxrd_phase_identification.py" simulate \
   --cif /absolute/path/to/model.cif \
   --output-dir /absolute/path/to/xrd-results \
   --radiation cu-ka1
@@ -79,7 +79,7 @@ python3 "${SKILL_DIR}/scripts/xrd_phase_identification.py" simulate \
 ### compare (experimental + CIF → peak diagnostics)
 
 ```bash
-python3 "${SKILL_DIR}/scripts/xrd_phase_identification.py" compare \
+python3 "${SKILL_DIR}/scripts/pxrd_phase_identification.py" compare \
   --input /absolute/path/to/experiment.xy \
   --cif /absolute/path/to/model.cif \
   --output-dir /absolute/path/to/xrd-results \
