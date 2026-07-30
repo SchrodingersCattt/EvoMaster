@@ -34,7 +34,7 @@ def deal_result(df):
 # 可装饰缓存器
 def search_in_database(chem, xy, file_name):
     all_tab = XRD_DATA
-    if not chem[0] and not chem[1] and not chem[2]:
+    if not chem[0] and not chem[1] and not chem[2] and not chem[3]:
         (
             all_zt,
             information_paixu_all,
@@ -118,11 +118,11 @@ async def search_elements(chem, xy, file_name, result: XRDResult, key_unique,ind
         all_pipei_results, all_tab, x_all, y_all = search_in_database(chem, xy, file_name)
 
         if len(all_pipei_results) > 0:
-            selected_rows = [str(all_pipei_results.iloc[1])]
+            selected_rows = [str(all_pipei_results.iloc[0])]
             options = XRDVis.pipei_results_see(
                 selected_rows, all_tab, x_all, y_all, [file_name], 0
             )
-            name = all_pipei_results["Chemical formula"].iloc[1]
+            name = all_pipei_results["Chemical formula"].iloc[0]
             name = "".join(chemistry_subscript(name))
             await result.add_search_result(name, chem, options)
 
