@@ -44,6 +44,7 @@ class MatToolCallbacksBase:
         pipeline.register_before(self.before_resolve_dpa_model_alias)
         pipeline.register_before(self.before_validate_run_contract_retrieval)
         pipeline.register_before(self.before_reject_runtime_owned_state_access)
+        pipeline.register_before(self.before_validate_compdart_constraint_syntax)
         pipeline.register_before(self.before_validate_job_lifecycle_route)
         pipeline.register_before(self.before_throttle_native_status_poll)
         pipeline.register_before(self.before_patch_monitor_job_bohr_id)

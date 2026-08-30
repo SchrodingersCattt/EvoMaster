@@ -279,3 +279,62 @@ def test_submit_still_uses_path_adaptor():
 
     assert observation['adapted'] is True
     assert tool._path_adaptor.calls == 1
+
+
+def test_compdart_schema_explains_single_comparison_conditions():
+    schema = {
+        'type': 'object',
+        'properties': {
+            'constraints': {
+                'type': 'array',
+                'items': {
+                    'type': 'object',
+                    'properties': {'condition': {'type': 'string'}},
+                },
+            }
+        },
+    }
+    spec = SimpleNamespace(
+        function=SimpleNamespace(
+            name='mat_compdart_submit_run_dart_ga',
+            parameters=schema,
+        )
+    )
+    policy = AsyncExecutionPolicy(AsyncToolRegistry(_config()))
+
+    policy.filter_tool_specs_for_llm([spec])
+
+    description = schema['properties']['constraints']['items']['properties'][
+        'condition'
+    ]['description']
+    assert 'one comparison operator' in description
+    assert 'two constraint entries with the same target' in description
+
+
+def test_compdart_chained_constraint_is_rejected_before_submission():
+    logger = SimpleNamespace(info=lambda *args: None, warning=lambda *args: None)
+    callbacks = MatToolCallbacks(
+        SimpleNamespace(
+            logger=logger,
+            _job_registry=JobRegistry(logger),
+            _async_tool_registry=AsyncToolRegistry(_config()),
+        )
+    )
+    callbacks.before_validate_compdart_constraint_syntax(
+        _call(
+            'mat_compdart_submit_run_dart_ga',
+            {
+                'constraints': [
+                    {'target': 'A', 'condition': '>=0.1'},
+                    {'target': 'A', 'condition': '<0.5'},
+                ]
+            },
+        )
+    )
+    with pytest.raises(ToolCallRejected, match='closed range as two entries'):
+        callbacks.before_validate_compdart_constraint_syntax(
+            _call(
+                'mat_compdart_submit_run_dart_ga',
+                {'constraints': [{'target': 'A', 'condition': '0.1 <= x < 0.5'}]},
+            )
+        )

@@ -2,6 +2,7 @@
 
 import json
 import os
+import re
 import tempfile
 import time
 from pathlib import Path, PurePosixPath
@@ -262,6 +263,38 @@ class MatToolCallbacksBefore:
         if any(value in raw for value in protected):
             raise ToolCallRejected(
                 'Runtime-owned protocol state is not accessible to the agent'
+            )
+
+    def before_validate_compdart_constraint_syntax(self, tool_call: Any) -> None:
+        """Reject condition strings that the CompDART service cannot parse."""
+        if (tool_call.function.name or '') != 'mat_compdart_submit_run_dart_ga':
+            return
+        try:
+            arguments = json.loads(tool_call.function.arguments or '{}')
+        except (json.JSONDecodeError, TypeError):
+            return
+        constraints = (
+            arguments.get('constraints') if isinstance(arguments, dict) else None
+        )
+        if not isinstance(constraints, list):
+            return
+        pattern = re.compile(
+            r'^\s*(?:<=|>=|<|>)\s*-?(?:\d+(?:\.\d*)?|\.\d+)'
+            r'(?:[eE][+-]?\d+)?\s*$'
+        )
+        invalid = [
+            index
+            for index, item in enumerate(constraints)
+            if not isinstance(item, dict)
+            or not isinstance(item.get('condition'), str)
+            or pattern.fullmatch(item['condition']) is None
+        ]
+        if invalid:
+            raise ToolCallRejected(
+                'CompDART constraint conditions use one comparison operator '
+                'followed by one numeric value. Express a closed range as two '
+                'entries with the same target. Invalid constraint indices: '
+                + ', '.join(map(str, invalid))
             )
 
     def before_validate_job_lifecycle_route(self, tool_call: Any) -> None:

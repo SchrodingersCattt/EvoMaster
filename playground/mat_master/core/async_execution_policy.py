@@ -23,6 +23,34 @@ class AsyncExecutionPolicy:
     def __init__(self, registry) -> None:
         self._registry = registry
 
+    @staticmethod
+    def _annotate_compdart_constraint_schema(spec) -> None:
+        """Expose the service's single-comparison condition grammar to the LLM."""
+        fn = getattr(spec, 'function', None)
+        if getattr(fn, 'name', '') != 'mat_compdart_submit_run_dart_ga':
+            return
+        parameters = getattr(fn, 'parameters', None)
+        if not isinstance(parameters, dict):
+            return
+        condition = (
+            ((parameters.get('properties') or {}).get('constraints') or {})
+            .get('items', {})
+            .get('properties', {})
+            .get('condition')
+        )
+        if not isinstance(condition, dict):
+            return
+        guidance = (
+            'Use one comparison operator followed by one numeric value, such as '
+            '>=0.1 or <0.5. Express a lower and upper bound as two constraint '
+            'entries with the same target; chained expressions are invalid.'
+        )
+        existing = str(condition.get('description') or '').strip()
+        if guidance not in existing:
+            condition['description'] = (
+                f'{existing} {guidance}'.strip() if existing else guidance
+            )
+
     def filter_tool_specs_for_llm(self, specs: list) -> list:
         """Apply submit-only async surface and hide lifecycle tools.
 
@@ -45,6 +73,7 @@ class AsyncExecutionPolicy:
             if not isinstance(name, str) or not name:
                 filtered.append(spec)
                 continue
+            self._annotate_compdart_constraint_schema(spec)
 
             matched_prefix = None
             remote_name = ''
