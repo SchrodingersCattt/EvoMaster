@@ -45,6 +45,7 @@ class RunContractManager:
             general.get('required_contracts') or [], skills
         )
         self.protocol: dict[str, Any] = {}
+        self.runtime_audit: dict[str, Any] = {}
         self.protocol_sha256 = ''
         self._locked_finalists: tuple[str, ...] | None = None
         self._retrieval_lock = threading.Lock()
@@ -65,6 +66,10 @@ class RunContractManager:
             self.protocol = loaded.get('protocol') or loaded
             if not isinstance(self.protocol, dict):
                 raise ValueError('protocol must be a YAML mapping')
+            audit = loaded.get('runtime_audit') or {}
+            if not isinstance(audit, dict):
+                raise ValueError('runtime_audit must be a YAML mapping')
+            self.runtime_audit = audit
             self.protocol_sha256 = _sha256(raw)
         if self.prompt_profile == 'scoped' and not self.contracts:
             raise ValueError('Scoped prompt profile requires a loaded run contract')
@@ -259,6 +264,30 @@ class RunContractManager:
     def _mentions(text: str, finalist: str) -> bool:
         pattern = rf'(?<![A-Za-z0-9]){re.escape(finalist)}(?![A-Za-z0-9])'
         return re.search(pattern, text, re.IGNORECASE) is not None
+
+    @staticmethod
+    def _stable_source_identifier(value: str) -> bool:
+        text = value.strip()
+        return bool(
+            re.match(r'https?://', text, re.IGNORECASE)
+            or re.match(r'doi:\s*10\.\d{4,9}/\S+$', text, re.IGNORECASE)
+            or re.match(r'10\.\d{4,9}/\S+$', text, re.IGNORECASE)
+        )
+
+    @classmethod
+    def _candidate_is_observed(cls, row: dict[str, str], candidate: str) -> bool:
+        observed_system = ' '.join(
+            str(row.get(field) or '') for field in ('composition', 'dose')
+        )
+        return cls._mentions(observed_system, candidate)
+
+    @staticmethod
+    def _observation_is_speculative(value: str) -> bool:
+        return re.search(
+            r'\b(?:could|would|may|might|potentially|is expected to)\b',
+            value,
+            re.IGNORECASE,
+        ) is not None
 
     @staticmethod
     def _targeted_tag(text: str, name: str) -> str:
@@ -503,6 +532,49 @@ class RunContractManager:
                             f'evidence row {index} has empty fields: '
                             + ', '.join(sorted(missing))
                         )
+                        continue
+                    source = str(row.get('source') or '')
+                    candidate = str(row.get('candidate') or '').strip()
+                    observation = str(row.get('observation') or '')
+                    if not self._stable_source_identifier(source):
+                        errors.append(
+                            f'evidence row {index} lacks a stable DOI or URL'
+                        )
+                    if candidate and not self._candidate_is_observed(row, candidate):
+                        errors.append(
+                            f'evidence row {index} for finalist "{candidate}" '
+                            'does not observe that finalist in composition or dose'
+                        )
+                    if self._observation_is_speculative(observation):
+                        errors.append(
+                            f'evidence row {index} records a speculative inference '
+                            'as a source observation'
+                        )
+                    role = str(row.get('evidence_role') or '').strip()
+                    role_rules = (
+                        self.runtime_audit.get('role_observation_requirements')
+                        or {}
+                    )
+                    rule = role_rules.get(role) if isinstance(role_rules, dict) else None
+                    if isinstance(rule, dict):
+                        terms = [
+                            str(term).strip().casefold()
+                            for term in rule.get('any_terms') or []
+                            if str(term).strip()
+                        ]
+                        observed = observation.casefold()
+                        if terms and not any(term in observed for term in terms):
+                            errors.append(
+                                f'evidence row {index} for role "{role}" '
+                                'does not report the configured observed quantity'
+                            )
+                        if rule.get('require_numeric') and not re.search(
+                            r'\d', observation
+                        ):
+                            errors.append(
+                                f'evidence row {index} for role "{role}" '
+                                'does not report a numeric observation'
+                            )
             except Exception as exc:
                 errors.append(f'cannot read evidence matrix: {exc}')
 

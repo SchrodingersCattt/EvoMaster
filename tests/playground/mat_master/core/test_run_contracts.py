@@ -66,7 +66,10 @@ def _valid_workspace(tmp_path: Path, manager: RunContractManager):
     for role in roles:
         for finalist in finalists:
             rows.append(
-                f'doi:{role}-{finalist},{finalist},1,measured,reported,{role},{finalist}'
+                (
+                    f'https://doi.org/10.1234/{role}-{finalist},'
+                    f'{finalist},1,measured,reported,{role},{finalist}'
+                )
             )
     (tmp_path / 'evidence_matrix.csv').write_text(
         '\n'.join(rows) + '\n', encoding='utf-8'
@@ -346,6 +349,70 @@ def test_evidence_role_coverage_is_runtime_checked(tmp_path):
     path.write_text('\n'.join(lines[:-1]) + '\n')
     errors, _ = manager.validate_finish(tmp_path, journal, jobs)
     assert any('has 0/1 inspected records' in error for error in errors)
+
+
+def _replace_evidence_cell(tmp_path, old, new):
+    path = tmp_path / 'evidence_matrix.csv'
+    path.write_text(path.read_text().replace(old, new), encoding='utf-8')
+
+
+def test_evidence_source_requires_stable_identifier(tmp_path):
+    manager = _manager(tmp_path)
+    journal, jobs = _valid_workspace(tmp_path, manager)
+    _replace_evidence_cell(
+        tmp_path, 'https://doi.org/10.1234/direct-A', 'paper one'
+    )
+    errors, _ = manager.validate_finish(tmp_path, journal, jobs)
+    assert 'evidence row 2 lacks a stable DOI or URL' in errors
+
+
+def test_evidence_candidate_must_appear_in_observed_system(tmp_path):
+    manager = _manager(tmp_path)
+    journal, jobs = _valid_workspace(tmp_path, manager)
+    _replace_evidence_cell(
+        tmp_path,
+        'https://doi.org/10.1234/direct-A,A,1,measured,reported,direct,A',
+        (
+            'https://doi.org/10.1234/direct-A,base alloy,general,'
+            'A improves the target,reported,direct,A'
+        ),
+    )
+    errors, _ = manager.validate_finish(tmp_path, journal, jobs)
+    assert any(
+        'for finalist "A" does not observe that finalist' in error
+        for error in errors
+    )
+
+
+def test_inference_cannot_be_recorded_as_source_observation(tmp_path):
+    manager = _manager(tmp_path)
+    journal, jobs = _valid_workspace(tmp_path, manager)
+    _replace_evidence_cell(
+        tmp_path,
+        'https://doi.org/10.1234/direct-A,A,1,measured,reported,direct,A',
+        (
+            'https://doi.org/10.1234/direct-A,A,1,A would improve the target,'
+            'reported,direct,A'
+        ),
+    )
+    errors, _ = manager.validate_finish(tmp_path, journal, jobs)
+    assert any('speculative inference' in error for error in errors)
+
+
+def test_role_specific_observed_quantity_is_runtime_checked(tmp_path):
+    manager = _manager(tmp_path)
+    manager.runtime_audit = {
+        'role_observation_requirements': {
+            'direct': {
+                'any_terms': ['thermal expansion', 'CTE'],
+                'require_numeric': True,
+            }
+        }
+    }
+    journal, jobs = _valid_workspace(tmp_path, manager)
+    errors, _ = manager.validate_finish(tmp_path, journal, jobs)
+    assert any('configured observed quantity' in error for error in errors)
+    assert any('numeric observation' in error for error in errors)
 
 
 def test_generic_monitor_is_blocked(tmp_path):
