@@ -6,6 +6,8 @@ Complete all configured broad-search facets before issuing a search for a named 
 
 Broad-search queries must not name, list, or exemplify any candidate option.
 
+Match a candidate identifier only as a complete token or explicit structured identifier. Never infer it from a substring inside an unrelated word.
+
 Build a longlist from the broad-search results, then write the configured number of finalists to the finalists array in run_result.json. Do this before any targeted retrieval. The remaining result fields may be provisional at this stage. The runtime locks these model-selected identifiers on the first targeted query, and the list must not change afterward.
 
 After all configured broad-search facets, prefix any optional additional candidate-neutral broad query with [BROAD]. Do not use this prefix for targeted retrieval.
