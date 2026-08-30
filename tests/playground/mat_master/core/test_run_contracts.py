@@ -359,3 +359,72 @@ def test_native_job_is_not_polled_by_generic_refresh():
     )
     jobs.refresh_pending()
     assert jobs.jobs['native-1'].lifecycle_state == 'submitted'
+
+def test_targeted_retrieval_requires_model_authored_finalist_lock(tmp_path):
+    manager = _manager(tmp_path)
+    manager.initialize_state(tmp_path)
+    broad = [
+        {
+            'tool': 'mat_sn_search-papers-enhanced',
+            'status': 'success',
+            'arguments': {'question': f'broad facet {index}'},
+        }
+        for index in range(5)
+    ]
+    error = manager.validate_retrieval_start(
+        tmp_path,
+        broad,
+        {'question': 'direct evidence for A'},
+    )
+    assert 'write run_result.json' in error
+
+    (tmp_path / 'run_result.json').write_text(
+        json.dumps({'finalists': ['A', 'B', 'C']}),
+        encoding='utf-8',
+    )
+    assert manager.validate_retrieval_start(
+        tmp_path,
+        broad,
+        {'question': 'direct evidence for A'},
+    ) is None
+    state = json.loads((tmp_path / '_tmp/protocol_state.json').read_text())
+    assert state['phase'] == 'finalists_locked'
+    assert state['finalists'] == ['A', 'B', 'C']
+
+
+def test_optional_broad_search_and_locked_finalists_are_enforced(tmp_path):
+    manager = _manager(tmp_path)
+    manager.initialize_state(tmp_path)
+    broad = [
+        {
+            'tool': 'mat_sn_search-papers-enhanced',
+            'status': 'success',
+            'arguments': {'question': f'broad facet {index}'},
+        }
+        for index in range(5)
+    ]
+    assert manager.validate_retrieval_start(
+        tmp_path,
+        broad,
+        {'question': '[BROAD] one additional neutral facet'},
+    ) is None
+
+    (tmp_path / 'run_result.json').write_text(
+        json.dumps({'finalists': ['A', 'B', 'C']}),
+        encoding='utf-8',
+    )
+    assert manager.validate_retrieval_start(
+        tmp_path,
+        broad,
+        {'question': 'evidence for A and B'},
+    ) == 'Each targeted retrieval query must name exactly one locked finalist identifier.'
+
+    (tmp_path / 'run_result.json').write_text(
+        json.dumps({'finalists': ['A', 'B', 'D']}),
+        encoding='utf-8',
+    )
+    assert manager.validate_retrieval_start(
+        tmp_path,
+        broad,
+        {'question': 'evidence for A'},
+    ) == 'The finalist set is runtime-locked and cannot be changed.'

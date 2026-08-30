@@ -6,7 +6,9 @@ Complete all configured broad-search facets before issuing a search for a named 
 
 Broad-search queries must not name, list, or exemplify any candidate option.
 
-Build a longlist from the broad-search results, then lock the configured number of finalists. Do not change the finalist set after targeted retrieval begins.
+Build a longlist from the broad-search results, then write the configured number of finalists to the finalists array in run_result.json. Do this before any targeted retrieval. The remaining result fields may be provisional at this stage. The runtime locks these model-selected identifiers on the first targeted query, and the list must not change afterward.
+
+After all configured broad-search facets, prefix any optional additional candidate-neutral broad query with [BROAD]. Do not use this prefix for targeted retrieval.
 
 Execute targeted retrieval in synchronized rounds. Each round covers every finalist once under the same evidence role, retrieval parameters, and result limit.
 

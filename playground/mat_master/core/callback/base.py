@@ -42,6 +42,7 @@ class MatToolCallbacksBase:
         pipeline.register_before(self.before_normalize_skill_script_args)
         pipeline.register_before(self.before_resolve_skill_reference_name)
         pipeline.register_before(self.before_resolve_dpa_model_alias)
+        pipeline.register_before(self.before_validate_run_contract_retrieval)
         pipeline.register_before(self.before_reject_runtime_owned_state_access)
         pipeline.register_before(self.before_validate_job_lifecycle_route)
         pipeline.register_before(self.before_throttle_native_status_poll)

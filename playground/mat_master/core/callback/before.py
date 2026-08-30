@@ -225,6 +225,30 @@ class MatToolCallbacksBefore:
                 time.sleep(wait_seconds)
             self._native_poll_times[job_id] = time.monotonic()
 
+    def before_validate_run_contract_retrieval(self, tool_call: Any) -> None:
+        """Require an explicit model-authored finalist lock before targeting."""
+        tool_name = tool_call.function.name or ''
+        if not tool_name.startswith('mat_sn_search-'):
+            return
+        manager = getattr(self.agent, '_run_contracts', None)
+        if manager is None or not manager.active:
+            return
+        try:
+            arguments = json.loads(tool_call.function.arguments or '{}')
+        except (json.JSONDecodeError, TypeError):
+            arguments = {}
+        if not isinstance(arguments, dict):
+            arguments = {}
+        workspace = self._resolve_workspace_root()
+        journal = getattr(self.agent, '_execution_journal', None)
+        error = manager.validate_retrieval_start(
+            workspace or '',
+            journal.entries if journal is not None else [],
+            arguments,
+        )
+        if error:
+            raise ToolCallRejected(error)
+
     def before_reject_runtime_owned_state_access(self, tool_call: Any) -> None:
         """Prevent the agent from reading or editing runtime-owned audit state."""
         tool_name = tool_call.function.name or ''
