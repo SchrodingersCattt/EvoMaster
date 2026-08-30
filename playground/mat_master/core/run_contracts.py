@@ -102,9 +102,23 @@ class RunContractManager:
         return resolved
 
     def filter_specs(self, specs: list[Any]) -> list[Any]:
-        if self.tool_allowlist is None:
-            return specs
-        return [spec for spec in specs if tool_name(spec) in self.tool_allowlist]
+        filtered: list[Any] = []
+        seen: set[str] = set()
+        for spec in specs:
+            name = tool_name(spec)
+            if self.tool_allowlist is not None and name not in self.tool_allowlist:
+                continue
+            if name and name not in seen:
+                seen.add(name)
+                filtered.append(spec)
+        if self.active and self.tool_allowlist is not None:
+            missing = sorted(self.tool_allowlist - seen)
+            if missing:
+                raise RuntimeError(
+                    'Required runtime tools were not registered: '
+                    + ', '.join(missing)
+                )
+        return filtered
 
     def tool_is_allowed(self, name: str) -> bool:
         return self.tool_allowlist is None or name in self.tool_allowlist

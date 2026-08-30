@@ -165,6 +165,17 @@ def test_contract_is_preloaded_hashed_and_tools_are_exact(tmp_path):
     assert 'symmetric retrieval' in manager.contract_text()
 
 
+def test_missing_runtime_tool_fails_before_agent_call(tmp_path):
+    manager = _manager(tmp_path)
+    specs = [SimpleNamespace(function=SimpleNamespace(name='finish'))]
+    try:
+        manager.filter_specs(specs)
+    except RuntimeError as exc:
+        assert 'peek_file' in str(exc)
+    else:
+        raise AssertionError('missing required runtime tool was accepted')
+
+
 def test_missing_required_contract_fails_before_agent_call(tmp_path):
     config = {
         'agents': {
