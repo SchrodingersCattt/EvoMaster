@@ -3,6 +3,7 @@
 import json
 import os
 import tempfile
+import time
 from pathlib import Path, PurePosixPath
 from typing import Any
 
@@ -190,6 +191,38 @@ class MatToolCallbacksBefore:
             model_path,
             resolved,
         )
+
+    def before_throttle_native_status_poll(self, tool_call: Any) -> None:
+        """Keep native status polling below the service-safe rate."""
+        tool_name = tool_call.function.name or ''
+        if not tool_name.endswith('_query_job_status'):
+            return
+        try:
+            args = json.loads(tool_call.function.arguments or '{}')
+        except (json.JSONDecodeError, TypeError):
+            return
+        job_id = args.get('job_id') if isinstance(args, dict) else None
+        registry = getattr(self.agent, '_job_registry', None)
+        record = registry.jobs.get(job_id) if registry is not None and job_id else None
+        if record is None or not record.native_lifecycle:
+            return
+
+        with self._native_poll_lock:
+            now = time.monotonic()
+            previous = self._native_poll_times.get(job_id)
+            wait_seconds = (
+                max(0.0, self._native_poll_interval_seconds - (now - previous))
+                if previous is not None
+                else 0.0
+            )
+            if wait_seconds:
+                self.logger.info(
+                    'before_tool: delaying native status poll job_id=%s by %.1fs',
+                    job_id,
+                    wait_seconds,
+                )
+                time.sleep(wait_seconds)
+            self._native_poll_times[job_id] = time.monotonic()
 
     def before_validate_job_lifecycle_route(self, tool_call: Any) -> None:
         """Reject job identifiers used outside their owning service route."""

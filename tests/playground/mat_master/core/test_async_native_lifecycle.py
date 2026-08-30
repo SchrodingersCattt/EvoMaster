@@ -1,4 +1,5 @@
 import json
+import time
 from types import SimpleNamespace
 
 from evomaster.agent.tools.mcp.mcp import MCPTool
@@ -139,6 +140,32 @@ def test_dict_submit_response_tracks_complete_native_lifecycle():
     assert record.bohr_job_id == 'bohr-1'
     assert record.lifecycle_state == 'succeeded'
     assert record.results == {'best': [0.8, 0.2]}
+
+
+def test_native_status_polling_is_throttled():
+    logger = SimpleNamespace(info=lambda *args: None, warning=lambda *args: None)
+    registry = JobRegistry(logger)
+    registry.record_submit(
+        job_id='native-1',
+        software='compdart',
+        source_tool='mat_compdart_submit_run_dart_ga',
+        native_lifecycle=True,
+    )
+    callbacks = MatToolCallbacks(
+        SimpleNamespace(
+            logger=logger,
+            _job_registry=registry,
+            _async_tool_registry=AsyncToolRegistry(_config()),
+        )
+    )
+    callbacks._native_poll_interval_seconds = 0.02
+    call = _call('mat_compdart_query_job_status', {'job_id': 'native-1'})
+
+    start = time.monotonic()
+    callbacks.before_throttle_native_status_poll(call)
+    callbacks.before_throttle_native_status_poll(call)
+
+    assert time.monotonic() - start >= 0.015
 
 
 class _PathAdaptor:

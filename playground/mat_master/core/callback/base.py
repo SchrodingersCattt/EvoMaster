@@ -33,6 +33,9 @@ class MatToolCallbacksBase:
         self._download_subdir = download_subdir
         self._ensured_download_dirs: set[str] = set()
         self._ensure_dir_lock = threading.Lock()
+        self._native_poll_lock = threading.Lock()
+        self._native_poll_times: dict[str, float] = {}
+        self._native_poll_interval_seconds = 30.0
 
     def register(self, pipeline: ToolCallbackPipeline) -> None:
         """Register all MAT callbacks in execution order."""
@@ -40,6 +43,7 @@ class MatToolCallbacksBase:
         pipeline.register_before(self.before_resolve_skill_reference_name)
         pipeline.register_before(self.before_resolve_dpa_model_alias)
         pipeline.register_before(self.before_validate_job_lifecycle_route)
+        pipeline.register_before(self.before_throttle_native_status_poll)
         pipeline.register_before(self.before_patch_monitor_job_bohr_id)
         pipeline.register_before(self.before_normalize_sn_search_words_parameter)
         pipeline.register_before(self.before_upload_nmr_predict_files)
