@@ -80,6 +80,7 @@ EXEMPT_TOOL_SUFFIXES = frozenset(
     {
         'query_job_status',
         'get_job_status',
+        'get_job_results',
     }
 )
 

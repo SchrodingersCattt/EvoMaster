@@ -256,6 +256,14 @@ class MatToolCallbacksBefore:
                 f'Job {job_id} belongs to the native lifecycle of {expected}; '
                 'use that service status/results tools'
             )
+        if (
+            tool_name.endswith('_get_job_results')
+            and record.lifecycle_state != 'results_pending'
+        ):
+            raise ValueError(
+                f'Job {job_id} results are unavailable until native status '
+                'reports success'
+            )
 
     def before_patch_monitor_job_bohr_id(self, tool_call: Any) -> None:
         """Auto-fill missing bohr_job_id for monitor_job calls."""

@@ -102,6 +102,8 @@ class JobRegistry:
         rec = self._jobs.get(job_id)
         if rec is None:
             return
+        if rec.lifecycle_state == 'succeeded':
+            return
         normalized = str(status).strip().lower()
         rec.raw_status = str(status)
         rec.updated_at = _now_iso()
@@ -121,16 +123,23 @@ class JobRegistry:
             rec.lifecycle_state = 'monitoring'
             rec.unknown_polls += 1
 
-    def record_native_results(self, job_id: str, results: Any) -> None:
-        """Store results returned by a native MCP lifecycle tool."""
+    def record_native_results(self, job_id: str, results: Any) -> bool:
+        """Store a nonempty result only after native status reports success."""
         rec = self._jobs.get(job_id)
-        if rec is None:
-            return
+        if rec is None or rec.lifecycle_state != 'results_pending':
+            return False
+        if results is None:
+            return False
+        if isinstance(results, str) and not results.strip():
+            return False
+        if isinstance(results, (dict, list, tuple, set)) and not results:
+            return False
         rec.results = results if isinstance(results, dict) else {'value': results}
         rec.lifecycle_state = 'succeeded'
         rec.raw_status = rec.raw_status or 'Finished'
         rec.unknown_polls = 0
         rec.updated_at = _now_iso()
+        return True
 
     def all_terminal(self) -> bool:
         return all(j.is_terminal for j in self._jobs.values())

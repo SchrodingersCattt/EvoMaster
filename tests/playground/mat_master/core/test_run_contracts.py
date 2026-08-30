@@ -32,6 +32,7 @@ def _manager(tmp_path: Path) -> RunContractManager:
             'inspected_records_per_finalist_per_round': 1,
             'symmetric_gap_filling': True,
             'abstention_allowed': True,
+            'compdart': {'require_agent_authored_constraints': True},
         }
     }
     protocol_path = tmp_path / 'protocol.yaml'
@@ -111,6 +112,19 @@ def _valid_workspace(tmp_path: Path, manager: RunContractManager):
                 }
             )
             step += 1
+    journal.append(
+        {
+            'step': step,
+            'tool': 'mat_compdart_submit_run_dart_ga',
+            'status': 'success',
+            'arguments': {
+                'constraints': [
+                    {'target': 'A', 'condition': '>0.25'},
+                    {'target': ['B', 'C'], 'condition': '<0.75'},
+                ]
+            },
+        }
+    )
 
     jobs = JobRegistry(SimpleNamespace(warning=lambda *args: None))
     jobs.record_submit(
@@ -201,6 +215,22 @@ def test_valid_protocol_is_derived_and_marks_structured_result(tmp_path):
     assert result['search_calls']['targeted'] == {'A': 4, 'B': 4, 'C': 4}
     assert result['inspected_sources'] == {'A': 4, 'B': 4, 'C': 4}
     assert result['dart']['results_retrieved'] is True
+    assert result['dart']['submitted_constraints'] == [
+        {'target': 'A', 'condition': '>0.25'},
+        {'target': ['B', 'C'], 'condition': '<0.75'},
+    ]
+    assert result['dart']['result_payload'] == {'rows': [1]}
+
+
+def test_missing_agent_authored_compdart_constraints_is_blocked(tmp_path):
+    manager = _manager(tmp_path)
+    journal, jobs = _valid_workspace(tmp_path, manager)
+    journal[-1]['arguments'].pop('constraints')
+    errors, _ = manager.validate_finish(tmp_path, journal, jobs)
+    assert (
+        'CompDART submit lacks agent-authored constraints in tool schema'
+        in errors
+    )
 
 
 def test_model_authored_protocol_state_is_ignored(tmp_path):
@@ -217,7 +247,7 @@ def test_model_authored_protocol_state_is_ignored(tmp_path):
 def test_asymmetric_targeted_round_is_blocked(tmp_path):
     manager = _manager(tmp_path)
     journal, jobs = _valid_workspace(tmp_path, manager)
-    journal.pop()
+    journal.pop(-2)
     errors, _ = manager.validate_finish(tmp_path, journal, jobs)
     assert 'targeted searches end with an incomplete symmetric round' in errors
 

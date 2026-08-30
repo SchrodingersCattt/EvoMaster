@@ -415,13 +415,42 @@ class RunContractManager:
 
         if any(str(entry.get('tool')) == 'monitor_job' for entry in journal):
             errors.append('monitor_job was used in a native-lifecycle run')
+        submit_entries = [
+            entry for entry in journal
+            if str(entry.get('tool', '')).startswith('mat_compdart_submit_')
+            and entry.get('status') == 'success'
+        ]
+        submitted_constraints: list[dict[str, Any]] = []
+        if submit_entries:
+            arguments = submit_entries[-1].get('arguments') or {}
+            if isinstance(arguments, dict):
+                values = arguments.get('constraints')
+                if isinstance(values, list):
+                    submitted_constraints = values
+        compdart_config = self.protocol.get('compdart') or {}
+        if (
+            isinstance(compdart_config, dict)
+            and compdart_config.get('require_agent_authored_constraints')
+        ):
+            valid_constraints = bool(submitted_constraints) and all(
+                isinstance(item, dict)
+                and isinstance(item.get('target'), (str, list))
+                and bool(item.get('target'))
+                and isinstance(item.get('condition'), str)
+                and bool(item.get('condition').strip())
+                for item in submitted_constraints
+            )
+            if not valid_constraints:
+                errors.append(
+                    'CompDART submit lacks agent-authored constraints in tool schema'
+                )
         compdart_jobs = [
             job for job in getattr(jobs, 'jobs', {}).values()
             if str(job.source_tool).startswith('mat_compdart_submit_')
         ]
         successful_jobs = [
             job for job in compdart_jobs
-            if job.lifecycle_state == 'succeeded' and job.results is not None
+            if job.lifecycle_state == 'succeeded' and bool(job.results)
         ]
         if not successful_jobs:
             errors.append('no CompDART job completed its native lifecycle')
@@ -431,6 +460,8 @@ class RunContractManager:
             'job_id': chosen_job.job_id if chosen_job else None,
             'status': chosen_job.raw_status if chosen_job else None,
             'results_retrieved': chosen_job is not None,
+            'submitted_constraints': submitted_constraints,
+            'result_payload': chosen_job.results if chosen_job else None,
         }
 
         state = {

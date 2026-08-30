@@ -2,6 +2,8 @@ import json
 import time
 from types import SimpleNamespace
 
+import pytest
+
 from evomaster.agent.tools.mcp.mcp import MCPTool
 from playground.mat_master.core.async_execution_policy import AsyncExecutionPolicy
 from playground.mat_master.core.async_tool_registry import AsyncToolRegistry
@@ -140,6 +142,42 @@ def test_dict_submit_response_tracks_complete_native_lifecycle():
     assert record.bohr_job_id == 'bohr-1'
     assert record.lifecycle_state == 'succeeded'
     assert record.results == {'best': [0.8, 0.2]}
+
+
+def test_native_results_require_success_status_and_nonempty_payload():
+    logger = SimpleNamespace(info=lambda *args: None, warning=lambda *args: None)
+    registry = JobRegistry(logger)
+    registry.record_submit(
+        job_id='native-1',
+        software='compdart',
+        source_tool='mat_compdart_submit_run_dart_ga',
+        native_lifecycle=True,
+    )
+    callbacks = MatToolCallbacks(
+        SimpleNamespace(
+            logger=logger,
+            _job_registry=registry,
+            _async_tool_registry=AsyncToolRegistry(_config()),
+        )
+    )
+    results_call = _call(
+        'mat_compdart_get_job_results',
+        {'job_id': 'native-1'},
+    )
+
+    with pytest.raises(ValueError, match='results are unavailable'):
+        callbacks.before_validate_job_lifecycle_route(results_call)
+
+    registry.record_native_status('native-1', 'Succeeded')
+    callbacks.before_validate_job_lifecycle_route(results_call)
+    assert registry.record_native_results('native-1', {}) is False
+    assert registry.jobs['native-1'].lifecycle_state == 'results_pending'
+    assert registry.record_native_results(
+        'native-1', {'best': [0.8, 0.2]}
+    ) is True
+
+    registry.record_native_status('native-1', 'Running')
+    assert registry.jobs['native-1'].lifecycle_state == 'succeeded'
 
 
 def test_native_status_polling_is_throttled():

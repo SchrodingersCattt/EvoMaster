@@ -288,12 +288,20 @@ class MatToolCallbacksAfter:
             return observation, info
 
         if is_results:
-            registry.record_native_results(job_id, observation)
-            self.logger.info(
-                'after_tool: stored native results job_id=%s tool=%s',
-                job_id,
-                tool_name,
-            )
+            stored = registry.record_native_results(job_id, observation)
+            if stored:
+                self.logger.info(
+                    'after_tool: stored native results job_id=%s tool=%s',
+                    job_id,
+                    tool_name,
+                )
+            else:
+                self.logger.warning(
+                    'after_tool: ignored premature or empty native results '
+                    'job_id=%s tool=%s',
+                    job_id,
+                    tool_name,
+                )
             return observation, info
 
         status = self._extract_native_job_status(observation)
