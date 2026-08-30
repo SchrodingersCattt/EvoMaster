@@ -269,6 +269,26 @@ class MatToolCallbacksBefore:
         """Reject condition strings that the CompDART service cannot parse."""
         if (tool_call.function.name or '') != 'mat_compdart_submit_run_dart_ga':
             return
+        journal = getattr(self.agent, '_execution_journal', None)
+        entries = getattr(journal, 'entries', []) if journal is not None else []
+        fatal_markers = (
+            'No space left on device',
+            'Disk quota exceeded',
+            'Read-only file system',
+        )
+        for entry in reversed(entries):
+            if entry.get('tool') != 'mat_compdart_submit_run_dart_ga':
+                continue
+            if entry.get('status') != 'error':
+                continue
+            failure = f"{entry.get('error', '')} {entry.get('summary', '')}"
+            if any(marker in failure for marker in fatal_markers):
+                raise ToolCallRejected(
+                    'A previous CompDART submission in this run failed with a '
+                    'non-recoverable service storage error. Do not resubmit; '
+                    'report the external failure and request finish.'
+                )
+            break
         try:
             arguments = json.loads(tool_call.function.arguments or '{}')
         except (json.JSONDecodeError, TypeError):

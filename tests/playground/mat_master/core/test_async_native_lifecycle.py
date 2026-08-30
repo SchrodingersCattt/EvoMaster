@@ -358,6 +358,53 @@ def test_compdart_percent_constraint_is_rejected_before_submission():
         )
 
 
+def test_fatal_compdart_storage_error_blocks_resubmission():
+    logger = SimpleNamespace(info=lambda *args: None, warning=lambda *args: None)
+    callbacks = MatToolCallbacks(
+        SimpleNamespace(
+            logger=logger,
+            _execution_journal=SimpleNamespace(
+                entries=[
+                    {
+                        'tool': 'mat_compdart_submit_run_dart_ga',
+                        'status': 'error',
+                        'error': '[Errno 28] No space left on device',
+                    }
+                ]
+            ),
+        )
+    )
+    call = _call(
+        'mat_compdart_submit_run_dart_ga',
+        {'constraints': [{'target': 'Fe', 'condition': '>=0.4'}]},
+    )
+    with pytest.raises(ToolCallRejected, match='Do not resubmit'):
+        callbacks.before_validate_compdart_constraint_syntax(call)
+
+
+def test_transient_compdart_error_does_not_block_resubmission():
+    logger = SimpleNamespace(info=lambda *args: None, warning=lambda *args: None)
+    callbacks = MatToolCallbacks(
+        SimpleNamespace(
+            logger=logger,
+            _execution_journal=SimpleNamespace(
+                entries=[
+                    {
+                        'tool': 'mat_compdart_submit_run_dart_ga',
+                        'status': 'error',
+                        'error': 'temporary timeout',
+                    }
+                ]
+            ),
+        )
+    )
+    callbacks.before_validate_compdart_constraint_syntax(
+        _call('mat_compdart_submit_run_dart_ga', {
+            'constraints': [{'target': 'Fe', 'condition': '>=0.4'}]
+        })
+    )
+
+
 @pytest.mark.parametrize('arguments', [{}, {'constraints': []}])
 def test_required_compdart_constraints_cannot_be_omitted(arguments):
     logger = SimpleNamespace(info=lambda *args: None, warning=lambda *args: None)
