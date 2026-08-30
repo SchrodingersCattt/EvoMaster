@@ -12,6 +12,8 @@ After all configured broad-search facets, prefix any optional additional candida
 
 Execute targeted retrieval in synchronized rounds. Each round covers every finalist once under the same evidence role, retrieval parameters, and result limit.
 
+Prefix every targeted question with [ROLE: configured evidence role] [FINALIST: locked identifier], using the exact role text supplied by the run configuration. Use [ROLE: gap-fill] only for an optional additional symmetric round after all configured roles.
+
 Include exactly one locked finalist identifier in every targeted retrieval query.
 
 Never combine multiple finalists in one targeted query, including gap-filling queries.

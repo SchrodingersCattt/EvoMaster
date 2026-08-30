@@ -49,6 +49,7 @@ class RunContractManager:
         self._locked_finalists: tuple[str, ...] | None = None
         self._retrieval_lock = threading.Lock()
         self._retrieval_started_count = 0
+        self._targeted_started: list[dict[str, Any]] = []
         protocol_file = general.get('contract_config_file')
         if protocol_file:
             path = Path(str(protocol_file))
@@ -138,6 +139,12 @@ class RunContractManager:
             'uses inconsistent retrieval parameters',
             'named finalist retrieval began before broad searches completed',
             'finalists changed after runtime lock',
+            'missing the required [ROLE:',
+            'missing the required [FINALIST:',
+            'uses evidence role',
+            'query has evidence role',
+            'query has finalist tag',
+            'repeats finalist',
         )
         return any(any(marker in error for marker in markers) for error in errors)
 
@@ -212,6 +219,7 @@ class RunContractManager:
         with self._retrieval_lock:
             self._locked_finalists = None
             self._retrieval_started_count = 0
+            self._targeted_started = []
         path = Path(workspace) / '_tmp' / 'protocol_state.json'
         path.parent.mkdir(parents=True, exist_ok=True)
         expected = {
@@ -251,6 +259,15 @@ class RunContractManager:
     def _mentions(text: str, finalist: str) -> bool:
         pattern = rf'(?<![A-Za-z0-9]){re.escape(finalist)}(?![A-Za-z0-9])'
         return re.search(pattern, text, re.IGNORECASE) is not None
+
+    @staticmethod
+    def _targeted_tag(text: str, name: str) -> str:
+        match = re.search(
+            rf'\[{re.escape(name)}:\s*([^\]]+?)\s*\]',
+            text,
+            re.IGNORECASE,
+        )
+        return match.group(1).strip() if match else ''
 
     @staticmethod
     def _retrieval_parameters(entry: dict[str, Any]) -> dict[str, Any]:
@@ -342,15 +359,82 @@ class RunContractManager:
                 if current_finalists != self._locked_finalists:
                     return 'The finalist set is runtime-locked and cannot be changed.'
 
+            tagged_role = self._targeted_tag(query_text, 'ROLE')
+            tagged_finalist = self._targeted_tag(query_text, 'FINALIST')
+            roles = [str(role) for role in self.protocol.get('finalist_rounds') or []]
+            query_n = int(
+                self.protocol.get('calls_per_finalist_per_round') or 0
+            )
+            group_size = len(self._locked_finalists) * query_n
+            group_index = (
+                len(self._targeted_started) // group_size if group_size else 0
+            )
+            expected_role = (
+                roles[group_index] if group_index < len(roles) else 'gap-fill'
+            )
+            if not tagged_role:
+                return (
+                    'Targeted retrieval is missing the required '
+                    f'[ROLE: {expected_role}] tag.'
+                )
+            if tagged_role.casefold() != expected_role.casefold():
+                return (
+                    f'Targeted retrieval uses evidence role "{tagged_role}"; '
+                    f'expected "{expected_role}".'
+                )
+            if not tagged_finalist:
+                return (
+                    'Targeted retrieval is missing the required '
+                    '[FINALIST: <locked identifier>] tag.'
+                )
+            canonical = next(
+                (
+                    finalist for finalist in self._locked_finalists
+                    if finalist.casefold() == tagged_finalist.casefold()
+                ),
+                None,
+            )
+            if canonical is None:
+                return (
+                    f'Targeted retrieval names unlocked finalist '
+                    f'"{tagged_finalist}".'
+                )
             matches = [
                 finalist for finalist in self._locked_finalists
                 if self._mentions(query_text, finalist)
             ]
-            if len(matches) != 1:
+            if len(matches) != 1 or matches[0] != canonical:
                 return (
                     'Each targeted retrieval query must name exactly one locked '
-                    'finalist identifier.'
+                    'finalist identifier, matching its FINALIST tag.'
                 )
+
+            current_group = (
+                self._targeted_started[-(len(self._targeted_started) % group_size):]
+                if group_size and len(self._targeted_started) % group_size
+                else []
+            )
+            repeated = sum(
+                entry['finalist'] == canonical for entry in current_group
+            )
+            if repeated >= query_n:
+                return (
+                    f'Targeted round "{expected_role}" repeats finalist '
+                    f'"{canonical}" before covering every finalist.'
+                )
+            parameters = self._retrieval_parameters({'arguments': arguments})
+            if current_group and parameters != current_group[0]['parameters']:
+                return (
+                    f'Targeted round "{expected_role}" uses inconsistent '
+                    'retrieval parameters.'
+                )
+            self._targeted_started.append(
+                {
+                    'role': expected_role,
+                    'finalist': canonical,
+                    'parameters': parameters,
+                }
+            )
             self._retrieval_started_count += 1
             return None
 
@@ -514,6 +598,14 @@ class RunContractManager:
             parameters = []
             for entry in chunk:
                 text = self._query_text(entry)
+                tagged_role = self._targeted_tag(text, 'ROLE')
+                tagged_finalist = self._targeted_tag(text, 'FINALIST')
+                expected_tag_role = role if group_index < len(roles) else 'gap-fill'
+                if tagged_role.casefold() != expected_tag_role.casefold():
+                    errors.append(
+                        f'targeted round "{role}" query has evidence role '
+                        f'"{tagged_role or "(missing)"}"'
+                    )
                 matches = [
                     finalist for finalist in finalists
                     if self._mentions(text, finalist)
@@ -524,6 +616,11 @@ class RunContractManager:
                     )
                     continue
                 finalist = matches[0]
+                if tagged_finalist.casefold() != finalist.casefold():
+                    errors.append(
+                        f'targeted round "{role}" query has finalist tag '
+                        f'"{tagged_finalist or "(missing)"}", expected "{finalist}"'
+                    )
                 targeted_counts[finalist] += 1
                 records[finalist]['query_steps'].append(entry.get('step'))
                 parameters.append(self._retrieval_parameters(entry))

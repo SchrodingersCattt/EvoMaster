@@ -106,7 +106,10 @@ def _valid_workspace(tmp_path: Path, manager: RunContractManager):
                     'tool': 'mat_sn_search-papers-enhanced',
                     'status': 'success',
                     'arguments': {
-                        'question': f'{role} evidence for finalist {finalist}',
+                        'question': (
+                            f'[ROLE: {role}] [FINALIST: {finalist}] '
+                            f'{role} evidence for finalist {finalist}'
+                        ),
                         'page_size': 10,
                     },
                 }
@@ -236,6 +239,9 @@ def test_missing_agent_authored_compdart_constraints_is_blocked(tmp_path):
 def test_irrecoverable_protocol_errors_are_classified():
     assert RunContractManager.errors_are_irrecoverable(
         ['targeted round "direct" is asymmetric for "A"']
+    )
+    assert RunContractManager.errors_are_irrecoverable(
+        ['targeted round "direct" query has evidence role "mechanism"']
     )
     assert not RunContractManager.errors_are_irrecoverable(
         ['evidence role "direct", finalist "A" has 0/1 inspected records']
@@ -374,7 +380,7 @@ def test_targeted_retrieval_requires_model_authored_finalist_lock(tmp_path):
     error = manager.validate_retrieval_start(
         tmp_path,
         broad,
-        {'question': 'direct evidence for A'},
+        {'question': '[ROLE: direct] [FINALIST: A] direct evidence for A'},
     )
     assert 'write run_result.json' in error
 
@@ -385,7 +391,7 @@ def test_targeted_retrieval_requires_model_authored_finalist_lock(tmp_path):
     assert manager.validate_retrieval_start(
         tmp_path,
         broad,
-        {'question': 'direct evidence for A'},
+        {'question': '[ROLE: direct] [FINALIST: A] direct evidence for A'},
     ) is None
     state = json.loads((tmp_path / '_tmp/protocol_state.json').read_text())
     assert state['phase'] == 'finalists_locked'
@@ -416,8 +422,11 @@ def test_optional_broad_search_and_locked_finalists_are_enforced(tmp_path):
     assert manager.validate_retrieval_start(
         tmp_path,
         broad,
-        {'question': 'evidence for A and B'},
-    ) == 'Each targeted retrieval query must name exactly one locked finalist identifier.'
+        {'question': '[ROLE: direct] [FINALIST: A] evidence for A and B'},
+    ) == (
+        'Each targeted retrieval query must name exactly one locked finalist '
+        'identifier, matching its FINALIST tag.'
+    )
 
     (tmp_path / 'run_result.json').write_text(
         json.dumps({'finalists': ['A', 'B', 'D']}),
@@ -426,7 +435,7 @@ def test_optional_broad_search_and_locked_finalists_are_enforced(tmp_path):
     assert manager.validate_retrieval_start(
         tmp_path,
         broad,
-        {'question': 'evidence for A'},
+        {'question': '[ROLE: direct] [FINALIST: A] evidence for A'},
     ) == 'The finalist set is runtime-locked and cannot be changed.'
 
 
@@ -452,3 +461,66 @@ def test_parallel_boundary_reserves_the_fifth_broad_call(tmp_path):
         {'question': 'premature named targeted query'},
     )
     assert 'write run_result.json' in error
+
+
+def test_targeted_roles_advance_only_after_symmetric_coverage(tmp_path):
+    manager = _manager(tmp_path)
+    manager.initialize_state(tmp_path)
+    broad = [
+        {
+            'tool': 'mat_sn_search-papers-enhanced',
+            'status': 'success',
+            'arguments': {'question': f'broad facet {index}'},
+        }
+        for index in range(5)
+    ]
+    (tmp_path / 'run_result.json').write_text(
+        json.dumps({'finalists': ['A', 'B', 'C']}),
+        encoding='utf-8',
+    )
+    for finalist in ('A', 'B', 'C'):
+        assert manager.validate_retrieval_start(
+            tmp_path,
+            broad,
+            {
+                'question': (
+                    f'[ROLE: direct] [FINALIST: {finalist}] '
+                    f'direct evidence for {finalist}'
+                ),
+                'page_size': 10,
+            },
+        ) is None
+
+    error = manager.validate_retrieval_start(
+        tmp_path,
+        broad,
+        {
+            'question': (
+                '[ROLE: mechanism] [FINALIST: A] mechanism evidence for A'
+            ),
+            'page_size': 10,
+        },
+    )
+    assert 'expected "adverse"' in error
+
+    assert manager.validate_retrieval_start(
+        tmp_path,
+        broad,
+        {
+            'question': (
+                '[ROLE: adverse] [FINALIST: A] adverse evidence for A'
+            ),
+            'page_size': 10,
+        },
+    ) is None
+    duplicate = manager.validate_retrieval_start(
+        tmp_path,
+        broad,
+        {
+            'question': (
+                '[ROLE: adverse] [FINALIST: A] more adverse evidence for A'
+            ),
+            'page_size': 10,
+        },
+    )
+    assert 'repeats finalist "A"' in duplicate
