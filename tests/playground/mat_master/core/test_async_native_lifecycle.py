@@ -338,3 +338,33 @@ def test_compdart_chained_constraint_is_rejected_before_submission():
                 {'constraints': [{'target': 'A', 'condition': '0.1 <= x < 0.5'}]},
             )
         )
+
+
+@pytest.mark.parametrize('arguments', [{}, {'constraints': []}])
+def test_required_compdart_constraints_cannot_be_omitted(arguments):
+    logger = SimpleNamespace(info=lambda *args: None, warning=lambda *args: None)
+    callbacks = MatToolCallbacks(
+        SimpleNamespace(
+            logger=logger,
+            _job_registry=JobRegistry(logger),
+            _async_tool_registry=AsyncToolRegistry(_config()),
+            _run_contracts=SimpleNamespace(
+                protocol={
+                    'compdart': {'require_agent_authored_constraints': True}
+                }
+            ),
+        )
+    )
+
+    with pytest.raises(ToolCallRejected, match='unconstrained submission'):
+        callbacks.before_validate_compdart_constraint_syntax(
+            _call('mat_compdart_submit_run_dart_ga', arguments)
+        )
+
+
+def test_optional_compdart_constraints_may_be_omitted():
+    logger = SimpleNamespace(info=lambda *args: None, warning=lambda *args: None)
+    callbacks = MatToolCallbacks(SimpleNamespace(logger=logger))
+    callbacks.before_validate_compdart_constraint_syntax(
+        _call('mat_compdart_submit_run_dart_ga', {})
+    )

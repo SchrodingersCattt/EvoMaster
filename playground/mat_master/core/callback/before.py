@@ -276,6 +276,18 @@ class MatToolCallbacksBefore:
         constraints = (
             arguments.get('constraints') if isinstance(arguments, dict) else None
         )
+        manager = getattr(self.agent, '_run_contracts', None)
+        protocol = getattr(manager, 'protocol', {}) if manager is not None else {}
+        compdart = protocol.get('compdart', {}) if isinstance(protocol, dict) else {}
+        constraints_required = (
+            isinstance(compdart, dict)
+            and bool(compdart.get('require_agent_authored_constraints'))
+        )
+        if constraints_required and not constraints:
+            raise ToolCallRejected(
+                'This run contract requires agent-authored CompDART constraints; '
+                'an unconstrained submission is not permitted'
+            )
         if not isinstance(constraints, list):
             return
         pattern = re.compile(
