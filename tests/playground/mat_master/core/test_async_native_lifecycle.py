@@ -7,7 +7,11 @@ import pytest
 from evomaster.agent.tools.mcp.mcp import MCPTool
 from playground.mat_master.core.async_execution_policy import AsyncExecutionPolicy
 from playground.mat_master.core.async_tool_registry import AsyncToolRegistry
-from playground.mat_master.core.callback import MatToolCallbacks
+from playground.mat_master.core.callback import (
+    MatToolCallbacks,
+    ToolCallbackPipeline,
+    ToolCallRejected,
+)
 from playground.mat_master.core.job_registry import JobRegistry
 
 
@@ -165,7 +169,7 @@ def test_native_results_require_success_status_and_nonempty_payload():
         {'job_id': 'native-1'},
     )
 
-    with pytest.raises(ValueError, match='results are unavailable'):
+    with pytest.raises(ToolCallRejected, match='results are unavailable'):
         callbacks.before_validate_job_lifecycle_route(results_call)
 
     registry.record_native_status('native-1', 'Succeeded')
@@ -178,6 +182,36 @@ def test_native_results_require_success_status_and_nonempty_payload():
 
     registry.record_native_status('native-1', 'Running')
     assert registry.jobs['native-1'].lifecycle_state == 'succeeded'
+
+
+def test_pipeline_propagates_intentional_tool_rejection():
+    pipeline = ToolCallbackPipeline(
+        SimpleNamespace(warning=lambda *args: None)
+    )
+
+    def reject(_tool_call):
+        raise ToolCallRejected('blocked')
+
+    pipeline.register_before(reject)
+    with pytest.raises(ToolCallRejected, match='blocked'):
+        pipeline.run_before(_call('peek_file'))
+
+
+def test_runtime_owned_protocol_state_is_rejected():
+    logger = SimpleNamespace(info=lambda *args: None, warning=lambda *args: None)
+    callbacks = MatToolCallbacks(
+        SimpleNamespace(
+            logger=logger,
+            _job_registry=JobRegistry(logger),
+            _async_tool_registry=AsyncToolRegistry(_config()),
+        )
+    )
+    call = _call(
+        'peek_file',
+        {'file_path': '/workspace/_tmp/protocol_state.json'},
+    )
+    with pytest.raises(ToolCallRejected, match='not accessible'):
+        callbacks.before_reject_runtime_owned_state_access(call)
 
 
 def test_native_status_polling_is_throttled():

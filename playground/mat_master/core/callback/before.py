@@ -12,6 +12,7 @@ from .constants import (
     _MOL_FILE_EXTS,
     _normalize_alias,
 )
+from .pipeline import ToolCallRejected
 
 
 class MatToolCallbacksBefore:
@@ -224,6 +225,21 @@ class MatToolCallbacksBefore:
                 time.sleep(wait_seconds)
             self._native_poll_times[job_id] = time.monotonic()
 
+    def before_reject_runtime_owned_state_access(self, tool_call: Any) -> None:
+        """Prevent the agent from reading or editing runtime-owned audit state."""
+        tool_name = tool_call.function.name or ''
+        if tool_name not in {'peek_file', 'str_replace_editor', 'execute_bash'}:
+            return
+        raw = str(tool_call.function.arguments or '')
+        protected = (
+            '_tmp/protocol_state.json',
+            '_tmp/execution_journal',
+        )
+        if any(value in raw for value in protected):
+            raise ToolCallRejected(
+                'Runtime-owned protocol state is not accessible to the agent'
+            )
+
     def before_validate_job_lifecycle_route(self, tool_call: Any) -> None:
         """Reject job identifiers used outside their owning service route."""
         tool_name = tool_call.function.name or ''
@@ -252,7 +268,7 @@ class MatToolCallbacksBefore:
         if tool_name == 'monitor_job' or not expected or not tool_name.startswith(
             expected + '_'
         ):
-            raise ValueError(
+            raise ToolCallRejected(
                 f'Job {job_id} belongs to the native lifecycle of {expected}; '
                 'use that service status/results tools'
             )
@@ -260,7 +276,7 @@ class MatToolCallbacksBefore:
             tool_name.endswith('_get_job_results')
             and record.lifecycle_state != 'results_pending'
         ):
-            raise ValueError(
+            raise ToolCallRejected(
                 f'Job {job_id} results are unavailable until native status '
                 'reports success'
             )

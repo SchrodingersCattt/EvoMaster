@@ -124,6 +124,18 @@ class RunContractManager:
     def tool_is_allowed(self, name: str) -> bool:
         return self.tool_allowlist is None or name in self.tool_allowlist
 
+    @staticmethod
+    def errors_are_irrecoverable(errors: list[str]) -> bool:
+        """Whether immutable journal history makes protocol recovery impossible."""
+        markers = (
+            'agent inspected or edited runtime-owned protocol state',
+            'query must name exactly one finalist',
+            'is asymmetric for',
+            'uses inconsistent retrieval parameters',
+            'named finalist retrieval began before broad searches completed',
+        )
+        return any(any(marker in error for marker in markers) for error in errors)
+
     def capabilities_text(self, specs: list[Any], async_registry: Any) -> str:
         names = sorted(filter(None, (tool_name(spec) for spec in specs)))
         retrieval = [
@@ -426,6 +438,22 @@ class RunContractManager:
                 )
             rounds.append({'name': role, 'candidates': records})
 
+        protected_state_access = []
+        for entry in journal:
+            arguments = entry.get('arguments') or {}
+            serialized = json.dumps(arguments, sort_keys=True, default=str)
+            if (
+                '_tmp/protocol_state.json' in serialized
+                or '_tmp/execution_journal' in serialized
+            ):
+                protected_state_access.append(
+                    {'step': entry.get('step'), 'tool': entry.get('tool')}
+                )
+        if protected_state_access:
+            errors.append(
+                'agent inspected or edited runtime-owned protocol state: '
+                + json.dumps(protected_state_access, sort_keys=True)
+            )
         if any(str(entry.get('tool')) == 'monitor_job' for entry in journal):
             errors.append('monitor_job was used in a native-lifecycle run')
         submit_entries = [

@@ -6,6 +6,10 @@ BeforeToolCallback = Callable[[Any], None]
 AfterToolCallback = Callable[[Any, str, dict[str, Any]], tuple[str, dict[str, Any]]]
 
 
+class ToolCallRejected(RuntimeError):
+    """Intentional before-tool rejection that must stop execution."""
+
+
 class ToolCallbackPipeline:
     """Composable before/after tool callback pipeline."""
 
@@ -24,6 +28,8 @@ class ToolCallbackPipeline:
         for cb in self._before:
             try:
                 cb(tool_call)
+            except ToolCallRejected:
+                raise
             except Exception as e:
                 self.logger.warning('before_tool callback failed: %s', e)
 

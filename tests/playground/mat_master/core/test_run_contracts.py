@@ -233,6 +233,15 @@ def test_missing_agent_authored_compdart_constraints_is_blocked(tmp_path):
     )
 
 
+def test_irrecoverable_protocol_errors_are_classified():
+    assert RunContractManager.errors_are_irrecoverable(
+        ['targeted round "direct" is asymmetric for "A"']
+    )
+    assert not RunContractManager.errors_are_irrecoverable(
+        ['evidence role "direct", finalist "A" has 0/1 inspected records']
+    )
+
+
 def test_model_authored_protocol_state_is_ignored(tmp_path):
     manager = _manager(tmp_path)
     journal, jobs = _valid_workspace(tmp_path, manager)

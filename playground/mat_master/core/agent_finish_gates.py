@@ -152,18 +152,23 @@ class MatMasterFinishGatesMixin:
                 self._job_registry,
             )
             if errors:
-                self._finish_block_count += 1
-                contract_info['finish_block_count'] = self._finish_block_count
-                return (
-                    [
-                        '[run_contract_gate] Blocked: '
-                        + '; '.join(errors[:12])
-                    ],
-                    contract_info,
-                )
+                if run_contracts.errors_are_irrecoverable(errors):
+                    contract_info['irrecoverable_protocol_failure'] = True
+                    gate_info.update(contract_info)
+                else:
+                    self._finish_block_count += 1
+                    contract_info['finish_block_count'] = self._finish_block_count
+                    return (
+                        [
+                            '[run_contract_gate] Blocked: '
+                            + '; '.join(errors[:12])
+                        ],
+                        contract_info,
+                    )
 
         self._job_registry.refresh_pending()
-        can_finish, gate_info = self._job_registry.can_finish()
+        can_finish, job_gate_info = self._job_registry.can_finish()
+        gate_info.update(job_gate_info)
 
         # When task_completed='partial' the agent is explicitly acknowledging that work
         # is incomplete (e.g. job still running), so the pending-jobs gate is skipped.
@@ -174,6 +179,9 @@ class MatMasterFinishGatesMixin:
                 'Continue monitoring until pending_jobs_check passes, '
                 "or finish with task_completed='partial' to yield while the job runs."
             )
+
+        if gate_info.get('irrecoverable_protocol_failure'):
+            return blocked_msgs, gate_info
 
         force_pass = self._finish_block_count >= self._finish_block_max
         if force_pass:

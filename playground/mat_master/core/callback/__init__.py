@@ -8,7 +8,12 @@ from .after import MatToolCallbacksAfter
 from .base import MatToolCallbacksBase
 from .before import MatToolCallbacksBefore
 from .constants import is_error_artifact_url
-from .pipeline import AfterToolCallback, BeforeToolCallback, ToolCallbackPipeline
+from .pipeline import (
+    AfterToolCallback,
+    BeforeToolCallback,
+    ToolCallbackPipeline,
+    ToolCallRejected,
+)
 
 
 class MatToolCallbacks(
@@ -26,5 +31,6 @@ __all__ = [
     'BeforeToolCallback',
     'MatToolCallbacks',
     'ToolCallbackPipeline',
+    'ToolCallRejected',
     'is_error_artifact_url',
 ]
