@@ -252,12 +252,36 @@ def test_asymmetric_targeted_round_is_blocked(tmp_path):
     assert 'targeted searches end with an incomplete symmetric round' in errors
 
 
+def test_additional_candidate_neutral_broad_search_is_allowed(tmp_path):
+    manager = _manager(tmp_path)
+    journal, jobs = _valid_workspace(tmp_path, manager)
+    journal.insert(
+        5,
+        {
+            'step': 6,
+            'tool': 'mat_sn_search-papers-enhanced',
+            'status': 'success',
+            'arguments': {
+                'question': 'one additional candidate-neutral broad facet',
+                'page_size': 20,
+            },
+        },
+    )
+    errors, _ = manager.validate_finish(tmp_path, journal, jobs)
+    assert errors == []
+    result = json.loads((tmp_path / 'run_result.json').read_text())
+    assert result['search_calls']['broad'] == 6
+
+
 def test_named_finalist_in_broad_search_is_blocked(tmp_path):
     manager = _manager(tmp_path)
     journal, jobs = _valid_workspace(tmp_path, manager)
     journal[2]['arguments']['question'] = 'broad search centered on A'
     errors, _ = manager.validate_finish(tmp_path, journal, jobs)
-    assert any('broad search 3 names a locked finalist' in error for error in errors)
+    assert (
+        'named finalist retrieval began before broad searches completed'
+        in errors
+    )
 
 
 def test_one_candidate_gap_fill_is_blocked(tmp_path):

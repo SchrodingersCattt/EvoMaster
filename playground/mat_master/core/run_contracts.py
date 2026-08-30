@@ -340,10 +340,23 @@ class RunContractManager:
             and entry.get('status') == 'success'
         ]
         broad_n = len(self.protocol.get('broad_searches') or [])
-        broad = retrieval_calls[:broad_n]
-        targeted = retrieval_calls[broad_n:]
-        if len(broad) != broad_n:
+        first_targeted = next(
+            (
+                index for index, entry in enumerate(retrieval_calls)
+                if any(
+                    self._mentions(self._query_text(entry), finalist)
+                    for finalist in finalists
+                )
+            ),
+            len(retrieval_calls),
+        )
+        broad = retrieval_calls[:first_targeted]
+        targeted = retrieval_calls[first_targeted:]
+        if len(broad) < broad_n:
             errors.append(f'broad searches incomplete: {len(broad)}/{broad_n}')
+            errors.append(
+                'named finalist retrieval began before broad searches completed'
+            )
         for index, entry in enumerate(broad, 1):
             named = [
                 finalist for finalist in finalists
