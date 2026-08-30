@@ -428,3 +428,27 @@ def test_optional_broad_search_and_locked_finalists_are_enforced(tmp_path):
         broad,
         {'question': 'evidence for A'},
     ) == 'The finalist set is runtime-locked and cannot be changed.'
+
+
+def test_parallel_boundary_reserves_the_fifth_broad_call(tmp_path):
+    manager = _manager(tmp_path)
+    manager.initialize_state(tmp_path)
+    four_completed = [
+        {
+            'tool': 'mat_sn_search-papers-enhanced',
+            'status': 'success',
+            'arguments': {'question': f'broad facet {index}'},
+        }
+        for index in range(4)
+    ]
+    assert manager.validate_retrieval_start(
+        tmp_path,
+        four_completed,
+        {'question': 'fifth candidate-neutral broad facet'},
+    ) is None
+    error = manager.validate_retrieval_start(
+        tmp_path,
+        four_completed,
+        {'question': 'premature named targeted query'},
+    )
+    assert 'write run_result.json' in error

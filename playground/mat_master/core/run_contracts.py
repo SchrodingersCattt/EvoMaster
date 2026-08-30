@@ -7,6 +7,7 @@ import hashlib
 import json
 from pathlib import Path
 import re
+import threading
 from typing import Any
 
 import yaml
@@ -46,6 +47,8 @@ class RunContractManager:
         self.protocol: dict[str, Any] = {}
         self.protocol_sha256 = ''
         self._locked_finalists: tuple[str, ...] | None = None
+        self._retrieval_lock = threading.Lock()
+        self._retrieval_started_count = 0
         protocol_file = general.get('contract_config_file')
         if protocol_file:
             path = Path(str(protocol_file))
@@ -206,7 +209,9 @@ class RunContractManager:
     def initialize_state(self, workspace: str | Path) -> None:
         if not self.active:
             return
-        self._locked_finalists = None
+        with self._retrieval_lock:
+            self._locked_finalists = None
+            self._retrieval_started_count = 0
         path = Path(workspace) / '_tmp' / 'protocol_state.json'
         path.parent.mkdir(parents=True, exist_ok=True)
         expected = {
@@ -267,78 +272,87 @@ class RunContractManager:
         """Lock model-selected finalists before the first targeted retrieval."""
         if not self.active:
             return None
-        successful = [
-            entry for entry in journal
-            if str(entry.get('tool', '')).startswith('mat_sn_search-')
-            and entry.get('status') == 'success'
-        ]
-        broad_n = len(self.protocol.get('broad_searches') or [])
-        if len(successful) < broad_n:
-            return None
-
-        entry = {'arguments': arguments}
-        query_text = self._query_text(entry)
-        if self._locked_finalists is None:
-            if query_text.lstrip().lower().startswith('[broad]'):
+        with self._retrieval_lock:
+            successful_count = sum(
+                str(entry.get('tool', '')).startswith('mat_sn_search-')
+                and entry.get('status') == 'success'
+                for entry in journal
+            )
+            self._retrieval_started_count = max(
+                self._retrieval_started_count,
+                successful_count,
+            )
+            broad_n = len(self.protocol.get('broad_searches') or [])
+            if self._retrieval_started_count < broad_n:
+                self._retrieval_started_count += 1
                 return None
-            result_path = Path(workspace) / 'run_result.json'
-            try:
-                result = json.loads(result_path.read_text(encoding='utf-8'))
-            except Exception:
-                result = {}
-            values = result.get('finalists') if isinstance(result, dict) else None
-            finalists = (
-                [str(value).strip() for value in values if str(value).strip()]
-                if isinstance(values, list)
-                else []
-            )
-            expected = int(self.protocol.get('finalist_count') or 0)
-            if len(finalists) != expected or len(set(finalists)) != expected:
-                return (
-                    'Before targeted retrieval, write run_result.json with exactly '
-                    f'{expected} unique model-selected finalists. Optional additional '
-                    'candidate-neutral broad queries must start with [BROAD].'
-                )
-            self._locked_finalists = tuple(finalists)
-            state_path = Path(workspace) / '_tmp' / 'protocol_state.json'
-            try:
-                state = json.loads(state_path.read_text(encoding='utf-8'))
-            except Exception:
-                state = {}
-            state.update(
-                {
-                    'phase': 'finalists_locked',
-                    'finalists': list(self._locked_finalists),
-                }
-            )
-            state_path.parent.mkdir(parents=True, exist_ok=True)
-            state_path.write_text(
-                json.dumps(state, indent=2) + '\n',
-                encoding='utf-8',
-            )
-        else:
-            result_path = Path(workspace) / 'run_result.json'
-            try:
-                current = json.loads(result_path.read_text(encoding='utf-8'))
-                values = current.get('finalists')
-                current_finalists = tuple(
-                    str(value).strip() for value in values if str(value).strip()
-                )
-            except Exception:
-                current_finalists = ()
-            if current_finalists != self._locked_finalists:
-                return 'The finalist set is runtime-locked and cannot be changed.'
 
-        matches = [
-            finalist for finalist in self._locked_finalists
-            if self._mentions(query_text, finalist)
-        ]
-        if len(matches) != 1:
-            return (
-                'Each targeted retrieval query must name exactly one locked '
-                'finalist identifier.'
-            )
-        return None
+            entry = {'arguments': arguments}
+            query_text = self._query_text(entry)
+            if self._locked_finalists is None:
+                if query_text.lstrip().lower().startswith('[broad]'):
+                    self._retrieval_started_count += 1
+                    return None
+                result_path = Path(workspace) / 'run_result.json'
+                try:
+                    result = json.loads(result_path.read_text(encoding='utf-8'))
+                except Exception:
+                    result = {}
+                values = result.get('finalists') if isinstance(result, dict) else None
+                finalists = (
+                    [str(value).strip() for value in values if str(value).strip()]
+                    if isinstance(values, list)
+                    else []
+                )
+                expected = int(self.protocol.get('finalist_count') or 0)
+                if len(finalists) != expected or len(set(finalists)) != expected:
+                    return (
+                        'Before targeted retrieval, write run_result.json with exactly '
+                        f'{expected} unique model-selected finalists. Optional '
+                        'additional candidate-neutral broad queries must start with '
+                        '[BROAD].'
+                    )
+                self._locked_finalists = tuple(finalists)
+                state_path = Path(workspace) / '_tmp' / 'protocol_state.json'
+                try:
+                    state = json.loads(state_path.read_text(encoding='utf-8'))
+                except Exception:
+                    state = {}
+                state.update(
+                    {
+                        'phase': 'finalists_locked',
+                        'finalists': list(self._locked_finalists),
+                    }
+                )
+                state_path.parent.mkdir(parents=True, exist_ok=True)
+                state_path.write_text(
+                    json.dumps(state, indent=2) + '\n',
+                    encoding='utf-8',
+                )
+            else:
+                result_path = Path(workspace) / 'run_result.json'
+                try:
+                    current = json.loads(result_path.read_text(encoding='utf-8'))
+                    values = current.get('finalists')
+                    current_finalists = tuple(
+                        str(value).strip() for value in values if str(value).strip()
+                    )
+                except Exception:
+                    current_finalists = ()
+                if current_finalists != self._locked_finalists:
+                    return 'The finalist set is runtime-locked and cannot be changed.'
+
+            matches = [
+                finalist for finalist in self._locked_finalists
+                if self._mentions(query_text, finalist)
+            ]
+            if len(matches) != 1:
+                return (
+                    'Each targeted retrieval query must name exactly one locked '
+                    'finalist identifier.'
+                )
+            self._retrieval_started_count += 1
+            return None
 
     def validate_finish(
         self, workspace: str | Path, journal: list[dict], jobs: Any
