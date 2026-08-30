@@ -6,6 +6,7 @@ import csv
 import hashlib
 import json
 from pathlib import Path
+import re
 from typing import Any
 
 import yaml
@@ -179,12 +180,12 @@ class RunContractManager:
                 ).strip()
             )
         sections.append(
-            'Protocol state\n\n'
-            'Maintain "_tmp/protocol_state.json" as the single internal state file. '
-            'Record tool-call step numbers for broad and targeted queries. Lock the '
-            'finalists before targeted rounds, and record each round as a candidates '
-            'mapping with query_steps and inspected_sources. Set phase to "complete" '
-            'only after every required artifact has been saved.'
+            'Runtime protocol audit\n\n'
+            'The runtime derives protocol state from actual retrieval calls, the '
+            'evidence matrix, and registered job lifecycles. Do not create, inspect, '
+            'or edit internal protocol-state files. Put exactly one locked finalist '
+            'identifier in every targeted retrieval query and use the configured '
+            'evidence-role text verbatim in the evidence matrix.'
         )
         return '\n\n'.join(sections)
 
@@ -199,11 +200,6 @@ class RunContractManager:
             'entrypoint': self.contracts[0]['entrypoint'],
             'sha256': self.contracts[0]['sha256'],
         }
-        if path.exists():
-            current = json.loads(path.read_text(encoding='utf-8'))
-            if (current.get('contract') or {}).get('sha256') != expected['sha256']:
-                raise ValueError('Protocol state contract hash mismatch')
-            return
         state = {
             'contract': expected,
             'protocol_sha256': self.protocol_sha256,
@@ -217,6 +213,36 @@ class RunContractManager:
         }
         path.write_text(json.dumps(state, indent=2) + '\n', encoding='utf-8')
 
+    @staticmethod
+    def _query_text(entry: dict[str, Any]) -> str:
+        arguments = entry.get('arguments') or {}
+        if not isinstance(arguments, dict):
+            return ''
+        parts: list[str] = []
+        for key in ('question', 'query', 'words', 'keywords'):
+            value = arguments.get(key)
+            if isinstance(value, str):
+                parts.append(value)
+            elif isinstance(value, list):
+                parts.extend(str(item) for item in value)
+        return ' '.join(parts)
+
+    @staticmethod
+    def _mentions(text: str, finalist: str) -> bool:
+        pattern = rf'(?<![A-Za-z0-9]){re.escape(finalist)}(?![A-Za-z0-9])'
+        return re.search(pattern, text, re.IGNORECASE) is not None
+
+    @staticmethod
+    def _retrieval_parameters(entry: dict[str, Any]) -> dict[str, Any]:
+        arguments = entry.get('arguments') or {}
+        if not isinstance(arguments, dict):
+            return {}
+        return {
+            key: value
+            for key, value in arguments.items()
+            if key not in {'question', 'query', 'words', 'keywords'}
+        }
+
     def validate_finish(
         self, workspace: str | Path, journal: list[dict], jobs: Any
     ) -> tuple[list[str], dict[str, Any]]:
@@ -225,140 +251,226 @@ class RunContractManager:
         root = Path(workspace)
         state_path = root / '_tmp' / 'protocol_state.json'
         errors: list[str] = []
-        try:
-            state = json.loads(state_path.read_text(encoding='utf-8'))
-        except Exception as exc:
-            return [f'Cannot read protocol state: {exc}'], {}
-        if (state.get('contract') or {}).get('sha256') != self.contracts[0]['sha256']:
-            errors.append('contract hash differs from the startup manifest')
-        if state.get('protocol_sha256') != self.protocol_sha256:
-            errors.append('protocol hash differs from the startup manifest')
-        if state.get('phase') != 'complete':
-            errors.append('protocol phase is not complete')
-        if state.get('violations'):
-            errors.append('protocol has unresolved violations')
-
-        broad = state.get('broad_queries') or []
-        expected_broad = self.protocol.get('broad_searches') or []
-        if len(broad) < len(expected_broad):
-            errors.append(f'broad searches incomplete: {len(broad)}/{len(expected_broad)}')
-        finalists = state.get('finalists') or []
-        expected_count = int(self.protocol.get('finalist_count') or 0)
-        if len(finalists) != expected_count:
-            errors.append(f'expected {expected_count} finalists; found {len(finalists)}')
-
-        broad_steps = [
-            int(q['step']) for q in broad
-            if isinstance(q, dict) and str(q.get('step', '')).isdigit()
-        ]
-        if len(broad_steps) != len(broad):
-            errors.append('every broad query must record its tool-call step')
-        targeted_steps: list[int] = []
-        rounds = {
-            str(r.get('name')): r
-            for r in state.get('rounds') or []
-            if isinstance(r, dict)
-        }
-        query_n = int(self.protocol.get('calls_per_finalist_per_round') or 0)
-        source_n = int(
-            self.protocol.get('inspected_records_per_finalist_per_round') or 0
-        )
-        for role in self.protocol.get('finalist_rounds') or []:
-            candidates = (rounds.get(str(role)) or {}).get('candidates') or {}
-            if set(candidates) != set(finalists):
-                errors.append(f'round "{role}" does not cover every finalist')
-                continue
-            for finalist in finalists:
-                record = candidates.get(finalist) or {}
-                queries = record.get('query_steps') or []
-                sources = record.get('inspected_sources') or []
-                if len(queries) != query_n or len(sources) != source_n:
-                    errors.append(
-                        f'round "{role}", finalist "{finalist}" is asymmetric'
-                    )
-                numeric_steps = [
-                    int(step) for step in queries if str(step).isdigit()
-                ]
-                if len(numeric_steps) != len(queries):
-                    errors.append(
-                        f'round "{role}", finalist "{finalist}" lacks query steps'
-                    )
-                targeted_steps += numeric_steps
-        if broad_steps and targeted_steps and max(broad_steps) >= min(targeted_steps):
-            errors.append('targeted retrieval started before broad retrieval finished')
-
-        required_files = (
-            'evidence_matrix.csv',
-            'outer_loop_decision.md',
-            'base_host_ga.csv',
-            'next_batch.csv',
-            'run_result.json',
-        )
+        required_files = ('evidence_matrix.csv', 'outer_loop_decision.md',
+                          'base_host_ga.csv', 'next_batch.csv', 'run_result.json')
         for name in required_files:
             path = root / name
             if not path.is_file() or not path.stat().st_size:
                 errors.append(f'missing or empty artifact: {name}')
-        evidence = root / 'evidence_matrix.csv'
-        if evidence.is_file() and evidence.stat().st_size:
-            with evidence.open(encoding='utf-8-sig', newline='') as handle:
-                fields = set(csv.DictReader(handle).fieldnames or [])
-            needed = {'source', 'composition', 'dose', 'observation', 'scope'}
-            if needed - fields:
-                errors.append(
-                    'evidence matrix missing fields: ' + ', '.join(sorted(needed - fields))
-                )
 
         result_path = root / 'run_result.json'
         result: dict[str, Any] = {}
         if result_path.is_file() and result_path.stat().st_size:
             try:
                 result = json.loads(result_path.read_text(encoding='utf-8'))
-                if result.get('abstained') is not True and not isinstance(
-                    result.get('primary_element'), str
-                ):
-                    errors.append('structured primary_element is missing')
-                for key in (
-                    'finalists', 'search_calls', 'inspected_sources', 'dart', 'usage'
-                ):
-                    if key not in result:
-                        errors.append(f'run_result.json missing {key}')
-                dart = result.get('dart') or {}
-                if (
-                    dart.get('submitted') is not True
-                    or not isinstance(dart.get('job_id'), str)
-                    or dart.get('results_retrieved') is not True
-                ):
-                    errors.append('run_result.json lacks a completed CompDART lifecycle')
-                usage = result.get('usage') or {}
-                if not all(
-                    isinstance(usage.get(key), int)
-                    for key in ('prompt_tokens', 'completion_tokens', 'total_tokens')
-                ):
-                    errors.append('run_result.json usage fields must be integers')
             except Exception as exc:
                 errors.append(f'invalid run_result.json: {exc}')
+        if result.get('abstained') is not True and not isinstance(
+            result.get('primary_element'), str
+        ):
+            errors.append('structured primary_element is missing')
+        finalists = result.get('finalists') or []
+        if not isinstance(finalists, list):
+            finalists = []
+        finalists = [str(value).strip() for value in finalists if str(value).strip()]
+        if len(set(finalists)) != len(finalists):
+            errors.append('finalists must be unique')
+        expected_count = int(self.protocol.get('finalist_count') or 0)
+        if len(finalists) != expected_count:
+            errors.append(f'expected {expected_count} finalists; found {len(finalists)}')
+
+        evidence_rows: list[dict[str, str]] = []
+        evidence = root / 'evidence_matrix.csv'
+        if evidence.is_file() and evidence.stat().st_size:
+            try:
+                with evidence.open(encoding='utf-8-sig', newline='') as handle:
+                    reader = csv.DictReader(handle)
+                    fields = set(reader.fieldnames or [])
+                    evidence_rows = list(reader)
+                needed = {
+                    'source', 'composition', 'dose', 'observation', 'scope',
+                    'evidence_role', 'candidate',
+                }
+                if needed - fields:
+                    errors.append(
+                        'evidence matrix missing fields: '
+                        + ', '.join(sorted(needed - fields))
+                    )
+                for index, row in enumerate(evidence_rows, 2):
+                    missing = [key for key in needed if not str(row.get(key) or '').strip()]
+                    if missing:
+                        errors.append(
+                            f'evidence row {index} has empty fields: '
+                            + ', '.join(sorted(missing))
+                        )
+            except Exception as exc:
+                errors.append(f'cannot read evidence matrix: {exc}')
+
+        roles = [str(role) for role in self.protocol.get('finalist_rounds') or []]
+        source_n = int(
+            self.protocol.get('inspected_records_per_finalist_per_round') or 0
+        )
+        evidence_sources: dict[str, dict[str, list[str]]] = {}
+        for role in roles:
+            evidence_sources[role] = {}
+            for finalist in finalists:
+                rows = [
+                    row for row in evidence_rows
+                    if str(row.get('evidence_role') or '').strip() == role
+                    and str(row.get('candidate') or '').strip() == finalist
+                ]
+                evidence_sources[role][finalist] = [
+                    str(row.get('source') or '').strip() for row in rows
+                ]
+                if len(rows) != source_n:
+                    errors.append(
+                        f'evidence role "{role}", finalist "{finalist}" '
+                        f'has {len(rows)}/{source_n} inspected records'
+                    )
+        observed_candidates = {
+            str(row.get('candidate') or '').strip()
+            for row in evidence_rows if str(row.get('candidate') or '').strip()
+        }
+        if finalists and observed_candidates != set(finalists):
+            errors.append('evidence-matrix candidates differ from locked finalists')
+
         retrieval_calls = [
             entry for entry in journal
             if str(entry.get('tool', '')).startswith('mat_sn_search-')
+            and entry.get('status') == 'success'
         ]
-        if len(retrieval_calls) < len(broad_steps) + len(targeted_steps):
-            errors.append('protocol state contains unobserved retrieval calls')
+        broad_n = len(self.protocol.get('broad_searches') or [])
+        broad = retrieval_calls[:broad_n]
+        targeted = retrieval_calls[broad_n:]
+        if len(broad) != broad_n:
+            errors.append(f'broad searches incomplete: {len(broad)}/{broad_n}')
+        for index, entry in enumerate(broad, 1):
+            named = [
+                finalist for finalist in finalists
+                if self._mentions(self._query_text(entry), finalist)
+            ]
+            if named:
+                errors.append(
+                    f'broad search {index} names a locked finalist: {", ".join(named)}'
+                )
+
+        query_n = int(self.protocol.get('calls_per_finalist_per_round') or 0)
+        group_size = len(finalists) * query_n
+        required_targeted = len(roles) * group_size
+        if len(targeted) < required_targeted:
+            errors.append(
+                f'targeted searches incomplete: {len(targeted)}/{required_targeted}'
+            )
+        if group_size and len(targeted) % group_size:
+            errors.append('targeted searches end with an incomplete symmetric round')
+        group_count = len(targeted) // group_size if group_size else 0
+        if group_count > len(roles) and not self.protocol.get('symmetric_gap_filling'):
+            errors.append('unconfigured targeted retrieval rounds were used')
+
+        targeted_counts = {finalist: 0 for finalist in finalists}
+        rounds: list[dict[str, Any]] = []
+        for group_index in range(group_count):
+            chunk = targeted[
+                group_index * group_size:(group_index + 1) * group_size
+            ]
+            role = (
+                roles[group_index]
+                if group_index < len(roles)
+                else f'gap_fill_{group_index - len(roles) + 1}'
+            )
+            records = {
+                finalist: {'query_steps': [], 'inspected_sources': []}
+                for finalist in finalists
+            }
+            parameters = []
+            for entry in chunk:
+                text = self._query_text(entry)
+                matches = [
+                    finalist for finalist in finalists
+                    if self._mentions(text, finalist)
+                ]
+                if len(matches) != 1:
+                    errors.append(
+                        f'targeted round "{role}" query must name exactly one finalist'
+                    )
+                    continue
+                finalist = matches[0]
+                targeted_counts[finalist] += 1
+                records[finalist]['query_steps'].append(entry.get('step'))
+                parameters.append(self._retrieval_parameters(entry))
+            for finalist, record in records.items():
+                if len(record['query_steps']) != query_n:
+                    errors.append(
+                        f'targeted round "{role}" is asymmetric for "{finalist}"'
+                    )
+                if group_index < len(roles):
+                    record['inspected_sources'] = evidence_sources.get(role, {}).get(
+                        finalist, []
+                    )
+            if parameters and any(value != parameters[0] for value in parameters[1:]):
+                errors.append(
+                    f'targeted round "{role}" uses inconsistent retrieval parameters'
+                )
+            rounds.append({'name': role, 'candidates': records})
+
         if any(str(entry.get('tool')) == 'monitor_job' for entry in journal):
             errors.append('monitor_job was used in a native-lifecycle run')
         compdart_jobs = [
             job for job in getattr(jobs, 'jobs', {}).values()
             if str(job.source_tool).startswith('mat_compdart_submit_')
         ]
-        if not compdart_jobs:
-            errors.append('no successful CompDART submission was recorded')
-        for job in compdart_jobs:
-            if str(job.source_tool).startswith('mat_compdart_submit_'):
-                if job.lifecycle_state != 'succeeded' or job.results is None:
-                    errors.append(f'CompDART job {job.job_id} has no native result')
+        successful_jobs = [
+            job for job in compdart_jobs
+            if job.lifecycle_state == 'succeeded' and job.results is not None
+        ]
+        if not successful_jobs:
+            errors.append('no CompDART job completed its native lifecycle')
+        chosen_job = successful_jobs[-1] if successful_jobs else None
+        dart = {
+            'submitted': bool(compdart_jobs),
+            'job_id': chosen_job.job_id if chosen_job else None,
+            'status': chosen_job.raw_status if chosen_job else None,
+            'results_retrieved': chosen_job is not None,
+        }
 
-        if not errors:
-            state['protocol_pass'] = True
-            state_path.write_text(json.dumps(state, indent=2) + '\n', encoding='utf-8')
-            result['protocol_pass'] = True
+        state = {
+            'contract': {
+                key: self.contracts[0][key]
+                for key in ('name', 'package', 'entrypoint', 'sha256')
+            },
+            'protocol_sha256': self.protocol_sha256,
+            'phase': 'complete' if not errors else 'synthesis',
+            'broad_queries': [
+                {
+                    'step': entry.get('step'),
+                    'arguments': entry.get('arguments') or {},
+                }
+                for entry in broad
+            ],
+            'finalists': finalists,
+            'rounds': rounds,
+            'inspected_sources': evidence_sources,
+            'violations': errors,
+            'protocol_pass': not errors,
+        }
+        state_path.parent.mkdir(parents=True, exist_ok=True)
+        state_path.write_text(json.dumps(state, indent=2) + '\n', encoding='utf-8')
+
+        if result:
+            result['finalists'] = finalists
+            result['search_calls'] = {
+                'broad': len(broad),
+                'targeted': targeted_counts,
+            }
+            result['inspected_sources'] = {
+                finalist: sum(
+                    len(evidence_sources.get(role, {}).get(finalist, []))
+                    for role in roles
+                )
+                for finalist in finalists
+            }
+            result['dart'] = dart
+            result['protocol_pass'] = not errors
+            result.setdefault('usage', {})
             result_path.write_text(json.dumps(result, indent=2) + '\n', encoding='utf-8')
         return errors, {'protocol_state': str(state_path), 'errors': errors}
