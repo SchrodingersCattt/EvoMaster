@@ -231,9 +231,25 @@ def test_missing_agent_authored_compdart_constraints_is_blocked(tmp_path):
     journal[-1]['arguments'].pop('constraints')
     errors, _ = manager.validate_finish(tmp_path, journal, jobs)
     assert (
-        'CompDART submit lacks agent-authored constraints in tool schema'
+        'CompDART submit omitted required agent-authored constraints at steps: 18'
         in errors
     )
+
+
+def test_any_unconstrained_compdart_submit_invalidates_run(tmp_path):
+    manager = _manager(tmp_path)
+    journal, jobs = _valid_workspace(tmp_path, manager)
+    journal.insert(
+        -1,
+        {
+            'step': 17,
+            'tool': 'mat_compdart_submit_run_dart_ga',
+            'status': 'success',
+            'arguments': {},
+        },
+    )
+    errors, _ = manager.validate_finish(tmp_path, journal, jobs)
+    assert any('at steps: 17' in error for error in errors)
 
 
 def test_irrecoverable_protocol_errors_are_classified():

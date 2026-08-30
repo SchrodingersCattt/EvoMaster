@@ -663,6 +663,7 @@ class RunContractManager:
             and entry.get('status') == 'success'
         ]
         submitted_constraints: list[dict[str, Any]] = []
+        unconstrained_submit_steps: list[Any] = []
         if submit_entries:
             arguments = submit_entries[-1].get('arguments') or {}
             if isinstance(arguments, dict):
@@ -674,17 +675,27 @@ class RunContractManager:
             isinstance(compdart_config, dict)
             and compdart_config.get('require_agent_authored_constraints')
         ):
-            valid_constraints = bool(submitted_constraints) and all(
-                isinstance(item, dict)
-                and isinstance(item.get('target'), (str, list))
-                and bool(item.get('target'))
-                and isinstance(item.get('condition'), str)
-                and bool(item.get('condition').strip())
-                for item in submitted_constraints
-            )
-            if not valid_constraints:
+            for entry in submit_entries:
+                arguments = entry.get('arguments') or {}
+                values = (
+                    arguments.get('constraints')
+                    if isinstance(arguments, dict)
+                    else None
+                )
+                valid = bool(values) and all(
+                    isinstance(item, dict)
+                    and isinstance(item.get('target'), (str, list))
+                    and bool(item.get('target'))
+                    and isinstance(item.get('condition'), str)
+                    and bool(item.get('condition').strip())
+                    for item in values
+                )
+                if not valid:
+                    unconstrained_submit_steps.append(entry.get('step'))
+            if unconstrained_submit_steps:
                 errors.append(
-                    'CompDART submit lacks agent-authored constraints in tool schema'
+                    'CompDART submit omitted required agent-authored constraints '
+                    'at steps: ' + ', '.join(map(str, unconstrained_submit_steps))
                 )
         compdart_jobs = [
             job for job in getattr(jobs, 'jobs', {}).values()
