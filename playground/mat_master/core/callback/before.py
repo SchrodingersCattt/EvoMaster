@@ -291,8 +291,8 @@ class MatToolCallbacksBefore:
         if not isinstance(constraints, list):
             return
         pattern = re.compile(
-            r'^\s*(?:<=|>=|<|>)\s*-?(?:\d+(?:\.\d*)?|\.\d+)'
-            r'(?:[eE][+-]?\d+)?\s*$'
+            r'^\s*(?:<=|>=|<|>)\s*(-?(?:\d+(?:\.\d*)?|\.\d+)'
+            r'(?:[eE][+-]?\d+)?)\s*$'
         )
         invalid = [
             index
@@ -307,6 +307,17 @@ class MatToolCallbacksBefore:
                 'followed by one numeric value. Express a closed range as two '
                 'entries with the same target. Invalid constraint indices: '
                 + ', '.join(map(str, invalid))
+            )
+        out_of_range = []
+        for index, item in enumerate(constraints):
+            match = pattern.fullmatch(item['condition'])
+            if match is not None and not 0.0 <= float(match.group(1)) <= 1.0:
+                out_of_range.append(index)
+        if out_of_range:
+            raise ToolCallRejected(
+                'CompDART constraint values are mole fractions in [0, 1]; '
+                'for example, use 0.3 for 30 at.%. Out-of-range constraint '
+                'indices: ' + ', '.join(map(str, out_of_range))
             )
 
     def before_validate_job_lifecycle_route(self, tool_call: Any) -> None:

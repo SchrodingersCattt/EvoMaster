@@ -43,7 +43,9 @@ class AsyncExecutionPolicy:
         guidance = (
             'Use one comparison operator followed by one numeric value, such as '
             '>=0.1 or <0.5. Express a lower and upper bound as two constraint '
-            'entries with the same target; chained expressions are invalid.'
+            'entries with the same target; chained expressions are invalid. '
+            'The numeric value is a mole fraction in [0, 1], so 0.3 means '
+            '30 at.%.'
         )
         existing = str(condition.get('description') or '').strip()
         if guidance not in existing:

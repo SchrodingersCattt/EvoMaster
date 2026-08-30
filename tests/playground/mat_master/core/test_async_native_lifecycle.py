@@ -309,6 +309,8 @@ def test_compdart_schema_explains_single_comparison_conditions():
     ]['description']
     assert 'one comparison operator' in description
     assert 'two constraint entries with the same target' in description
+    assert 'mole fraction in [0, 1]' in description
+    assert '0.3 means 30 at.%' in description
 
 
 def test_compdart_chained_constraint_is_rejected_before_submission():
@@ -337,6 +339,22 @@ def test_compdart_chained_constraint_is_rejected_before_submission():
                 'mat_compdart_submit_run_dart_ga',
                 {'constraints': [{'target': 'A', 'condition': '0.1 <= x < 0.5'}]},
             )
+        )
+
+
+def test_compdart_percent_constraint_is_rejected_before_submission():
+    logger = SimpleNamespace(info=lambda *args: None, warning=lambda *args: None)
+    callbacks = MatToolCallbacks(SimpleNamespace(logger=logger))
+    callbacks.before_validate_compdart_constraint_syntax(
+        _call('mat_compdart_submit_run_dart_ga', {
+            'constraints': [{'target': 'Fe', 'condition': '>=0.4017'}]
+        })
+    )
+    with pytest.raises(ToolCallRejected, match='mole fractions in \\[0, 1\\]'):
+        callbacks.before_validate_compdart_constraint_syntax(
+            _call('mat_compdart_submit_run_dart_ga', {
+                'constraints': [{'target': 'Fe', 'condition': '>=40.17'}]
+            })
         )
 
 
