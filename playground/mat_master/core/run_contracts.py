@@ -335,8 +335,8 @@ class RunContractManager:
             job for job in getattr(jobs, 'jobs', {}).values()
             if str(job.source_tool).startswith('mat_compdart_submit_')
         ]
-        if len(compdart_jobs) != 1:
-            errors.append(f'expected one CompDART job; found {len(compdart_jobs)}')
+        if not compdart_jobs:
+            errors.append('no successful CompDART submission was recorded')
         for job in compdart_jobs:
             if str(job.source_tool).startswith('mat_compdart_submit_'):
                 if job.lifecycle_state != 'succeeded' or job.results is None:
