@@ -38,6 +38,7 @@ class JobRecord:
     job_id: str
     software: str
     source_tool: str
+    native_lifecycle: bool = False
     bohr_job_id: str | None = None
     lifecycle_state: str = 'submitted'
     raw_status: str | None = None
@@ -70,6 +71,7 @@ class JobRegistry:
         job_id: str,
         software: str,
         source_tool: str,
+        native_lifecycle: bool = False,
         bohr_job_id: str | None = None,
     ) -> None:
         if not job_id:
@@ -80,6 +82,7 @@ class JobRegistry:
                 job_id=job_id,
                 software=software,
                 source_tool=source_tool,
+                native_lifecycle=native_lifecycle,
                 bohr_job_id=bohr_job_id,
             )
             return
@@ -147,6 +150,8 @@ class JobRegistry:
             return
 
         for rec in pendings:
+            if rec.native_lifecycle:
+                continue
             try:
                 status = str(
                     query_job_status(
@@ -205,6 +210,9 @@ class JobRegistry:
                 'software': j.software,
                 'state': j.lifecycle_state,
                 'status': j.raw_status,
+                'lifecycle_route': (
+                    'native' if j.native_lifecycle else 'generic'
+                ),
             }
             for j in pending[:10]
         ]

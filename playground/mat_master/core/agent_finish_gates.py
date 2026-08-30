@@ -142,6 +142,26 @@ class MatMasterFinishGatesMixin:
         if requested_task_completed not in ('true', 'partial'):
             return blocked_msgs, gate_info
 
+        run_contracts = getattr(self, '_run_contracts', None)
+        if run_contracts is not None and run_contracts.active:
+            workspace = getattr(self.session.config, 'workspace_path', '') or ''
+            journal = getattr(self, '_execution_journal', None)
+            errors, contract_info = run_contracts.validate_finish(
+                workspace,
+                journal.entries if journal is not None else [],
+                self._job_registry,
+            )
+            if errors:
+                self._finish_block_count += 1
+                contract_info['finish_block_count'] = self._finish_block_count
+                return (
+                    [
+                        '[run_contract_gate] Blocked: '
+                        + '; '.join(errors[:12])
+                    ],
+                    contract_info,
+                )
+
         self._job_registry.refresh_pending()
         can_finish, gate_info = self._job_registry.can_finish()
 

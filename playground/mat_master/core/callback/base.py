@@ -39,6 +39,7 @@ class MatToolCallbacksBase:
         pipeline.register_before(self.before_normalize_skill_script_args)
         pipeline.register_before(self.before_resolve_skill_reference_name)
         pipeline.register_before(self.before_resolve_dpa_model_alias)
+        pipeline.register_before(self.before_validate_job_lifecycle_route)
         pipeline.register_before(self.before_patch_monitor_job_bohr_id)
         pipeline.register_before(self.before_normalize_sn_search_words_parameter)
         pipeline.register_before(self.before_upload_nmr_predict_files)

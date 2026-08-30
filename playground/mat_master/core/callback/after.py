@@ -237,10 +237,21 @@ class MatToolCallbacksAfter:
         if registry is None:
             return observation, info
 
+        async_registry = getattr(self.agent, '_async_tool_registry', None)
+        server = (
+            async_registry.server_for_tool(tool_name)
+            if async_registry is not None
+            else None
+        )
+        native_lifecycle = bool(
+            server
+            and async_registry.uses_native_lifecycle(server)
+        )
         registry.record_submit(
             job_id=job_id,
             software=software,
             source_tool=tool_name,
+            native_lifecycle=native_lifecycle,
             bohr_job_id=bohr_job_id,
         )
         self.logger.info(

@@ -191,6 +191,39 @@ class MatToolCallbacksBefore:
             resolved,
         )
 
+    def before_validate_job_lifecycle_route(self, tool_call: Any) -> None:
+        """Reject job identifiers used outside their owning service route."""
+        tool_name = tool_call.function.name or ''
+        lifecycle_call = (
+            tool_name == 'monitor_job'
+            or tool_name.endswith('_query_job_status')
+            or tool_name.endswith('_get_job_results')
+        )
+        if not lifecycle_call:
+            return
+        try:
+            args = json.loads(tool_call.function.arguments or '{}')
+        except (json.JSONDecodeError, TypeError):
+            return
+        job_id = args.get('job_id') if isinstance(args, dict) else None
+        registry = getattr(self.agent, '_job_registry', None)
+        record = registry.jobs.get(job_id) if registry is not None and job_id else None
+        if record is None or not record.native_lifecycle:
+            return
+        async_registry = getattr(self.agent, '_async_tool_registry', None)
+        expected = (
+            async_registry.server_for_tool(record.source_tool)
+            if async_registry is not None
+            else None
+        )
+        if tool_name == 'monitor_job' or not expected or not tool_name.startswith(
+            expected + '_'
+        ):
+            raise ValueError(
+                f'Job {job_id} belongs to the native lifecycle of {expected}; '
+                'use that service status/results tools'
+            )
+
     def before_patch_monitor_job_bohr_id(self, tool_call: Any) -> None:
         """Auto-fill missing bohr_job_id for monitor_job calls."""
         tool_name = tool_call.function.name or ''

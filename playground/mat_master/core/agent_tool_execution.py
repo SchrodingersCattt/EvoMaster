@@ -36,6 +36,24 @@ class MatMasterToolExecutionMixin:
             tool_args = tool_call.function.arguments
             self._log_tool_start(tool_name, tool_args)
 
+            run_contracts = getattr(self, '_run_contracts', None)
+            if run_contracts is not None and not run_contracts.tool_is_allowed(
+                tool_name
+            ):
+                error_msg = f"Unavailable tool for this run: {tool_name}"
+                info = {'error': 'tool_not_allowed'}
+                self._log_tool_end(tool_name, error_msg, info)
+                observation, info = self._tool_callback_pipeline.run_after(
+                    tool_call, error_msg, info
+                )
+                slim = slim_tool_info_for_payload(info)
+                return (
+                    format_tool_observation(
+                        self.logger, tool_name, observation, slim
+                    ),
+                    slim,
+                )
+
             tool = self.tools.get_tool(tool_name)
             if tool is None:
                 error_msg = f"Unknown tool: {tool_name}"
@@ -79,6 +97,7 @@ class MatMasterToolExecutionMixin:
                     status='error' if 'error' in info else 'success',
                     info=info,
                     observation=observation if isinstance(observation, str) else '',
+                    arguments=tool_args,
                 )
 
             if tool_name == 'finish' and isinstance(observation, dict):

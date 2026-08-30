@@ -218,6 +218,22 @@ class AsyncToolRegistry:
             return True
         return False
 
+    def server_for_tool(self, tool_name: str) -> str | None:
+        """Return the registered service prefix owning a tool name."""
+        prefixes = sorted(
+            {entry.server_prefix for entry in self._entries},
+            key=len,
+            reverse=True,
+        )
+        return next(
+            (
+                prefix
+                for prefix in prefixes
+                if tool_name == prefix or tool_name.startswith(prefix + '_')
+            ),
+            None,
+        )
+
     def uses_native_lifecycle(self, server_prefix: str) -> bool:
         """Return whether a server owns status/result lifecycle tools.
 

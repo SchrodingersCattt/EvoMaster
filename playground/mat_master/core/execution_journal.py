@@ -52,6 +52,7 @@ class ExecutionJournal:
         status: str,
         info: dict[str, Any],
         observation: str,
+        arguments: str | dict[str, Any] | None = None,
     ) -> None:
         """Append one journal entry (in-memory + file).
 
@@ -63,10 +64,25 @@ class ExecutionJournal:
             observation: String observation (truncated to 300 chars for
                 the summary field).
         """
+        safe_arguments: Any = arguments
+        if isinstance(arguments, str):
+            try:
+                safe_arguments = json.loads(arguments)
+            except Exception:
+                safe_arguments = arguments[:1000]
+        if isinstance(safe_arguments, dict):
+            safe_arguments = {
+                key: ('[redacted]' if any(
+                    marker in str(key).lower()
+                    for marker in ('token', 'secret', 'password', 'api_key', 'header')
+                ) else value)
+                for key, value in safe_arguments.items()
+            }
         entry: dict[str, Any] = {
             'step': step,
             'ts': datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
             'tool': tool,
+            'arguments': safe_arguments,
             'status': status,
             'saved_path': info.get('auto_saved_path') or None,
             'downloaded_files': info.get('downloaded_files') or [],

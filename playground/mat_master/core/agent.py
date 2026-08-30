@@ -28,6 +28,7 @@ from .async_execution_policy import AsyncExecutionPolicy
 from .callback import MatToolCallbacks, ToolCallbackPipeline
 from .execution_journal import ExecutionJournal
 from .job_registry import JobRegistry
+from .run_contracts import RunContractManager
 from .tool_guard import ToolGuard
 
 
@@ -56,6 +57,11 @@ class MatMasterAgent(MatMasterFinishGatesMixin, MatMasterToolExecutionMixin, Age
         self._rate_limit: float | None = rate_limit
         # Full config dict for async tool registry (prompt injection)
         self._full_config_dict: dict = config_dict or {}
+        self._run_contracts = RunContractManager(
+            self._full_config_dict,
+            self.skill_registry,
+            getattr(self, 'config_dir', None),
+        )
         # Mode profile controls prompt-level execution contract (direct/planner).
         self._mode_profile: str = (mode_profile or 'direct').strip().lower()
         from .async_tool_registry import AsyncToolRegistry
@@ -260,6 +266,7 @@ class MatMasterAgent(MatMasterFinishGatesMixin, MatMasterToolExecutionMixin, Age
             self.trajectory.dialogs.append(self.current_dialog)
             self._step_count = 0
             self._tool_output_save_counter = 0
+            self._initialize_run_contract_state()
             return
         super()._initialize(task)
         self._tool_output_save_counter = 0
@@ -273,6 +280,16 @@ class MatMasterAgent(MatMasterFinishGatesMixin, MatMasterToolExecutionMixin, Age
             self._execution_journal.set_path(
                 os.path.join(workspace, '_tmp', journal_name)
             )
+        self._initialize_run_contract_state()
+
+    def _initialize_run_contract_state(self) -> None:
+        """Create the task-scoped state only after the workspace is bound."""
+        if not self._run_contracts.active:
+            return
+        workspace = getattr(self.session.config, 'workspace_path', '') or ''
+        if not workspace:
+            raise ValueError('A scoped run contract requires a workspace')
+        self._run_contracts.initialize_state(workspace)
 
     def _get_async_tool_registry(self):
         """Get async registry derived from full config dict."""
@@ -286,6 +303,26 @@ class MatMasterAgent(MatMasterFinishGatesMixin, MatMasterToolExecutionMixin, Age
         """Use generated system prompt (tool list + date), then append working directory, tool rules, and skills.
         Date and OS/Shell are appended last so they appear at the end of the prompt (and in log tail).
         """
+        if self._run_contracts.active:
+            template = (
+                Path(__file__).resolve().parent.parent
+                / 'prompts'
+                / 'scoped_system_prompt.txt'
+            )
+            base = template.read_text(encoding='utf-8').strip()
+            specs = self._get_tool_specs()
+            runtime = self._run_contracts.capabilities_text(
+                specs, self._get_async_tool_registry()
+            )
+            contract = self._run_contracts.contract_text()
+            workspace = str(Path(self.session.config.workspace_path).absolute())
+            return (
+                f'{base}\n\n{runtime}\n\n{contract}\n\n'
+                'Runtime workspace\n'
+                f'- working directory: {workspace}\n'
+                '- Do not change the working directory.'
+            )
+
         from ..prompts.build_prompt import build_mat_master_system_prompt
 
         # Build registry from config for dynamic prompt injection
@@ -368,7 +405,8 @@ You can use the 'use_skill' tool to:
     def _get_tool_specs(self) -> list:
         """Expose MCP tools using unified async execution policy."""
         specs = super()._get_tool_specs()
-        return self._async_execution_policy.filter_tool_specs_for_llm(specs)
+        specs = self._async_execution_policy.filter_tool_specs_for_llm(specs)
+        return self._run_contracts.filter_specs(specs)
 
     def _on_assistant_message(self, msg: AssistantMessage) -> None:
         """Optional hook after assistant message is added. Override in subclasses (e.g. streaming)."""

@@ -16,7 +16,6 @@ from typing import Any, Optional
 from evomaster.core.exp import BaseExp
 from evomaster.utils.types import Dialog, SystemMessage, TaskInstance, UserMessage
 
-from ...prompts.build_prompt import LANGUAGE_RULE
 from ..async_tool_registry import AsyncToolRegistry
 from ..exp import SkillEvolutionExp, WorkerExp
 
@@ -111,41 +110,16 @@ def _parse_route(response: str) -> str:
 
 
 def _build_router_system(registry: AsyncToolRegistry, skills_str: str = '') -> str:
-    """Build ROUTER_SYSTEM prompt with software names from registry (no hardcoding)."""
-    sw = registry.software_list_str()
-    sm = registry.mcp_submit_mapping_str()
-    block = registry.crp_block_str()
-    skills_constraint = ''
-    if skills_str:
-        skills_constraint = (
-            f"\n5. Skills (callable via use_skill): The following skills are available and do NOT "
-            f"require SKILL_EVOLUTION: {skills_str}. Any task that can be accomplished by calling "
-            f"use_skill with one of these skills MUST be routed to STANDARD_EXECUTION."
-        )
-    return f"""You are a deterministic task routing module for MatMaster. Your sole function is to classify the user's task into one of two execution modes based on strict system constraints.
+    """Build a project-independent router prompt."""
+    return """Classify the task using only the runtime capabilities listed below.
 
-{LANGUAGE_RULE}
+Choose STANDARD_EXECUTION when the task can be completed with the registered capabilities and loaded run contracts.
 
-SYSTEM CONSTRAINTS:
-1. Local Environment: The local sandbox supports Python scripting, data manipulation, and lightweight simulations (e.g., ASE, Pymatgen). It does NOT provide {block}, {sw} run services locally.
-2. Remote Delegation: Heavy calculations ({sw}) are run remotely.
-   - SG/DPA/COMPDART: submitted via their native MCP submit tools ({sm}), monitored via monitor_job.
-   - LAMMPS/CP2K/ABINIT/QE/ORCA/GROMACS/ABACUS/PySCF/PyATB: use **input-manual-helper** skill to generate/validate input files (where applicable), then **submit via bohrium-job skill** (`submit_job.py` + `poll_job.py`). There are no MCP submit tools for these — use bohrium-job exclusively.
-   All of this is handled within STANDARD_EXECUTION; no separate routing is needed.
-3. Tool Availability: Use the provided 'Available Tools' list to decide if a programmatic capability is missing (SKILL_EVOLUTION) or can be fulfilled by existing tools and skills (STANDARD_EXECUTION). Always check the full tool list before concluding a tool is missing.
-4. Characterization routing baseline: NMR/XRD/electron-microscopy requests should default to STANDARD_EXECUTION when dedicated MCP tools exist (e.g., mat_nmr_NMR_search_tool, mat_nmr_NMR_predict_tool, mat_nmr_NMR_reverse_predict_tool, mat_xrd_xrd_phase_identification, mat_electron_microscope_get_electron_microscope_recognize). Do NOT choose SKILL_EVOLUTION for these unless the user requests a clearly missing capability.{skills_constraint}
+Choose SKILL_EVOLUTION only when a necessary programmatic capability is absent.
 
-ROUTING CATEGORIES:
-A. [SKILL_EVOLUTION]: Choose this IF AND ONLY IF the task requires a programmatic tool or specific Python capability that is strictly absent from BOTH the 'Available Tools' list AND the 'Available Skills' list, necessitating the generation of a new script. Do NOT choose this if a matching tool or skill already exists.
-B. [STANDARD_EXECUTION]: Choose this for all other tasks. This includes literature searches, structure generation, data extraction, local Python scripting, remote calculation submission and monitoring (via MCP tools + monitor_job tool), utilizing existing MCP tools, and any task achievable via use_skill with an available skill.
+Do not assume that an unavailable tool, skill, or service can be called.
 
-OUTPUT FORMAT:
-You must output a strictly valid JSON object with exactly two keys. Do not include markdown formatting or explanatory text outside the JSON.
-{{
-    "decision": "<SKILL_EVOLUTION | STANDARD_EXECUTION>",
-    "rationale": "<A precise, one-sentence logical deduction based on the constraints.>"
-}}"""
-
+Return the decision and a one-sentence rationale as JSON."""
 
 class DirectSolver(BaseExp):
     """即时响应模式：分析任务 -> 动态路由到 SkillEvolutionExp / WorkerExp。
@@ -171,6 +145,10 @@ class DirectSolver(BaseExp):
         except Exception:
             cfg_dict = {}
         self._registry = AsyncToolRegistry(cfg_dict)
+        general = ((cfg_dict.get('agents') or {}).get('general') or {})
+        self._execution_mode = str(
+            general.get('execution_mode') or 'auto'
+        ).strip().lower()
 
     def _route_task(self, task_description: str) -> str:
         """One-shot LLM route: SKILL_EVOLUTION | STANDARD_EXECUTION -> evo | default."""
@@ -238,7 +216,11 @@ Output the JSON object only (decision + rationale).'''
         else:
             desc = task_description
             tid = task_id
-        route = self._route_task(desc)
+        route = (
+            'default'
+            if self._execution_mode == 'direct'
+            else self._route_task(desc)
+        )
         if route == 'evo' and not self._evo_enabled:
             route = 'default'
 

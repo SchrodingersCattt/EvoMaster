@@ -122,7 +122,11 @@ class MatMasterPlayground(BasePlayground):
 
         if self.run_dir is not None:
             self.memory_service.run_dir = Path(self.run_dir)
-        memory_tools = get_memory_tools(self.memory_service)
+        memory_tools = [
+            tool
+            for tool in get_memory_tools(self.memory_service)
+            if _allowed(tool.name)
+        ]
         registry.register_many(memory_tools)
         from ..tools import get_aissq_download_tool, get_aissq_search_tool, get_extract_webpage_tool
 
