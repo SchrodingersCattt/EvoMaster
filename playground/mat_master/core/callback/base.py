@@ -245,14 +245,17 @@ class MatToolCallbacksBase:
         return mapping
 
     @staticmethod
-    def _extract_submit_payload(observation: str) -> dict[str, Any] | None:
+    def _extract_submit_payload(observation: Any) -> dict[str, Any] | None:
         """Best-effort extraction of submit payload from tool observation text."""
-        if not isinstance(observation, str) or not observation.strip():
+        if isinstance(observation, dict):
+            payload = observation
+        elif not isinstance(observation, str) or not observation.strip():
             return None
-        try:
-            payload = json.loads(observation)
-        except (json.JSONDecodeError, TypeError):
-            payload = None
+        else:
+            try:
+                payload = json.loads(observation)
+            except (json.JSONDecodeError, TypeError):
+                payload = None
         if payload is None:
             job_match = re.search(r'"job_id"\s*:\s*"([^"]+)"', observation)
             bohr_match = re.search(r'"bohr_job_id"\s*:\s*"([^"]+)"', observation)

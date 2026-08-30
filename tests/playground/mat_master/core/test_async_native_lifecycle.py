@@ -4,6 +4,7 @@ from types import SimpleNamespace
 from evomaster.agent.tools.mcp.mcp import MCPTool
 from playground.mat_master.core.async_execution_policy import AsyncExecutionPolicy
 from playground.mat_master.core.async_tool_registry import AsyncToolRegistry
+from playground.mat_master.core.callback import MatToolCallbacks
 from playground.mat_master.core.job_registry import JobRegistry
 
 
@@ -103,6 +104,41 @@ def test_native_status_and_results_release_pending_gate():
     registry.record_native_results('job-1', {'best': [0.8, 0.2]})
     assert registry.pending_jobs() == []
     assert registry.jobs['job-1'].results == {'best': [0.8, 0.2]}
+
+
+def test_dict_submit_response_tracks_complete_native_lifecycle():
+    logger = SimpleNamespace(info=lambda *args: None, warning=lambda *args: None)
+    agent = SimpleNamespace(
+        logger=logger,
+        _job_registry=JobRegistry(logger),
+        _async_tool_registry=AsyncToolRegistry(_config()),
+    )
+    callbacks = MatToolCallbacks(agent)
+
+    callbacks.after_track_async_submit(
+        _call('mat_compdart_submit_run_dart_ga'),
+        {
+            'job_id': 'native-1',
+            'extra_info': {'bohr_job_id': 'bohr-1'},
+        },
+        {'success': True},
+    )
+    callbacks.after_track_native_lifecycle(
+        _call('mat_compdart_query_job_status', {'job_id': 'native-1'}),
+        {'status': 'Succeeded'},
+        {},
+    )
+    callbacks.after_track_native_lifecycle(
+        _call('mat_compdart_get_job_results', {'job_id': 'native-1'}),
+        {'best': [0.8, 0.2]},
+        {},
+    )
+
+    record = agent._job_registry.jobs['native-1']
+    assert record.native_lifecycle is True
+    assert record.bohr_job_id == 'bohr-1'
+    assert record.lifecycle_state == 'succeeded'
+    assert record.results == {'best': [0.8, 0.2]}
 
 
 class _PathAdaptor:

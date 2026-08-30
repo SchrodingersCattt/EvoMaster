@@ -4,11 +4,15 @@ This contract governs an open candidate-discovery workflow. Its numerical settin
 
 Complete all configured broad-search facets before issuing a search for a named option.
 
+Broad-search queries must not name, list, or exemplify any candidate option.
+
 Build a longlist from the broad-search results, then lock the configured number of finalists. Do not change the finalist set after targeted retrieval begins.
 
 Execute targeted retrieval in synchronized rounds. Each round covers every finalist once under the same evidence role, retrieval parameters, and result limit.
 
 Include exactly one locked finalist identifier in every targeted retrieval query.
+
+Never combine multiple finalists in one targeted query, including gap-filling queries.
 
 Do not deepen one finalist alone. Any additional retrieval round must be applied to every finalist.
 

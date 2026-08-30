@@ -207,9 +207,9 @@ class MatToolCallbacksAfter:
     def after_track_async_submit(
         self,
         tool_call: Any,
-        observation: str,
+        observation: Any,
         info: dict[str, Any],
-    ) -> tuple[str, dict[str, Any]]:
+    ) -> tuple[Any, dict[str, Any]]:
         """Track submit_* jobs in runtime registry for finish-attempt gating."""
         tool_name = tool_call.function.name or ''
         if '_submit_' not in tool_name:
