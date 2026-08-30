@@ -45,6 +45,7 @@ class MatToolCallbacksBase:
         pipeline.register_after(self.after_detect_mcp_business_error)
         pipeline.register_after(self.after_ask_human_interaction)
         pipeline.register_after(self.after_track_async_submit)
+        pipeline.register_after(self.after_track_native_lifecycle)
         pipeline.register_after(self.after_autodownload_oss_results)
         pipeline.register_after(self.after_download_characterization_results)
         pipeline.register_after(self.after_normalize_struct_db_metadata)

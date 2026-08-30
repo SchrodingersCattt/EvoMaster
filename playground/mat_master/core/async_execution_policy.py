@@ -17,6 +17,7 @@ class AsyncExecutionPolicy:
         {'query_job_status', 'get_job_results', 'terminate_job', 'get_job_status'}
     )
     _HIDDEN_LIFECYCLE_SUFFIXES = tuple(f"_{n}" for n in _HIDDEN_LIFECYCLE_NAMES)
+    _NATIVE_LIFECYCLE_NAMES = frozenset({'query_job_status', 'get_job_results'})
     _ALWAYS_ALLOWED_DURING_PENDING = frozenset({'mem_save', 'mem_recall'})
 
     def __init__(self, registry) -> None:
@@ -45,13 +46,6 @@ class AsyncExecutionPolicy:
                 filtered.append(spec)
                 continue
 
-            # Hide generic lifecycle tools globally for every mat_* server,
-            # not only servers discovered as async in registry.
-            if name.startswith('mat_') and name.endswith(
-                self._HIDDEN_LIFECYCLE_SUFFIXES
-            ):
-                continue
-
             matched_prefix = None
             remote_name = ''
             for prefix in prefixes:
@@ -62,10 +56,21 @@ class AsyncExecutionPolicy:
                     break
 
             if not matched_prefix:
+                # Hide generic lifecycle tools globally for mat_* servers that
+                # are not represented by an async registry entry.
+                if name.startswith('mat_') and name.endswith(
+                    self._HIDDEN_LIFECYCLE_SUFFIXES
+                ):
+                    continue
                 filtered.append(spec)
                 continue
 
             if remote_name in self._HIDDEN_LIFECYCLE_NAMES:
+                if (
+                    remote_name in self._NATIVE_LIFECYCLE_NAMES
+                    and self._registry.uses_native_lifecycle(matched_prefix)
+                ):
+                    filtered.append(spec)
                 continue
 
             if not self._registry.is_async_tool(matched_prefix, remote_name):
@@ -85,6 +90,17 @@ class AsyncExecutionPolicy:
             return True
         if name.startswith('mat_') and '_submit_' in name:
             return True
+        for entry in self._registry.entries:
+            marker = f"{entry.server_prefix}_"
+            if not name.startswith(marker):
+                continue
+            remote_name = name[len(marker) :]
+            if (
+                remote_name in self._NATIVE_LIFECYCLE_NAMES
+                and self._registry.uses_native_lifecycle(entry.server_prefix)
+            ):
+                return True
+            break
         if name == 'monitor_job':
             return True
         if name == 'use_skill':

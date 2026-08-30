@@ -27,6 +27,9 @@ except ImportError:
 
 # 外部服务（web-search、论文检索、结构库等）常需更长时间，默认 60 秒；可通过环境变量 MCP_TOOL_CALL_TIMEOUT 覆盖
 DEFAULT_MCP_TOOL_CALL_TIMEOUT = 60
+_NATIVE_LIFECYCLE_TOOL_NAMES = frozenset(
+    {'query_job_status', 'get_job_results', 'terminate_job', 'get_job_status'}
+)
 
 
 def _mcp_call_timeout() -> int:
@@ -133,6 +136,12 @@ class MCPTool(BaseTool):
 
             # 2. Path adaptor: path args must be URL links; local paths → upload then pass OSS URL
             path_adaptor = getattr(self, '_path_adaptor', None)
+            if self._remote_tool_name in _NATIVE_LIFECYCLE_TOOL_NAMES:
+                # Native lifecycle tools consume the service-local job ID only.
+                # Injecting the calculation executor/storage here changes the
+                # backend that receives the query and can make a valid job ID
+                # appear unknown.
+                path_adaptor = None
             if path_adaptor is not None:
                 workspace_path = (
                     getattr(getattr(session, 'config', None), 'workspace_path', None)

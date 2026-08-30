@@ -32,6 +32,7 @@ class _AsyncEntry:
         str | None
     )  # executor_map key (e.g. "run_lammps"), or None for server-level executor
     sync_tools: frozenset[str] = field(default_factory=frozenset)
+    native_lifecycle: bool = False
 
 
 # ---------------------------------------------------------------------------
@@ -132,6 +133,7 @@ class AsyncToolRegistry:
             executor = server_cfg.get('executor')
             executor_map: dict[str, Any] = server_cfg.get('executor_map') or {}
             sync_tools = frozenset(server_cfg.get('sync_tools') or [])
+            native_lifecycle = bool(server_cfg.get('native_lifecycle', False))
 
             # Case 1: server-level executor with remote_profile
             if _has_remote_profile(executor):
@@ -141,6 +143,7 @@ class AsyncToolRegistry:
                         software_name=_derive_name(server_name),
                         tool_key=None,
                         sync_tools=sync_tools,
+                        native_lifecycle=native_lifecycle,
                     )
                 )
 
@@ -155,6 +158,7 @@ class AsyncToolRegistry:
                             software_name=_derive_name(tool_key),
                             tool_key=tool_key,
                             sync_tools=sync_tools,
+                            native_lifecycle=native_lifecycle,
                         )
                     )
 
@@ -214,6 +218,18 @@ class AsyncToolRegistry:
             return True
         return False
 
+    def uses_native_lifecycle(self, server_prefix: str) -> bool:
+        """Return whether a server owns status/result lifecycle tools.
+
+        Some MCP services return service-local job IDs that cannot be queried
+        through the generic Bohrium job adaptor.  Those services must expose
+        and use their own ``query_job_status`` and ``get_job_results`` tools.
+        """
+        return any(
+            entry.server_prefix == server_prefix and entry.native_lifecycle
+            for entry in self._entries
+        )
+
     # ── Formatted text snippets for prompt injection ──────────────────────
 
     def software_list_str(self) -> str:
@@ -235,6 +251,30 @@ class AsyncToolRegistry:
         for e in self._entries:
             if e.tool_key is None:
                 by_server.setdefault(e.server_prefix, []).append(e.software_name)
+        return '; '.join(
+            f"{prefix}_* for {', '.join(names)}" for prefix, names in by_server.items()
+        )
+
+    def native_lifecycle_mapping_str(self) -> str:
+        """MCP submit servers whose jobs are monitored by the same MCP service."""
+        by_server: dict[str, list[str]] = {}
+        for entry in self._entries:
+            if entry.tool_key is None and entry.native_lifecycle:
+                by_server.setdefault(entry.server_prefix, []).append(
+                    entry.software_name
+                )
+        return '; '.join(
+            f"{prefix}_* for {', '.join(names)}" for prefix, names in by_server.items()
+        )
+
+    def generic_monitor_mapping_str(self) -> str:
+        """MCP submit servers whose jobs use the generic monitor_job adaptor."""
+        by_server: dict[str, list[str]] = {}
+        for entry in self._entries:
+            if entry.tool_key is None and not entry.native_lifecycle:
+                by_server.setdefault(entry.server_prefix, []).append(
+                    entry.software_name
+                )
         return '; '.join(
             f"{prefix}_* for {', '.join(names)}" for prefix, names in by_server.items()
         )
@@ -282,6 +322,8 @@ class AsyncToolRegistry:
     def format_calculation_rules(self) -> str:
         sw = self.software_list_str()
         mcp_sm = self.mcp_submit_mapping_str()
+        native_sm = self.native_lifecycle_mapping_str()
+        generic_sm = self.generic_monitor_mapping_str()
         bj_sw = self.bohrium_job_sw_str()
         # Build submit step based on which paths exist
         if mcp_sm and bj_sw:
@@ -307,6 +349,19 @@ class AsyncToolRegistry:
                 f"3. **Submit**: After `input-manual-helper` local input generation, submit via "
                 f"`use_skill skill_name=bohrium-job` ({bj_sw}).\n"
             )
+        monitor_step = "4. **Monitor & Resilience**: "
+        if native_sm:
+            monitor_step += (
+                f"For MCP services with native lifecycle tools ({native_sm}), call the matching "
+                f"`query_job_status(job_id=\"<ID>\")`; after a terminal success, call the matching "
+                f"`get_job_results(job_id=\"<ID>\")`. "
+            )
+        if generic_sm:
+            monitor_step += (
+                f"For other MCP-submit jobs ({generic_sm}), call "
+                f"`monitor_job(job_id=\"<ID>\", software=\"<SW>\", workspace=\"<PATH>\")`. "
+                f"Supported software values: {self.monitor_job_software_arg()}. "
+            )
         return (
             f"# Calculation & Jobs (MANDATORY)\n"
             f"To run any heavy calculation ({sw}, etc.), follow this workflow:\n"
@@ -315,23 +370,20 @@ class AsyncToolRegistry:
             f"2. **Input generation**: Use the **input-manual-helper** skill to write and validate input files "
             f"(see tool_rules for the full procedure).\n"
             f"{submit_step}"
-            f"4. **Monitor & Resilience**: For MCP-submit path jobs, call "
-            f"`monitor_job(job_id=\"<ID>\", software=\"<SW>\", workspace=\"<PATH>\")`. "
-            f"Supported software values: {self.monitor_job_software_arg()}. "
+            f"{monitor_step}"
             f"For dpdispatcher-based jobs (ABACUS, etc.) also pass bohr_job_id=extra_info.bohr_job_id "
             f"from the submit response. "
             f"For bohrium-job path jobs, call skill scripts in two steps: submit_job.py then poll_job.py. "
             f"Result files are downloaded to workspace after status=Finished. "
-            f"**Poll-budget semantics**: when the poll budget exhausts while the job is still running, "
+            f"**Poll-budget semantics**: when a generic monitor's poll budget exhausts while the job is still running, "
             f"`monitor_job` returns `status: \"running\"` and `poll_job.py` returns `status: \"still_running\"` "
             f"(both with a non-error exit). This means the job is alive on Bohrium — either re-invoke the "
             f"monitor to continue watching, or finish with task_completed=partial. "
             f"**Do NOT perform unrelated work while waiting for HPC jobs.**\n"
-            f"5. **On failure**: If monitor_job returns status=\"failed\", read the `log_tail` field to diagnose "
-            f"the root cause, fix input files, re-submit via MCP, and call monitor_job again "
-            f"with the new job_id. If the cause is unclear, call ask_human(mode=\"timeout\").\n"
-            f"Do NOT manually poll job_status in the chat loop — that wastes tokens and is fragile. "
-            f"Let monitor_job handle the entire lifecycle.\n"
+            f"5. **On failure**: If a lifecycle tool reports failure, inspect its error or log output to diagnose "
+            f"the root cause, fix inputs, re-submit, and use the matching lifecycle route for the new job ID. "
+            f"If the cause is unclear, call ask_human(mode=\"timeout\").\n"
+            f"Use the lifecycle route specified above for the service that created the job ID.\n"
             f"**File inputs**: All file/path arguments to calculation MCP tools must be **OSS URLs** "
             f"(https://...), not local paths. The system auto-uploads workspace files; ensure the file "
             f"exists locally before calling the tool. Pre-trained model shortcuts (e.g. \"DPA2.4-7M\") "

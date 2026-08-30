@@ -322,6 +322,9 @@ mcp:
           envs: {}
       sync_tools: []
     mat_compdart:
+      # CompDART returns service-local job IDs; query and fetch results through
+      # the same MCP server rather than the generic Bohrium job adaptor.
+      native_lifecycle: true
       executor:
         type: "dispatcher"
         machine:

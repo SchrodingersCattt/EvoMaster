@@ -251,6 +251,102 @@ class MatToolCallbacksAfter:
         )
         return observation, info
 
+    def after_track_native_lifecycle(
+        self,
+        tool_call: Any,
+        observation: str | dict[str, Any] | list[Any],
+        info: dict[str, Any],
+    ) -> tuple[str | dict[str, Any] | list[Any], dict[str, Any]]:
+        """Reflect native MCP status/results in the runtime job registry."""
+        tool_name = tool_call.function.name or ''
+        is_status = tool_name.endswith('_query_job_status')
+        is_results = tool_name.endswith('_get_job_results')
+        if not (is_status or is_results) or info.get('error') is not None:
+            return observation, info
+
+        try:
+            args = json.loads(tool_call.function.arguments or '{}')
+        except (json.JSONDecodeError, TypeError):
+            return observation, info
+        job_id = args.get('job_id') if isinstance(args, dict) else None
+        if not isinstance(job_id, str) or not job_id:
+            return observation, info
+
+        registry = getattr(self.agent, '_job_registry', None)
+        if registry is None:
+            return observation, info
+
+        if is_results:
+            registry.record_native_results(job_id, observation)
+            self.logger.info(
+                'after_tool: stored native results job_id=%s tool=%s',
+                job_id,
+                tool_name,
+            )
+            return observation, info
+
+        status = self._extract_native_job_status(observation)
+        if status is not None:
+            registry.record_native_status(job_id, status)
+            self.logger.info(
+                'after_tool: updated native status job_id=%s status=%s',
+                job_id,
+                status,
+            )
+        return observation, info
+
+    @classmethod
+    def _extract_native_job_status(cls, payload: Any) -> str | None:
+        """Find a status value in common native MCP response envelopes."""
+        if isinstance(payload, str):
+            stripped = payload.strip()
+            if stripped.startswith('{') or stripped.startswith('['):
+                try:
+                    return cls._extract_native_job_status(json.loads(stripped))
+                except json.JSONDecodeError:
+                    pass
+            if stripped.lower() in {
+                'running',
+                'pending',
+                'scheduling',
+                'wait',
+                'waiting',
+                'uploading',
+                'submitted',
+                'finished',
+                'done',
+                'success',
+                'succeeded',
+                'completed',
+                'complete',
+                'failed',
+                'failure',
+                'error',
+                'deleted',
+                'stopped',
+                'terminated',
+                'killed',
+            }:
+                return stripped
+            return None
+        if isinstance(payload, dict):
+            for key in ('status', 'state', 'job_status', 'jobStatus'):
+                value = payload.get(key)
+                if isinstance(value, str):
+                    return value
+            for key in ('data', 'result', 'payload'):
+                if key in payload:
+                    found = cls._extract_native_job_status(payload[key])
+                    if found is not None:
+                        return found
+            return None
+        if isinstance(payload, list):
+            for item in payload:
+                found = cls._extract_native_job_status(item)
+                if found is not None:
+                    return found
+        return None
+
     def after_autodownload_oss_results(
         self,
         tool_call: Any,

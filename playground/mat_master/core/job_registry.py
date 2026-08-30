@@ -20,6 +20,15 @@ _SUCCESS_STATES = frozenset({'Finished'})
 _FAILURE_STATES = frozenset(
     {'Failed', 'Deleted', 'Stopped', 'Stopping', 'Terminating', 'Killing'}
 )
+_NATIVE_SUCCESS_STATES = frozenset(
+    {'finished', 'done', 'success', 'succeeded', 'completed', 'complete'}
+)
+_NATIVE_RUNNING_STATES = frozenset(
+    {'running', 'pending', 'scheduling', 'wait', 'waiting', 'uploading', 'submitted'}
+)
+_NATIVE_FAILURE_STATES = frozenset(
+    {'failed', 'failure', 'error', 'deleted', 'stopped', 'terminated', 'killed'}
+)
 
 
 @dataclass
@@ -84,6 +93,41 @@ class JobRegistry:
 
     def pending_jobs(self) -> list[JobRecord]:
         return [j for j in self._jobs.values() if not j.is_terminal]
+
+    def record_native_status(self, job_id: str, status: str) -> None:
+        """Update a tracked job from its MCP service's native status tool."""
+        rec = self._jobs.get(job_id)
+        if rec is None:
+            return
+        normalized = str(status).strip().lower()
+        rec.raw_status = str(status)
+        rec.updated_at = _now_iso()
+        if normalized in _NATIVE_SUCCESS_STATES:
+            # The calculation has finished, but keep the finish gate closed
+            # until get_job_results has actually returned the numeric payload.
+            rec.lifecycle_state = 'results_pending'
+            rec.unknown_polls = 0
+        elif normalized in _NATIVE_FAILURE_STATES:
+            rec.lifecycle_state = 'failed'
+            rec.unknown_polls = 0
+            rec.message = f'terminal_failure: {status}'
+        elif normalized in _NATIVE_RUNNING_STATES:
+            rec.lifecycle_state = 'monitoring'
+            rec.unknown_polls = 0
+        else:
+            rec.lifecycle_state = 'monitoring'
+            rec.unknown_polls += 1
+
+    def record_native_results(self, job_id: str, results: Any) -> None:
+        """Store results returned by a native MCP lifecycle tool."""
+        rec = self._jobs.get(job_id)
+        if rec is None:
+            return
+        rec.results = results if isinstance(results, dict) else {'value': results}
+        rec.lifecycle_state = 'succeeded'
+        rec.raw_status = rec.raw_status or 'Finished'
+        rec.unknown_polls = 0
+        rec.updated_at = _now_iso()
 
     def all_terminal(self) -> bool:
         return all(j.is_terminal for j in self._jobs.values())
