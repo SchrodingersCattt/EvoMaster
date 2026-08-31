@@ -334,14 +334,17 @@ class MatToolCallbacksBefore:
             index
             for index, item in enumerate(constraints)
             if not isinstance(item, dict)
+            or not isinstance(item.get('target'), str)
+            or not item['target'].strip()
             or not isinstance(item.get('condition'), str)
             or pattern.fullmatch(item['condition']) is None
         ]
         if invalid:
             raise ToolCallRejected(
-                'CompDART constraint conditions use one comparison operator '
-                'followed by one numeric value. Express a closed range as two '
-                'entries with the same target. Invalid constraint indices: '
+                'Each CompDART constraint needs a non-empty string target and '
+                'a condition with one comparison operator followed by one '
+                'numeric value. Express a closed range as two entries with '
+                'the same target. Invalid constraint indices: '
                 + ', '.join(map(str, invalid))
             )
         out_of_range = []

@@ -342,6 +342,18 @@ def test_compdart_chained_constraint_is_rejected_before_submission():
         )
 
 
+def test_compdart_constraint_target_must_be_string():
+    logger = SimpleNamespace(info=lambda *args: None, warning=lambda *args: None)
+    callbacks = MatToolCallbacks(SimpleNamespace(logger=logger))
+
+    with pytest.raises(ToolCallRejected, match='non-empty string target'):
+        callbacks.before_validate_compdart_constraint_syntax(
+            _call('mat_compdart_submit_run_dart_ga', {
+                'constraints': [{'target': ['Fe', 'Ni'], 'condition': '>=0.5'}]
+            })
+        )
+
+
 def test_compdart_percent_constraint_is_rejected_before_submission():
     logger = SimpleNamespace(info=lambda *args: None, warning=lambda *args: None)
     callbacks = MatToolCallbacks(SimpleNamespace(logger=logger))
