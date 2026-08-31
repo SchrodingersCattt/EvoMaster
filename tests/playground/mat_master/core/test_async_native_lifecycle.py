@@ -427,6 +427,29 @@ def test_required_compdart_constraints_cannot_be_omitted(arguments):
         )
 
 
+def test_required_compdart_constraints_cannot_be_stringified():
+    logger = SimpleNamespace(info=lambda *args: None, warning=lambda *args: None)
+    callbacks = MatToolCallbacks(
+        SimpleNamespace(
+            logger=logger,
+            _job_registry=JobRegistry(logger),
+            _async_tool_registry=AsyncToolRegistry(_config()),
+            _run_contracts=SimpleNamespace(
+                protocol={
+                    'compdart': {'require_agent_authored_constraints': True}
+                }
+            ),
+        )
+    )
+
+    with pytest.raises(ToolCallRejected, match='JSON array'):
+        callbacks.before_validate_compdart_constraint_syntax(
+            _call('mat_compdart_submit_run_dart_ga', {
+                'constraints': '[{"target": "Fe", "condition": ">=0.4"}]'
+            })
+        )
+
+
 def test_optional_compdart_constraints_may_be_omitted():
     logger = SimpleNamespace(info=lambda *args: None, warning=lambda *args: None)
     callbacks = MatToolCallbacks(SimpleNamespace(logger=logger))

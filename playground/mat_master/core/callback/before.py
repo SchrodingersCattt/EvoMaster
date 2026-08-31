@@ -308,6 +308,11 @@ class MatToolCallbacksBefore:
                 'This run contract requires agent-authored CompDART constraints; '
                 'an unconstrained submission is not permitted'
             )
+        if constraints_required and not isinstance(constraints, list):
+            raise ToolCallRejected(
+                'CompDART constraints must be a JSON array of constraint objects; '
+                'do not encode the array as a quoted string'
+            )
         if not isinstance(constraints, list):
             return
         pattern = re.compile(
