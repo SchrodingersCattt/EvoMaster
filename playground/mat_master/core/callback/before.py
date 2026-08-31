@@ -303,6 +303,17 @@ class MatToolCallbacksBefore:
             isinstance(compdart, dict)
             and bool(compdart.get('require_agent_authored_constraints'))
         )
+        if constraints_required and isinstance(constraints, str):
+            try:
+                decoded_constraints = json.loads(constraints)
+            except json.JSONDecodeError:
+                decoded_constraints = None
+            if isinstance(decoded_constraints, list):
+                arguments['constraints'] = decoded_constraints
+                tool_call.function.arguments = json.dumps(
+                    arguments, ensure_ascii=False
+                )
+                constraints = decoded_constraints
         if constraints_required and not constraints:
             raise ToolCallRejected(
                 'This run contract requires agent-authored CompDART constraints; '
