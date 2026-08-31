@@ -615,10 +615,13 @@ class RunContractManager:
         first_targeted = next(
             (
                 index for index, entry in enumerate(retrieval_calls)
-                if any(
+                if len(
+                    [
                     self._mentions(self._query_text(entry), finalist)
                     for finalist in finalists
-                )
+                    if self._mentions(self._query_text(entry), finalist)
+                    ]
+                ) == 1
             ),
             len(retrieval_calls),
         )
@@ -634,9 +637,9 @@ class RunContractManager:
                 finalist for finalist in finalists
                 if self._mentions(self._query_text(entry), finalist)
             ]
-            if named:
+            if len(named) == 1:
                 errors.append(
-                    f'broad search {index} names a locked finalist: {", ".join(named)}'
+                    f'broad search {index} centers on locked finalist: {named[0]}'
                 )
 
         query_n = int(self.protocol.get('calls_per_finalist_per_round') or 0)

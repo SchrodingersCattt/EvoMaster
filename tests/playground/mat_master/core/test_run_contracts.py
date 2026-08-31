@@ -318,6 +318,16 @@ def test_named_finalist_in_broad_search_is_blocked(tmp_path):
     )
 
 
+def test_multi_finalist_longlist_remains_a_broad_search(tmp_path):
+    manager = _manager(tmp_path)
+    journal, jobs = _valid_workspace(tmp_path, manager)
+    journal[4]['arguments']['question'] = (
+        'broad longlist across A, B, C, and other options'
+    )
+    errors, _ = manager.validate_finish(tmp_path, journal, jobs)
+    assert errors == []
+
+
 def test_one_candidate_gap_fill_is_blocked(tmp_path):
     manager = _manager(tmp_path)
     journal, jobs = _valid_workspace(tmp_path, manager)
